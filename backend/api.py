@@ -371,9 +371,12 @@ async def startup_event():
         else:
             logger.warning("frontend/dist NOT FOUND — dashboard will not load")
 
-        await audio.start()
-        logger.info("Audio service active.")
-        bot.audio = audio
+        if os.environ.get("RUN_MODE") != "cloud":
+            await audio.start()
+            logger.info("Audio service active.")
+            bot.audio = audio
+        else:
+            logger.info("Cloud Mode: Skipping local Audio Engine initialization.")
         bot.on_subscriber_update = broadcast_overlay
         if os.environ.get("RUN_MODE") == "cloud":
             bot.on_cloud_alert = broadcast_to_pi_clients

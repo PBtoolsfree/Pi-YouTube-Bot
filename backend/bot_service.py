@@ -301,6 +301,10 @@ class BotService:
         except Exception as e:
              logger.error(f"Sheet Auto-Connect Failed: {e}")
 
+        if os.environ.get("RUN_MODE") == "cloud":
+            logger.info("Running in Cloud Mode. Minimal services started. Skipping local loops.")
+            return
+
         # Always start SB loop so it can dynamically connect when enabled via UI
         self.sb_ws_task = self._spawn_managed_loop("sb_ws", self._sb_ws_loop)
         if self.tunnel:
