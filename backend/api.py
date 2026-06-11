@@ -8,6 +8,15 @@ from typing import List, Dict, Any, Optional
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+# Python 3.8 compatibility for asyncio.to_thread
+if not hasattr(asyncio, "to_thread"):
+    async def to_thread(func, *args, **kwargs):
+        import functools
+        loop = asyncio.get_event_loop()
+        func_call = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(None, func_call)
+    asyncio.to_thread = to_thread
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Response, Request
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
