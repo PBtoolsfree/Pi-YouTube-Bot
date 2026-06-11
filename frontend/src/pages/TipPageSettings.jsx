@@ -106,17 +106,20 @@ export default function TipPageSettings() {
         fetchLocalIp()
         fetchHistory()
         fetchStatus()
-        fetchWebhookLogs()
 
         checkTunnel()
         const interval = setInterval(checkTunnel, 5000)
         const statusInterval = setInterval(fetchStatus, 5000) // Poll status every 5s
-        const logsInterval = setInterval(fetchWebhookLogs, 5000) // Poll webhook logs every 5s
+        
+        // Auto-detect IP
+        const hostname = window.location.hostname
+        if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+            setLocalIp(hostname)
+        }
 
         return () => {
             clearInterval(interval)
             clearInterval(statusInterval)
-            clearInterval(logsInterval)
         }
     }, [])
 
@@ -361,15 +364,6 @@ export default function TipPageSettings() {
                     )}
                 >
                     <Mail className="h-3.5 w-3.5" /> Email
-                </button>
-                <button
-                    onClick={() => setActiveTab('notifications')}
-                    className={cn(
-                        "px-4 py-2 font-medium text-sm transition-all border-b-2 whitespace-nowrap flex items-center gap-2",
-                        activeTab === 'notifications' ? "border-indigo-500 text-indigo-400" : "border-transparent text-zinc-500 hover:text-zinc-300 hover:border-zinc-800"
-                    )}
-                >
-                    <Smartphone className="h-3.5 w-3.5" /> App Notifications
                 </button>
             </div>
 
@@ -1005,154 +999,6 @@ export default function TipPageSettings() {
                         </div>
                     </Card>
                 </div>
-            )}
-
-            {/* ------ TAB: NOTIFICATIONS ------ */}
-            {activeTab === 'notifications' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                    <Card className="col-span-1 md:col-span-2 p-6 border-zinc-800 bg-zinc-900 shadow-sm space-y-6">
-                        <div className="space-y-2">
-                            <h2 className="text-xl font-bold flex items-center gap-3">
-                                <Smartphone className="text-indigo-400 h-6 w-6" />
-                                Universal App Notifications (UPI)
-                            </h2>
-                            <p className="text-sm text-zinc-400">
-                                This feature bypasses traditional payment gateways. The Pi Bot will read the <strong>Google Pay, PhonePe, and Paytm</strong> notifications directly from your Android device and show alerts on stream without showing any specific brand to your viewers!
-                            </p>
-                        </div>
-
-                        <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-lg border border-zinc-800">
-                            <div>
-                                <div className="font-medium text-zinc-200 mb-1 text-sm">Enable Webhook Alerts</div>
-                                <div className="text-xs text-zinc-500">Listen for incoming requests from MacroDroid/Tasker</div>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={appAlertsConfig.enabled}
-                                    onChange={(e) => setAppAlertsConfig({ ...appAlertsConfig, enabled: e.target.checked })}
-                                />
-                                <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
-                            </label>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Minimum Amount (₹)</label>
-                                <input
-                                    type="number"
-                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                                    value={appAlertsConfig.min_amount}
-                                    onChange={(e) => setAppAlertsConfig({ ...appAlertsConfig, min_amount: Number(e.target.value) })}
-                                    min="0"
-                                />
-                                <p className="text-[10px] text-zinc-500">Alerts below this amount will be ignored.</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Audio (Read Amount & Name)</label>
-                                <div className="flex items-center justify-between bg-zinc-950 p-2.5 rounded-lg border border-zinc-700 h-[42px]">
-                                    <span className="text-sm text-zinc-300">Enable Text-to-Speech</span>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={appAlertsConfig.tts_enabled}
-                                            onChange={(e) => setAppAlertsConfig({ ...appAlertsConfig, tts_enabled: e.target.checked })}
-                                        />
-                                        <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-300 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="pt-4 border-t border-zinc-800 space-y-4">
-                            <h3 className="text-sm font-semibold text-zinc-200">📱 How to send Mobile Notifications to Pi Bot</h3>
-                            <p className="text-xs text-zinc-400">The easiest way to capture notifications is using the custom <strong>Pi Bot Forwarder</strong> app on your Android phone.</p>
-
-                            <div className="bg-zinc-950 p-4 rounded-lg font-mono text-xs border border-zinc-800 space-y-3">
-                                <ol className="list-decimal pl-4 space-y-2 text-zinc-300">
-                                    <li>Download the <a href="/PiForwarder.apk" download="PiForwarder.apk" className="text-indigo-400 hover:underline font-semibold">Pi Bot Forwarder</a> APK directly to your phone and install it.</li>
-                                    <li>Open the app and click the large button to grant it <strong>Notification Access</strong> permission.</li>
-                                    <li>Set the <strong>App Filter</strong> by choosing any or all: <span className="text-emerald-400 font-semibold">paytm, phonepe, gpay</span>.</li>
-                                    <li>Set the <strong>Webhook URL</strong> to the following: <br /> <span className="text-indigo-300 mt-1 block break-all font-semibold">http://{localIp || 'PI_IP_ADDRESS'}:8000/api/webhook/app</span></li>
-                                    <li>Save the configuration toggles. Every notification from these apps will now be sent directly to your overlay without showing brands!</li>
-                                </ol>
-                            </div>
-                        </div>
-
-                        {/* ── Test & Live Log ── */}
-                        <div className="pt-4 border-t border-zinc-800 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-semibold text-zinc-200">🔔 Test &amp; Live Webhook Log</h3>
-                                <button
-                                    onClick={testWebhook}
-                                    disabled={testingWebhook}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all"
-                                >
-                                    {testingWebhook
-                                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Firing...</>
-                                        : <><Beaker className="h-3.5 w-3.5" /> Send Test Alert</>
-                                    }
-                                </button>
-                            </div>
-
-                            {webhookTestResult && (
-                                <div className={cn(
-                                    'flex items-center gap-2 text-xs px-3 py-2 rounded-lg border',
-                                    webhookTestResult.type === 'success'
-                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                                        : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                                )}>
-                                    {webhookTestResult.type === 'success'
-                                        ? <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                                        : <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                                    }
-                                    {webhookTestResult.message}
-                                </div>
-                            )}
-
-                            {webhookLogs.length === 0 ? (
-                                <p className="text-xs text-zinc-600 italic">No webhook events recorded yet. Send a test or wait for a real payment.</p>
-                            ) : (
-                                <div className="bg-zinc-950 rounded-lg border border-zinc-800 overflow-hidden">
-                                    <table className="w-full text-[11px]">
-                                        <thead>
-                                            <tr className="border-b border-zinc-800 text-zinc-500 uppercase tracking-wider">
-                                                <th className="text-left px-3 py-2 font-medium">Time</th>
-                                                <th className="text-left px-3 py-2 font-medium">Provider</th>
-                                                <th className="text-left px-3 py-2 font-medium">Status</th>
-                                                <th className="text-left px-3 py-2 font-medium">Message</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-zinc-900">
-                                            {webhookLogs.slice(0, 10).map((log, i) => (
-                                                <tr key={i} className="hover:bg-zinc-900/50 transition-colors">
-                                                    <td className="px-3 py-1.5 text-zinc-500 font-mono whitespace-nowrap">{log.timestamp}</td>
-                                                    <td className="px-3 py-1.5 text-zinc-400 capitalize">{log.provider}</td>
-                                                    <td className="px-3 py-1.5">
-                                                        <span className={cn(
-                                                            'px-1.5 py-0.5 rounded font-semibold',
-                                                            log.status === 'Success' ? 'bg-emerald-500/15 text-emerald-400' :
-                                                                log.status === 'Test' ? 'bg-blue-500/15 text-blue-400' :
-                                                                    log.status === 'Failed' ? 'bg-rose-500/15 text-rose-400' :
-                                                                        'bg-amber-500/15 text-amber-400'
-                                                        )}>{log.status}</span>
-                                                    </td>
-                                                    <td className="px-3 py-1.5 text-zinc-300 truncate max-w-[180px]" title={log.message}>{log.message}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-
-                    </Card>
-                </div>
-            )}
-
         </div>
     )
 }

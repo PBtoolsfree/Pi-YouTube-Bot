@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     LayoutDashboard, Settings, Cpu, Activity, Power, Monitor, Shield, Users,
     ShieldBan, Volume2, Heart, Share2, Beaker, Sparkles, IndianRupee, Cloud,
-    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift
+    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -90,7 +90,11 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                 <div className="flex-1 overflow-y-auto py-2">
                     <nav className="p-4 space-y-1">
                         {config?.is_cloud ? (
-                            <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
+                            <>
+                                <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
+                                <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
+                                <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
+                            </>
                         ) : (
                             <>
                                 <NavItem id="dashboard" icon={<Activity />} label="Dashboard" active={activeTab} onClick={setActiveTab} dot={navDot('dashboard')} dotColor={dotColor} />
