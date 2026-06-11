@@ -22,6 +22,9 @@ else
     # Check if pibot repository already exists in home directory
     if [[ -d "$HOME/pibot" && -f "$HOME/pibot/backend/api.py" ]]; then
         PROJECT_DIR="$HOME/pibot"
+        echo "🔄 Repository already exists. Pulling latest updates..."
+        cd "$PROJECT_DIR"
+        git pull origin main || git pull || true
     else
         echo "📥 Cloning repository to $HOME/pibot..."
         git clone https://github.com/PBtoolsfree/pibot.git "$HOME/pibot"
