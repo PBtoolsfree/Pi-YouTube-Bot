@@ -15,7 +15,19 @@ if [[ "$OSTYPE" != "linux-gnu"* ]]; then
     exit 1
 fi
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Detect project directory robustly (especially when piped to bash via curl)
+if [[ -f "backend/api.py" && -d "frontend" ]]; then
+    PROJECT_DIR="$(pwd)"
+else
+    # Check if pibot repository already exists in home directory
+    if [[ -d "$HOME/pibot" && -f "$HOME/pibot/backend/api.py" ]]; then
+        PROJECT_DIR="$HOME/pibot"
+    else
+        echo "📥 Cloning repository to $HOME/pibot..."
+        git clone https://github.com/PBtoolsfree/pibot.git "$HOME/pibot"
+        PROJECT_DIR="$HOME/pibot"
+    fi
+fi
 cd "$PROJECT_DIR"
 
 # Install system dependencies
