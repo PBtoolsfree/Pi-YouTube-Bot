@@ -165,3 +165,20 @@ Successfully connected to Cloud Alert WebSocket!
 ```
 
 Now, whenever a payment is received on the Cloud Server, it will be pushed in real-time to the Raspberry Pi to play the alert. If the Pi goes offline, the VPS queues the alerts and pushes them sequentially the moment the Pi reconnects.
+
+---
+
+## 🔄 Updating the Cloud Server (Tip Page & Webhooks Only)
+
+To update the Tip Page and Backend API on the Cloud VPS with the latest changes from GitHub without touching any local files, run:
+
+```bash
+bash scripts/update_cloud.sh
+```
+
+### What this update script does:
+1. Pulls the latest code updates from the GitHub repository (`main` branch).
+2. Updates any Python dependencies in `.venv` if `requirements.txt` was changed.
+3. Rebuilds the frontend Tip Page inside `frontend/` (`npm install` & `npm run build`).
+4. Restarts only the `pibot-cloud.service` to apply updates immediately.
+
