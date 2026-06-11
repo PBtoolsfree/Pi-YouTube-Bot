@@ -1351,6 +1351,8 @@ async def check_system_integrity():
 async def send_test_chat():
     return await bot.send_test_chat()
 
+from fastapi import Body
+
 class EmailTestPayload(BaseModel):
     email: str
     app_password: str
