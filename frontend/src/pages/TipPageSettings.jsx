@@ -999,6 +999,7 @@ export default function TipPageSettings() {
                         </div>
                     </Card>
                 </div>
+            )}
         </div>
     )
 }
