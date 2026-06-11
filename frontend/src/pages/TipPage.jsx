@@ -439,16 +439,6 @@ export default function TipPage() {
                     <img src="/logo.jpg" alt="PB Hero Live" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full object-cover shadow-lg shadow-green-900/30 ring-2 ring-green-500/30" />
                     <span className="font-bold text-lg sm:text-xl tracking-tight">PB Hero <span className="text-green-400">Live</span></span>
                 </div>
-                
-                {/* Admin Button */}
-                <a 
-                    href="/"
-                    title="Admin Dashboard"
-                    className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 p-2 sm:px-3 sm:py-2 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-zinc-400 hover:text-white transition-all active:scale-95"
-                >
-                    <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
-                    <span className="hidden sm:inline text-sm font-medium">Admin</span>
-                </a>
             </nav>
 
             <div className="flex-1 flex flex-col items-center px-4 py-6 sm:p-6 md:p-12 gap-6 sm:gap-8">

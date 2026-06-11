@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
+import App from './App.jsx'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -72,39 +73,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// 1. FAST ROUTING CHECK (Before App even loads)
-// Default to TipPage (Public) for safety. Only load Admin Dashboard on Localhost or Private Network.
-const hostname = window.location.hostname;
-const isLocal = hostname.includes('localhost') ||
-  hostname.includes('127.0.0.1') ||
-  hostname.startsWith('192.168.') ||
-  hostname.startsWith('10.') ||
-  hostname.startsWith('172.') ||
-  hostname.includes('nip.io');
-
-console.log(`[Boot] Host: ${hostname}, Local: ${isLocal} -> Loading: ${isLocal ? 'Dashboard' : 'TipPage'}`);
-
-// Lazy Load Dashboard (Heavy)
-const App = React.lazy(() => import('./App.jsx'));
-// Eager Load TipPage (Critical & Lightweight)
-import TipPage from './pages/TipPage.jsx';
-
-// FAILURE SAFE DEFAULT: Always TipPage unless strictly Localhost/Private
-let RootComponent = TipPage;
-
-if (isLocal) {
-  console.log("[Boot] Local/Private network detected, loading Admin Dashboard...");
-  RootComponent = App;
-} else {
-  console.log("[Boot] Public Domain detected, enforcing TipPage...");
-}
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
       <React.Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-zinc-500">Loading...</div>}>
-        <RootComponent />
+        <App />
       </React.Suspense>
     </ErrorBoundary>
   </React.StrictMode>,
 )
+
