@@ -1556,7 +1556,7 @@ async def payment_webhook(provider: str, payload: dict):
 
             # 1. Try to find amount with currency symbol first (Safer)
             # This prevents extracting random numbers like "2 new messages" or "Txn ID 2"
-            currency_pattern = r'(?:\u20b9|\u20B9|\\u20b9|\\u20B9|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)'
+            currency_pattern = r'(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)'
             amount_match = re.search(currency_pattern, combined_text, flags=re.IGNORECASE)
             
             if amount_match:
@@ -1566,22 +1566,33 @@ async def payment_webhook(provider: str, payload: dict):
                 except Exception as e:
                     logger.warning("Webhook/%s: failed to cast currency amount: %s", provider, e)
             else:
-                # 2. Fallback: Strip currency symbols and find the first number
-                cleaned_text = re.sub(
-                    r'(?:\u20b9|\u20B9|\\u20b9|\\u20B9|Rs\.?|INR|\bRs\b)',
-                    '', combined_text, flags=re.IGNORECASE
-                ).strip()
-
-                amount_match = re.search(r'([\d,]+(?:\.\d+)?)', cleaned_text)
+                # 2. Fallback: Look for amounts near keywords if currency symbol is missing
+                keyword_pattern = r'(?:received|paid|sent|for|amount)\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)'
+                amount_match = re.search(keyword_pattern, combined_text, flags=re.IGNORECASE)
+                
                 if amount_match:
                     try:
                         raw_amount_str = amount_match.group(1).replace(',', '').strip()
                         amount = float(raw_amount_str)
                     except Exception as e:
-                        logger.warning("Webhook/%s: failed to cast fallback amount: %s", provider, e)
+                        logger.warning("Webhook/%s: failed to cast keyword amount: %s", provider, e)
                 else:
-                    logger.warning("Webhook/%s: no amount found in: %.120r", provider, combined_text)
-                    return {"status": "ignored", "reason": f"Could not parse amount from text: {repr(combined_text[:120])}"}  # type: ignore
+                    # 3. Last resort: strip literal symbols and find first number (Risky, might catch notification counts)
+                    cleaned_text = re.sub(
+                        r'(?:₹|Rs\.?|INR|\bRs\b)',
+                        '', combined_text, flags=re.IGNORECASE
+                    ).strip()
+
+                    amount_match = re.search(r'([\d,]+(?:\.\d+)?)', cleaned_text)
+                    if amount_match:
+                        try:
+                            raw_amount_str = amount_match.group(1).replace(',', '').strip()
+                            amount = float(raw_amount_str)
+                        except Exception as e:
+                            logger.warning("Webhook/%s: failed to cast fallback amount: %s", provider, e)
+                    else:
+                        logger.warning("Webhook/%s: no amount found in: %.120r", provider, combined_text)
+                        return {"status": "ignored", "reason": f"Could not parse amount from text: {repr(combined_text[:120])}"}  # type: ignore
 
             if amount <= 0:
                 logger.warning("Webhook/%s: amount<=0, ignoring. Text: %.120r", provider, combined_text)
