@@ -1,0 +1,62 @@
+# Pi YouTube Bot — Python Dependencies
+# Compatible with Python 3.11+ and 3.13+ on Raspberry Pi OS
+# Last updated: 2026-02-28
+
+# --- Web Framework ---
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# --- HTTP Clients ---
+httpx==0.27.2
+requests==2.32.3
+aiohttp==3.11.18
+# NOTE: websockets is NOT pinned here — supabase[realtime] requires <13,
+# uvicorn[standard] requires >=10.4. Let pip resolve the compatible version.
+websockets>=10.4,<13
+
+# --- Data / Config ---
+pydantic==2.11.1
+python-multipart==0.0.20
+python-dotenv==1.1.0
+jinja2==3.1.6
+
+# --- YouTube Chat ---
+pytchat==0.5.5
+
+# --- TTS ---
+edge-tts==7.2.7
+gTTS==2.5.4
+
+# --- AI Providers ---
+openai==1.66.5
+
+# --- Google / YouTube API ---
+google-auth==2.38.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+google-api-python-client==2.166.0
+
+# --- Google Sheets ---
+gspread==6.1.4
+oauth2client==4.1.3
+
+# --- Storage (optional — used by CloudListenerService only) ---
+# supabase is optional: if not installed, cloud listener is automatically disabled.
+# If you need Supabase cloud donation sync, uncomment the line below:
+# supabase==2.15.2
+
+
+twilio==9.5.0
+
+# --- Web Scraping ---
+beautifulsoup4==4.13.3
+yt-dlp
+
+# --- System Monitoring ---
+psutil==7.0.0
+
+# --- Performance (Linux/Pi only) ---
+uvloop==0.21.0; sys_platform != 'win32'
+
+# --- Language Detection ---
+langid==1.1.6

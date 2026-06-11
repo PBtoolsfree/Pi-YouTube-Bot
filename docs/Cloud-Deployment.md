@@ -60,6 +60,35 @@ curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/main/scripts/deplo
 5. Builds the React frontend.
 6. Installs and starts a systemd service (`pibot-cloud.service`) configured with `RUN_MODE=cloud`.
 
+### 💡 Oracle Cloud (OCI) Special Requirements
+
+Oracle Cloud Infrastructure (Always Free instances) has strict networking rules at both the console (VCN) level and OS firewall level.
+
+If you are deploying on Oracle Cloud:
+
+#### 1. Allow Port 8000 in OCI Security List
+You must create an Ingress Rule in your Virtual Cloud Network (VCN) subnet:
+- **Source CIDR**: `0.0.0.0/0` (Any IP)
+- **IP Protocol**: `TCP`
+- **Destination Port Range**: `8000`
+- **Description**: Allow Pi Bot server dashboard and Tip Page
+
+#### 2. Open Port 8000 in OS Firewall (iptables)
+By default, Oracle Cloud Ubuntu and Oracle Linux OS templates drop all incoming connections. Even if you opened port 8000 in the OCI dashboard, you must run these commands on the VPS:
+
+##### For Ubuntu/Debian Instances:
+```bash
+sudo iptables -I INPUT 6 -p tcp --dport 8000 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+##### For Oracle Linux/RHEL Instances:
+```bash
+sudo firewall-cmd --zone=public --add-port=8000/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+
 ### Post-Install Output Example:
 ```text
 ============================================================
