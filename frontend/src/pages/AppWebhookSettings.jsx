@@ -126,48 +126,6 @@ export default function AppWebhookSettings() {
                 </div>
 
                 <div className="pt-4 border-t border-zinc-800 space-y-4">
-                    <div className="space-y-2">
-                        <h2 className="text-xl font-bold flex items-center gap-3">
-                            <Smartphone className="text-indigo-400 h-6 w-6" />
-                            Cloud Forwarder (Send to Local Pi)
-                        </h2>
-                        <p className="text-sm text-zinc-400">
-                            Configure your Cloud dashboard to automatically forward all incoming donations directly to your local Raspberry Pi.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-lg border border-zinc-800">
-                        <div>
-                            <div className="font-medium text-zinc-200 mb-1 text-sm">Forward to Local Pi</div>
-                            <div className="text-xs text-zinc-500">Sends alerts over internet to your local PC overlay</div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={localPiConfig.enabled}
-                                onChange={(e) => saveConfig(null, { ...localPiConfig, enabled: e.target.checked })}
-                            />
-                            <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-300 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                        </label>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Local Pi Webhook URL</label>
-                        <input
-                            type="text"
-                            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                            value={localPiConfig.webhook_url}
-                            onChange={(e) => saveConfig(null, { ...localPiConfig, webhook_url: e.target.value })}
-                            placeholder="https://my-local-pi-tunnel.trycloudflare.com/api/webhook/cloud"
-                        />
-                        <p className="text-[10px] text-zinc-500">
-                            Paste the Cloudflare tunnel URL from your Local Pi dashboard. Make sure it ends in <strong>/api/webhook/cloud</strong>
-                        </p>
-                    </div>
-                </div>
-
-                <div className="pt-4 border-t border-zinc-800 space-y-4">
                     <h3 className="text-sm font-semibold text-zinc-200">📱 How to send Mobile Notifications to Pi Bot</h3>
                     <p className="text-xs text-zinc-400">The easiest way to capture notifications is using the custom <strong>Pi Bot Forwarder</strong> app on your Android phone.</p>
 
