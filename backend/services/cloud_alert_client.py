@@ -107,6 +107,10 @@ class CloudAlertClientService:
                     user=event.get("user"),
                     amount=event.get("amount")
                 )
+            
+            # Force UI overlays to fetch new data
+            if hasattr(self.bot, "_log_ui"):
+                await self.bot._log_ui("DONATION", "History sync update")
 
     def stop(self):
         self.is_running = False
