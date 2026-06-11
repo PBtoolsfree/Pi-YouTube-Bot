@@ -122,6 +122,38 @@ curl http://localhost:8000/api/health
 
 ---
 
+## 6.1 Cloud VPS / Oracle Cloud Setup (Tip Page Only)
+
+For running only the public Tip Page and webhook payment handlers in the cloud (VPS) with dashboard password protection.
+
+### Quick Install (Recommended)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/main/scripts/deploy_cloud.sh | bash
+```
+
+### What it does (automatically):
+1. Installs Node.js v20+, Python 3, Git, SQLite
+2. Clones the repository to `~/pibot`
+3. Creates Python virtual environment (`.venv`) and installs requirements
+4. Generates secure credentials:
+   - **`security.dashboard_password`**: Unique admin dashboard password
+   - **`security.webhook_secret`**: Webhook validation secret token
+5. Rebuilds the frontend Tip Page assets
+6. Registers and starts the systemd service (`pibot-cloud.service`) in Cloud Mode (`RUN_MODE=cloud`)
+
+### How to Update:
+```bash
+bash scripts/update_cloud.sh
+```
+
+> 💡 **Oracle Cloud (OCI) Users**:
+> 1. Add an Ingress Rule in OCI Virtual Cloud Network (VCN) subnet allowing TCP port `8000`.
+> 2. Open port `8000` in the OS firewall by running `sudo iptables -I INPUT 6 -p tcp --dport 8000 -j ACCEPT && sudo netfilter-persistent save`.
+> Detailed guide: [Cloud-Deployment.md](docs/Cloud-Deployment.md)
+
+---
+
 ## 7. Manual Installation Guide (Linux)
 
 ```bash
