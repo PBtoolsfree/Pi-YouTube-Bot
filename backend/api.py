@@ -1402,6 +1402,8 @@ async def debug_email_check():
 # --- TUNNEL ROUTES ---
 @app.get("/api/tunnel")
 async def get_tunnel_status():
+    if not hasattr(bot, "tunnel") or bot.tunnel is None:
+        return {"is_running": False, "url": None}
     return bot.tunnel.get_status()
 
 @app.post("/api/tunnel/start")
