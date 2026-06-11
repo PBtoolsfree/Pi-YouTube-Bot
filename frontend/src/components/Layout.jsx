@@ -92,6 +92,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                         {config?.is_cloud ? (
                             <>
                                 <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
+                                <NavItem id="local_pi_connection" icon={<Server />} label="Local Pi Connection" active={activeTab} onClick={setActiveTab} dot={navDot('local_pi_connection')} dotColor={dotColor} />
                                 <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
                                 <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
                             </>

@@ -14,6 +14,13 @@ class CloudAlertClientService:
 
     async def start(self):
         config = self.bot.load_config()
+        
+        # Check if enabled
+        enabled = config.get("cloud_alert_enabled", True)
+        if not enabled:
+            logger.info("Cloud Connection disabled in settings.")
+            return
+
         cloud_ws_url = config.get("cloud_alert_url") or os.environ.get("CLOUD_ALERT_URL")
         if not cloud_ws_url:
             logger.info("CLOUD_ALERT_URL not set in config or environment. Standing by in local mode.")

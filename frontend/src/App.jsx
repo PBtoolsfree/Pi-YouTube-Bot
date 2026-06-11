@@ -37,6 +37,7 @@ const IgnoreListPage = lazy(() => import('./pages/IgnoreList'))
 const TipPageSettings = lazy(() => import('./pages/TipPageSettings'))
 const CloudflareSettings = lazy(() => import('./pages/CloudflareSettings'))
 const AppWebhookSettings = lazy(() => import('./pages/AppWebhookSettings'))
+const LocalPiConnection = lazy(() => import('./pages/LocalPiConnection'))
 const SuperChatSettings = lazy(() => import('./pages/SuperChatSettings'))
 const AgentPage = lazy(() => import('./pages/Agent'))
 const BackupPage = lazy(() => import('./pages/Backup'))
@@ -250,6 +251,7 @@ function App() {
         {activeTab === 'settings' && <SettingsPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'tip_page_settings' && <TipPageSettings />}
         {activeTab === 'app_webhook' && <AppWebhookSettings />}
+        {activeTab === 'local_pi_connection' && <LocalPiConnection />}
         {activeTab === 'super_chat_settings' && <SuperChatSettings config={config} onSave={handleSaveConfig} />}
         {activeTab === 'cloudflare' && <CloudflareSettings />}
         {activeTab === 'agent' && <AgentPage />}

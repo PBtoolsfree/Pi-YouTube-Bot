@@ -777,28 +777,28 @@ export default function SettingsPage({ config, onSave }) {
                         <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                             <CardHeader className="pb-3 border-b border-zinc-800">
                                 <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
-                                    <Cpu className="h-4 w-4 text-emerald-400" />
-                                    Local Raspberry Pi
+                                    <Cloud className="h-4 w-4 text-blue-400" />
+                                    Cloud Connection
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-4">
                                 <div className="flex items-center justify-between">
                                     <label className="text-sm font-medium text-zinc-300">Enabled</label>
                                     <Switch
-                                        checked={localConfig.local_pi?.enabled || false}
-                                        onCheckedChange={(c) => updateNested('local_pi.enabled', c)}
+                                        checked={localConfig.cloud_alert_enabled !== false}
+                                        onCheckedChange={(c) => updateNested('cloud_alert_enabled', c)}
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Webhook URL</label>
+                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Cloud Server WebSocket URL</label>
                                     <Input
-                                        value={localConfig.local_pi?.webhook_url || ''}
-                                        onChange={(e) => updateNested('local_pi.webhook_url', e.target.value)}
+                                        value={localConfig.cloud_alert_url || ''}
+                                        onChange={(e) => updateNested('cloud_alert_url', e.target.value)}
                                         className="bg-zinc-950 border-zinc-700 h-9 font-mono text-xs"
-                                        placeholder="https://my-local-pi-tunnel.trycloudflare.com/webhook"
+                                        placeholder="ws://80.225.201.233:8000/ws/pi-client"
                                     />
                                     <p className="text-[10px] text-zinc-500">
-                                        The Cloud Pi Bot will forward donation alerts to this local Raspberry Pi URL.
+                                        The Local Pi will connect to this Cloud Server URL to receive real-time donation alerts. (Copy this from your Cloud Dashboard).
                                     </p>
                                 </div>
                             </CardContent>
