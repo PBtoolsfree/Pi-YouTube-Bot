@@ -96,6 +96,17 @@ class CloudAlertClientService:
                 amount=amount,
                 do_tts=do_tts
             )
+        elif etype == "sync_action":
+            action = event.get("action")
+            logger.info(f"Sync action received: {action}")
+            if action == "clear_history":
+                self.bot.clear_donation_history()
+            elif action == "delete_history_item":
+                self.bot.delete_donation_history_item(
+                    timestamp=event.get("timestamp"),
+                    user=event.get("user"),
+                    amount=event.get("amount")
+                )
 
     def stop(self):
         self.is_running = False

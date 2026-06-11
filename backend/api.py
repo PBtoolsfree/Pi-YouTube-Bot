@@ -1330,6 +1330,15 @@ async def clear_donations_route():
     success = bot.clear_donation_history()
     if success:
         bot.processed_transactions.clear() # Clear deduplication cache to allow old tips again
+        
+        # Broadcast to Pi Clients
+        is_cloud = (os.environ.get("RUN_MODE") == "cloud")
+        if is_cloud and getattr(bot, "pi_clients", None):
+            asyncio.create_task(bot.pi_clients.broadcast({
+                "type": "sync_action",
+                "action": "clear_history"
+            }))
+            
         return {"status": "success", "message": "History cleared"}
     raise HTTPException(500, "Failed to clear history")
 
@@ -1342,6 +1351,17 @@ class DeleteDonationRequest(BaseModel):
 async def delete_donation_item_route(payload: DeleteDonationRequest):
     success = bot.delete_donation_history_item(payload.timestamp, payload.user, payload.amount)
     if success:
+        # Broadcast to Pi Clients
+        is_cloud = (os.environ.get("RUN_MODE") == "cloud")
+        if is_cloud and getattr(bot, "pi_clients", None):
+            asyncio.create_task(bot.pi_clients.broadcast({
+                "type": "sync_action",
+                "action": "delete_history_item",
+                "timestamp": payload.timestamp,
+                "user": payload.user,
+                "amount": payload.amount
+            }))
+            
         return {"status": "success", "message": "Item deleted"}
     raise HTTPException(404, "Item not found or failed to delete")
 
