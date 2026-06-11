@@ -1586,16 +1586,26 @@ async def payment_webhook(provider: str, payload: dict):
             # Search in full combined_text (not just `text`) so ticker/bigtext are included
             sender = "Someone"
             for search_text in [text, combined_text]:
-                m = re.search(r'(?:from|by)\s+([A-Za-z][A-Za-z0-9 ]{1,40})(?:[\.|\n]|$)', search_text, re.IGNORECASE)
-                if m:
-                    sender = m.group(1).strip()
+                # 1. "Sender: Name" or "Name: Name"
+                m0 = re.search(r'(?:sender|name)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 ]{1,40})', search_text, re.IGNORECASE)
+                if m0:
+                    sender = m0.group(1).strip()
                     break
+                    
+                # 2. "from Name" or "by Name" 
+                # Stop matching at punctuation like comma, period, or words like "on", "for", "via"
+                m1 = re.search(r'(?:from|by)\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)(?:[,;\.\n]|\s+on\b|\s+for\b|\s+via\b|\s+using\b|$)', search_text, re.IGNORECASE)
+                if m1:
+                    sender = m1.group(1).strip()
+                    break
+                    
+                # 3. "received ... has sent"
                 m2 = re.search(r'received\s+([A-Za-z0-9 ]+?)\s+has sent', search_text, re.IGNORECASE)
                 if m2:
                     sender = m2.group(1).strip()
                     break
 
-            # Clean up trailing noise
+            # Clean up trailing noise just in case it got included
             for pattern in [r'\s+on paytm.*', r'\s+on phonepe.*', r'\s+for order.*',
                             r'\s+via upi.*', r'\s+using.*']:
                 sender = re.sub(pattern, '', sender, flags=re.IGNORECASE).strip()

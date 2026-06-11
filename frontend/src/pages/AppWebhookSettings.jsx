@@ -43,11 +43,13 @@ export default function AppWebhookSettings() {
         setTestingWebhook(true)
         setWebhookTestResult(null)
         try {
-            const res = await axios.post(`${API_URL}/webhook/test`)
+            const res = await axios.post(`${API_URL}/webhook/test/app`)
             setWebhookTestResult({ type: 'success', message: res.data.message || 'Test alert fired!' })
             await fetchWebhookLogs()
         } catch (e) {
-            setWebhookTestResult({ type: 'error', message: e.response?.data?.detail || e.message })
+            const detail = e.response?.data?.detail;
+            const errorMsg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? JSON.stringify(detail) : e.message);
+            setWebhookTestResult({ type: 'error', message: errorMsg })
         }
         setTestingWebhook(false)
     }
