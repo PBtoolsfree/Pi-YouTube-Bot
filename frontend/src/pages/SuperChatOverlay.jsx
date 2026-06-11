@@ -281,7 +281,6 @@ export default function SuperChatOverlay({ config }) {
     return (
         <>
             <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
             * { box-sizing: border-box; }
 
             #alert-container {
