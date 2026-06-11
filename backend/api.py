@@ -1351,26 +1351,34 @@ async def check_system_integrity():
 async def send_test_chat():
     return await bot.send_test_chat()
 
-from fastapi import Body
+class EmailTestPayload(BaseModel):
+    email: str
+    app_password: str
+    imap_server: str
 
 @app.post("/api/test/email")
-async def test_email_connection(payload: Optional[Dict[str, str]] = Body(None)):
+async def test_email_connection(payload: EmailTestPayload = Body(...)):
     # Allow testing with payload credentials OR saved config
-    temp_config = {}
-    if payload:
-        temp_config = {"email_verification": payload}
+    temp_config = {"email_verification": payload.dict()}
     
     # Use the service to test connection
     # We create a temporary service instance or use the bot's
     from backend.services.email_service import EmailService
     
-    # Mock config loader if payload provided
-    loader = bot.load_config
-    if payload:
-        loader = lambda: temp_config
+    # Mock config loader
+    loader = lambda: temp_config
         
     service = EmailService(loader)
-    success = await asyncio.to_thread(service._connect)
+    
+    import threading
+    import asyncio
+    
+    def _run_connect():
+        return service._connect()
+        
+    loop = asyncio.get_event_loop()
+    success = await loop.run_in_executor(None, _run_connect)
+    
     if success:
         service._disconnect()
         return {"status": "success", "message": "Connected to IMAP successfully!"}
@@ -1665,7 +1673,8 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     
     # Run in thread to avoid blocking async loop
     try:
-        result = await asyncio.to_thread(service.check_for_payment_email, amount, min_timestamp=timestamp)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: service.check_for_payment_email(amount, min_timestamp=timestamp))
         
         # If verified, trigger alert!
         if result["verified"]:
@@ -1747,7 +1756,8 @@ async def test_sheets_connection():
     """
     Forces a connection attempt
     """
-    success = await bot.sheets.connect()
+    loop = asyncio.get_event_loop()
+    success = await loop.run_in_executor(None, bot.sheets.connect)
     if success:
         return {"status": "success", "message": f"Connected to Sheet: {bot.sheets.sheet.title if bot.sheets.sheet else 'Unknown'}"}
     else:
@@ -1798,7 +1808,8 @@ async def list_user_spreadsheets():
                 pageSize=20
             ).execute()
 
-        results = await asyncio.to_thread(_fetch_drive_files)  # type: ignore
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, _fetch_drive_files)  # type: ignore
         
         items = results.get('files', [])
         return {"status": "success", "sheets": items}
