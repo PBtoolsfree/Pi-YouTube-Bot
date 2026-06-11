@@ -2244,9 +2244,9 @@ class BotService:
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
-            if getattr(self, "on_cloud_alert", None):
+            if getattr(self, "pi_clients", None):
                 logger.info("Forwarding alert to Cloud Pi Clients...")
-                asyncio.create_task(self.on_cloud_alert({
+                asyncio.create_task(self.pi_clients.broadcast({
                     "type": "donation_alert",
                     "user": user,
                     "amount": amount,
@@ -2343,9 +2343,9 @@ class BotService:
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
-            if getattr(self, "on_cloud_alert", None):
+            if getattr(self, "pi_clients", None):
                 logger.info("Forwarding app alert to Cloud Pi Clients...")
-                asyncio.create_task(self.on_cloud_alert({
+                asyncio.create_task(self.pi_clients.broadcast({
                     "type": "app_alert",
                     "user": user,
                     "amount": amount,

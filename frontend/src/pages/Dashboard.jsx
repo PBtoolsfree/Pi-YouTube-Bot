@@ -320,6 +320,16 @@ function FeaturesPanel() {
             statusLabel: core.status,
             canToggle: false,
         },
+        {
+            key: 'cloud_client',
+            label: 'Cloud Connection',
+            desc: 'Real-time WebSocket alerts',
+            icon: <Globe className="h-4 w-4" />,
+            color: 'cyan',
+            active: workers.cloud_client?.status === 'connected',
+            statusLabel: workers.cloud_client?.status,
+            canToggle: false,
+        },
     ]
 
     const activeCount = features.filter(f => f.active).length

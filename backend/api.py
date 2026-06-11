@@ -983,6 +983,10 @@ async def get_system_status():
                 "last_error": sb_last_error,
                 "last_heartbeat": sb_worker.get("last_heartbeat"),
                 "restart_count": sb_worker.get("restart_count", 0)
+            },
+            "cloud_client": {
+                "enabled": cfg.get("cloud_alert_enabled", True),
+                "status": bot_stats.get("workers", {}).get("cloud_client", {}).get("status", "disconnected")
             }
         },
         "system": {
@@ -2765,6 +2769,53 @@ async def upload_qr(file: UploadFile = File(...)):
     except Exception as e:
         logger.exception("QR upload failed")
         raise HTTPException(500, f"Upload failed: {e}")
+
+class PiClientManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(json.dumps(message))
+            except Exception as e:
+                logger.error(f"Error broadcasting to Pi client: {e}")
+
+pi_clients = PiClientManager()
+bot.pi_clients = pi_clients
+
+@app.websocket("/ws/pi-client")
+async def websocket_pi_client_endpoint(websocket: WebSocket):
+    # Security Token Check
+    cfg = _get_config()
+    secret = cfg.get("security", {}).get("webhook_secret")
+    if secret:
+        token = websocket.query_params.get("token")
+        if token != secret:
+            logger.warning("Pi client WebSocket connection rejected: Invalid Token")
+            await websocket.close(code=1008, reason="Unauthorized")
+            return
+            
+    await pi_clients.connect(websocket)
+    logger.info("Pi client connected successfully!")
+    try:
+        while True:
+            # We don't expect messages from the Pi, but we keep the connection open
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        pi_clients.disconnect(websocket)
+        logger.info("Pi client disconnected.")
+    except Exception as e:
+        pi_clients.disconnect(websocket)
+        logger.error(f"Pi client error: {e}")
 
 # --- FRONTEND STATIC SERVING ---
 # Order matters: API/WS routes are defined above.

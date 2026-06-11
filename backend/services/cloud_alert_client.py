@@ -11,6 +11,7 @@ class CloudAlertClientService:
         self.bot = bot_service
         self.task = None
         self.is_running = False
+        self.connected = False
 
     async def start(self):
         config = self.bot.load_config()
@@ -42,6 +43,7 @@ class CloudAlertClientService:
                 logger.info(f"Connecting to Cloud WebSocket: {url}...")
                 async with websockets.connect(connect_url) as ws:
                     logger.info("Successfully connected to Cloud Alert WebSocket!")
+                    self.connected = True
                     await self.bot._log_ui("SYSTEM", "Connected to Cloud Alert server")
                     
                     while self.is_running:
@@ -52,6 +54,7 @@ class CloudAlertClientService:
                         except Exception as parse_err:
                             logger.error(f"Error parsing cloud event: {parse_err}")
             except Exception as e:
+                self.connected = False
                 logger.warning(f"Cloud Alert Client connection lost: {e}. Retrying in 5 seconds...")
                 await self.bot._log_ui("SYSTEM", "Cloud Alert connection lost. Reconnecting...")
                 await asyncio.sleep(5)
