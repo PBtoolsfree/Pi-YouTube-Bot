@@ -94,7 +94,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
                                 <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
                                 <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
-                                <NavItem id="local_pi_webhook" icon={<Server />} label="Local Pi Connection" active={activeTab} onClick={setActiveTab} dot={navDot('local_pi_webhook')} dotColor={dotColor} />
                             </>
                         ) : (
                             <>
@@ -114,7 +113,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="obs" icon={<Monitor />} label="OBS Source" active={activeTab} onClick={setActiveTab} dot={navDot('obs')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
                                 <NavItem id="super_chat_settings" icon={<Gem />} label="Super Chat" active={activeTab} onClick={() => setActiveTab('super_chat_settings')} dot={navDot('super_chat_settings')} dotColor={dotColor} />
-                                <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
                                 <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
                             </>
