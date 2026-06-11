@@ -1534,9 +1534,17 @@ async def payment_webhook(provider: str, payload: dict):
             return {"status": "error", "reason": f"Internal Server Error: {str(e)}"}
 
     # ── Generic / other providers ──────────────────────────────────────────
-    amount  = payload.get("amount", 0)
+    amount  = float(payload.get("amount", 0))
     sender  = payload.get("sender", "Unknown")
     message = payload.get("message", f"Payment via {provider}")
+
+    if provider == "cloud":
+        original_provider = payload.get("original_provider", "email")
+        if original_provider == "app":
+            asyncio.create_task(bot.trigger_app_alert(sender, amount, do_tts=True))
+        else:
+            await bot.trigger_donation_alert(sender, amount, message, skip_verification=True)
+        return {"status": "received", "provider": "cloud"}
 
     if amount > 1000:
         amount = amount / 100

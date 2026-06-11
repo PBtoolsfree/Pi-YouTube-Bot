@@ -2243,11 +2243,21 @@ class BotService:
                 })
 
         # Forward to Pi clients if running as Cloud server
-        if is_cloud and getattr(self, "on_cloud_alert", None):
-            logger.info("Forwarding alert to Cloud Pi Clients...")
-            asyncio.create_task(self.on_cloud_alert({
-                "type": "donation_alert",
-                "user": user,
+        if is_cloud:
+            if getattr(self, "on_cloud_alert", None):
+                logger.info("Forwarding alert to Cloud Pi Clients...")
+                asyncio.create_task(self.on_cloud_alert({
+                    "type": "donation_alert",
+                    "user": user,
+                    "amount": amount,
+                    "message": message,
+                    "transaction_id": transaction_id
+                }))
+            
+            # Send HTTP Webhook to local Pi
+            asyncio.create_task(self._send_local_pi_webhook({
+                "original_provider": "app" if skip_verification else "email",
+                "sender": user,
                 "amount": amount,
                 "message": message,
                 "transaction_id": transaction_id
@@ -2332,13 +2342,23 @@ class BotService:
             })
 
         # Forward to Pi clients if running as Cloud server
-        if is_cloud and getattr(self, "on_cloud_alert", None):
-            logger.info("Forwarding app alert to Cloud Pi Clients...")
-            asyncio.create_task(self.on_cloud_alert({
-                "type": "app_alert",
-                "user": user,
+        if is_cloud:
+            if getattr(self, "on_cloud_alert", None):
+                logger.info("Forwarding app alert to Cloud Pi Clients...")
+                asyncio.create_task(self.on_cloud_alert({
+                    "type": "app_alert",
+                    "user": user,
+                    "amount": amount,
+                    "do_tts": do_tts,
+                    "transaction_id": tx_id
+                }))
+            
+            # Send HTTP Webhook to local Pi
+            asyncio.create_task(self._send_local_pi_webhook({
+                "original_provider": "app",
+                "sender": user,
                 "amount": amount,
-                "do_tts": do_tts,
+                "message": message,
                 "transaction_id": tx_id
             }))
             
@@ -2395,6 +2415,27 @@ class BotService:
         
         return {"status": "success", "processed": True}
 
+    async def _send_local_pi_webhook(self, payload):
+        """Send an HTTP POST webhook to the local Raspberry Pi if configured."""
+        try:
+            config = self.load_config()
+            local_pi = config.get("local_pi", {})
+            if not local_pi.get("enabled", False):
+                return
+            
+            webhook_url = local_pi.get("webhook_url", "").strip()
+            if not webhook_url:
+                return
+                
+            logger.info(f"Sending webhook to Local Pi: {webhook_url}")
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                # Fire and forget with a short timeout
+                async with session.post(webhook_url, json=payload, timeout=5.0) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"Local Pi Webhook returned {resp.status}")
+        except Exception as e:
+            logger.error(f"Failed to send local Pi webhook: {e}")
 
     def _save_donation_history(self, user, amount, message, transaction_id=None, played=True):
         """
