@@ -10,7 +10,21 @@ const LocalPiConnection = () => {
         // Automatically determine the correct WebSocket URL based on current host
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const host = window.location.host
-        setWsUrl(`${protocol}//${host}/ws/pi-client`)
+        
+        // Fetch config to get the webhook secret
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(data => {
+                const secret = data.security?.webhook_secret
+                if (secret) {
+                    setWsUrl(`${protocol}//${host}/ws/pi-client?token=${secret}`)
+                } else {
+                    setWsUrl(`${protocol}//${host}/ws/pi-client`)
+                }
+            })
+            .catch(() => {
+                setWsUrl(`${protocol}//${host}/ws/pi-client`)
+            })
     }, [])
 
     const handleCopy = () => {

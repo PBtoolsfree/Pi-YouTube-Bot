@@ -36,7 +36,10 @@ class CloudAlertClientService:
         secret = config.get("security", {}).get("webhook_secret") or os.environ.get("WEBHOOK_SECRET")
         
         # Build URL with token parameter for auth if secret configured
-        connect_url = f"{url}?token={secret}" if secret else url
+        if "?token=" in url:
+            connect_url = url
+        else:
+            connect_url = f"{url}?token={secret}" if secret else url
 
         while self.is_running:
             try:

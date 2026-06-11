@@ -365,7 +365,7 @@ function FeaturesPanel() {
             </CardHeader>
 
             <div className="flex-1 overflow-auto p-3">
-                <div className="grid grid-cols-2 gap-2 h-full">
+                <div className="grid grid-cols-2 gap-2">
                     {features.map(feat => {
                         const c = colorMap[feat.color]
                         const isOn = !!feat.active
