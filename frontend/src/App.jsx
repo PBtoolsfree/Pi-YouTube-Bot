@@ -120,7 +120,10 @@ function App() {
       // AUTO-DETECT PUBLIC MODE (Host based only)
       if (
         window.location.hostname &&
-        (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('trycloudflare.com'))
+        (window.location.hostname.includes('vercel.app') || 
+         window.location.hostname.includes('trycloudflare.com') ||
+         window.location.hostname.includes('qzz.io') ||
+         window.location.hostname.includes('pbherotip'))
       ) {
         console.log("Detecting Public Mode via Hostname")
         setIsPublicMode(true)
