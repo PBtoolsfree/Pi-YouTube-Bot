@@ -155,16 +155,14 @@ class TunnelSecurityASGIMiddleware:
         is_allowed_public = (
             path.startswith("/assets")
             or path.startswith("/uploads")
-            or path.startswith("/api/payment/")
-            or path.startswith("/api/donate")
+            or path.startswith("/api/")
             or path.startswith("/overlay")
             or path.startswith("/obs")
             or path.startswith("/ws/")
             or (path in ["/", ""] and "mode" in request.query_params)
-            or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
-                        "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client",
+            or path in ["/favicon.ico", "/manifest.json", "/tip", "/tip/",
+                        "/logo.jpg", "/Background.jpg", "/vite.svg",
                         "/public-avatar-overlay", "/giveawayspin"]
-            or path.startswith("/api/webhook/")
             or path in allowed_paths
             or "*" in allowed_paths
             or any(
