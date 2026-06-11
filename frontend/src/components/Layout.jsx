@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     LayoutDashboard, Settings, Cpu, Activity, Power, Monitor, Shield, Users,
     ShieldBan, Volume2, Heart, Share2, Beaker, Sparkles, IndianRupee, Cloud,
-    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone
+    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -94,6 +94,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
                                 <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
                                 <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
+                                <NavItem id="local_pi_webhook" icon={<Server />} label="Local Pi Connection" active={activeTab} onClick={setActiveTab} dot={navDot('local_pi_webhook')} dotColor={dotColor} />
                             </>
                         ) : (
                             <>
