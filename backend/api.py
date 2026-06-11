@@ -1312,8 +1312,11 @@ class DonationRequest(BaseModel):
 
 @app.post("/api/donate")
 async def receive_donation(payload: DonationRequest):
+    import time
+    import random
     print(f">>> [API] Donation Received: {payload.user} - Rs.{payload.amount}")
-    return await bot.trigger_donation_alert(payload.user, payload.amount, payload.message, skip_verification=True)
+    tx_id = f"test_donate_{int(time.time())}_{random.randint(1000, 9999)}"
+    return await bot.trigger_donation_alert(payload.user, payload.amount, payload.message, transaction_id=tx_id, skip_verification=True)
 
 @app.get("/api/donations")
 async def get_donations_route(limit: int = 100):
@@ -1348,10 +1351,10 @@ async def simulate_alert(payload: Dict[str, Any]):
 
 @app.post("/api/test/superchat")
 async def test_superchat(payload: Dict[str, Any]):
-    """
-    Manually triggers a Super Chat alert for testing.
-    Does NOT log to Google Sheets.
-    """
+    import time
+    import random
+    if "transaction_id" not in payload:
+        payload["transaction_id"] = f"test_sc_{int(time.time())}_{random.randint(1000, 9999)}"
     return await bot.test_super_chat(payload)
 
 @app.post("/api/test/system")
