@@ -66,7 +66,7 @@ export default function Dashboard({ logs }) {
     }
 
     return (
-        <div className="flex flex-col gap-5 p-6 h-full max-h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+        <div className="flex flex-col gap-5 min-h-0 bg-zinc-950 text-zinc-100">
             {/* Top Stats Row */}
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
                 <StatCard
