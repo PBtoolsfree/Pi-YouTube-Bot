@@ -1004,8 +1004,8 @@ async def get_system_status():
                 "restart_count": sb_worker.get("restart_count", 0)
             },
             "cloud_client": {
-                "enabled": cfg.get("cloud_alert_enabled", True),
-                "status": bot_stats.get("workers", {}).get("cloud_client", {}).get("status", "disconnected")
+                "enabled": True,
+                "status": "connected" if (os.environ.get("RUN_MODE") == "cloud" and len(active_pi_websockets) > 0) else bot_stats.get("workers", {}).get("cloud_client", {}).get("status", "disconnected")
             }
         },
         "system": {
@@ -1014,6 +1014,9 @@ async def get_system_status():
             "disk": psutil.disk_usage('/').percent,
             "temp": temp,
             "uptime_seconds": int(time.time() - _START_TIME)
+        },
+        "tunnel": {
+            "is_running": hasattr(bot, "tunnel") and bot.tunnel is not None and bot.tunnel.get_status().get("is_running", False)
         },
         "warnings": []
     }

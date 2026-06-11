@@ -64,7 +64,8 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
             case 'testing': return svc.bot ? 'green' : 'red'
             case 'tip_page_settings': return svc.email ? 'green' : 'yellow'
             case 'super_chat_settings': return svc.bot ? 'green' : 'red'
-            case 'cloudflare': return null
+            case 'cloudflare': return svcStatus?.tunnel?.is_running ? 'green' : 'red'
+            case 'local_pi_connection': return svcStatus?.workers?.cloud_client?.status === 'connected' ? 'green' : 'red'
             case 'backup': return null
             case 'redeems': return svc.streamer ? 'green' : 'yellow'
             case 'settings': return null
