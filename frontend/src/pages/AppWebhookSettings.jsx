@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Smartphone, CheckCircle, Loader2, AlertCircle, Beaker } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+import { Card } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 const API_URL = import.meta?.env?.VITE_API_URL || '/api'
