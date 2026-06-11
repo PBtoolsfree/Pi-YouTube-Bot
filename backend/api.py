@@ -1351,8 +1351,10 @@ async def check_system_integrity():
 async def send_test_chat():
     return await bot.send_test_chat()
 
+from fastapi import Body
+
 @app.post("/api/test/email")
-async def test_email_connection(payload: Optional[Dict[str, str]] = None):
+async def test_email_connection(payload: Optional[Dict[str, str]] = Body(None)):
     # Allow testing with payload credentials OR saved config
     temp_config = {}
     if payload:
