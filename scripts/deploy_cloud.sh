@@ -4,6 +4,8 @@
 # =============================================================================
 set -euo pipefail
 
+export DEBIAN_FRONTEND=noninteractive
+
 # Print banner
 echo "============================================================"
 echo " 🌐 PI BOT — CLOUD VPS DEPLOYMENT SERVICE"
@@ -35,9 +37,14 @@ cd "$PROJECT_DIR"
 
 # Install system dependencies
 echo "📦 Installing system dependencies (requires sudo)..."
+SUDO_CMD=""
+if command -v sudo &> /dev/null; then
+    SUDO_CMD="sudo"
+fi
+
 if command -v apt-get &> /dev/null; then
-    sudo apt-get update -y
-    sudo apt-get install -y git python3 python3-venv python3-pip sqlite3 curl build-essential
+    $SUDO_CMD apt-get update -y
+    $SUDO_CMD apt-get install -y git python3 python3-venv python3-pip sqlite3 curl build-essential
 else
     echo "⚠️ Warning: apt-get not found. Make sure git, python3 (with venv, pip), and sqlite3 are installed."
 fi
@@ -46,8 +53,8 @@ fi
 if ! command -v node &> /dev/null || [[ "$(node -v | cut -d'.' -f1)" != "v20" && "$(node -v | cut -d'.' -f1)" != "v21" && "$(node -v | cut -d'.' -f1)" != "v22" ]]; then
     echo "🟢 Node.js v20+ not found. Installing Node.js LTS v20..."
     if command -v apt-get &> /dev/null; then
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO_CMD -E bash -
+        $SUDO_CMD apt-get install -y nodejs
     else
         echo "❌ Node.js v20+ is required. Please install it manually."
         exit 1
@@ -67,6 +74,7 @@ echo "⚛️ Building Frontend Assets (this may take a moment)..."
 if [[ -d "frontend" ]]; then
     cd frontend
     npm install --silent
+    export NODE_OPTIONS=--max_old_space_size=512
     npm run build
     cd "$PROJECT_DIR"
 else
@@ -76,7 +84,7 @@ fi
 
 # Configure config.json and generate credentials
 echo "🔑 Preparing configuration and security credentials..."
-CREDS=$(python3 -c "
+CREDS=$(python3 -W ignore -c "
 import json, os, secrets
 
 config_path = 'config.json'
@@ -121,6 +129,7 @@ DASHBOARD_PASSWORD=$(echo "$CREDS" | cut -d':' -f2)
 # Create systemd service unit file locally
 echo "⚙️ Configuring systemd service..."
 SERVICE_FILE="scripts/pibot-cloud.service"
+CURRENT_USER=$(whoami)
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Pi Bot Cloud Service
@@ -128,7 +137,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=$USER
+User=$CURRENT_USER
 WorkingDirectory=$PROJECT_DIR
 Environment=RUN_MODE=cloud
 ExecStart=$PROJECT_DIR/.venv/bin/uvicorn backend.api:app --host 0.0.0.0 --port 8000
@@ -140,13 +149,20 @@ WantedBy=multi-user.target
 EOF
 
 # Install systemd service
-sudo cp "$SERVICE_FILE" /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable pibot-cloud.service
-sudo systemctl restart pibot-cloud.service
+if command -v systemctl &> /dev/null; then
+    $SUDO_CMD cp "$SERVICE_FILE" /etc/systemd/system/
+    $SUDO_CMD systemctl daemon-reload
+    $SUDO_CMD systemctl enable pibot-cloud.service
+    $SUDO_CMD systemctl restart pibot-cloud.service
+else
+    echo "⚠️ Warning: systemctl not found. You will need to start the service manually."
+fi
 
 # Get Public/LAN IP
-IP_ADDR=$(hostname -I | awk '{print $1}' || echo "localhost")
+IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [[ -z "$IP_ADDR" ]]; then
+    IP_ADDR="localhost"
+fi
 
 echo "============================================================"
 echo " 🎉 CLOUD DEPLOYMENT COMPLETED SUCCESSFULLY!"
@@ -162,6 +178,8 @@ echo "  🔗 WEBSOCKET & WEBHOOK CONFIGURATION:"
 echo "    Local Pi WS URL:  ws://${IP_ADDR}:8000/ws/pi-client?token=${WEBHOOK_SECRET}"
 echo "    Webhook Secret:   ${WEBHOOK_SECRET}"
 echo "============================================================"
-echo "  ℹ️ To view service logs, run:"
-echo "    sudo journalctl -fu pibot-cloud.service"
-echo "============================================================"
+if command -v systemctl &> /dev/null; then
+    echo "  ℹ️ To view service logs, run:"
+    echo "    $SUDO_CMD journalctl -fu pibot-cloud.service"
+    echo "============================================================"
+fi
