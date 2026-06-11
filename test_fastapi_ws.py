@@ -10,9 +10,14 @@ async def test_middleware(request: Request, call_next):
     return await call_next(request)
 
 @app.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket):
+async def ws_endpoint(websocket):
     await websocket.accept()
     await websocket.send_text("Hello")
+
+@app.get("/{full_path:path}")
+async def catch_all(full_path: str):
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("<html><body>Catch All</body></html>")
     await websocket.close()
 
 async def test_client():

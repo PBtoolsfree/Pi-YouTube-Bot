@@ -19,7 +19,7 @@ try:
 import websockets
 
 async def test_ws():
-    uri = "ws://80.225.201.233:8000/ws/pi-client"
+    uri = "ws://80.225.201.233:8000/ws/pi-client?token=a65b93019b388dc315a9dc42e4d8cbfe"
     print(f"Connecting to {uri}...")
     try:
         async with websockets.connect(uri) as ws:

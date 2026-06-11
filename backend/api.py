@@ -122,103 +122,36 @@ def _is_public_request(request: Request) -> bool:
         return True
     return False
 
-@app.middleware("http")
-async def tunnel_security_middleware(request: Request, call_next):
-    # 1. Identify if request is from Cloudflare Tunnel
-    is_public = _is_public_request(request)
-    cf_ip = request.headers.get("cf-connecting-ip")
-    path = request.url.path
-    
-    cfg = _get_config()
-    security_cfg = cfg.get("security", {})
-    allowed_paths = security_cfg.get("allowed_public_paths", [
-        "/tip", "/tip/", "/api/donate", "/api/webhook/*", "/api/config", "/assets", "/favicon.ico", "/manifest.json"
-    ])
-    
-    is_allowed_public = (
-        path.startswith("/assets")
-        or path.startswith("/uploads")
-        or path.startswith("/api/payment/")
-        or path.startswith("/api/donate")
-        or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
-                    "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
-        or path.startswith("/api/webhook/")
-        or path in allowed_paths
-        or "*" in allowed_paths
-        or any(
-            (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
-            for a in allowed_paths
-        )
-    )
+class TunnelSecurityASGIMiddleware:
+    def __init__(self, app):
+        self.app = app
 
-    # 2. Check basic auth if this is an admin path and password is configured
-    is_public_bypass = False
-    if not is_allowed_public:
-        db_password = security_cfg.get("dashboard_password") or os.environ.get("DASHBOARD_PASSWORD")
-        if db_password:
-            auth_header = request.headers.get("authorization")
-            authenticated = False
-            if auth_header and auth_header.startswith("Basic "):
-                try:
-                    import base64
-                    encoded = auth_header.split(" ", 1)[1]
-                    decoded = base64.b64decode(encoded).decode("utf-8")
-                    if ":" in decoded:
-                        user, pwd = decoded.split(":", 1)
-                        if user == "admin" and pwd == db_password:
-                            authenticated = True
-                except Exception as e:
-                    logger.error("Basic auth decoding error: %s", e)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
             
-            if not authenticated:
-                return Response(
-                    status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
-                    content="Unauthorized"
-                )
-            # Authenticated admin gets full access (bypasses tunnel blocks & receives unsanitized configs)
-            is_public_bypass = True
-
-    # Inject state for endpoints (authenticated admin is treated as local/internal)
-    request.state.is_public = is_public and not is_public_bypass
-
-    if is_public and not is_public_bypass:
-        # AUTO-REDIRECT ROOT TO TIP
-        if path in ("/", ""):
-            return RedirectResponse("/tip")
-
-        # RATE LIMITING
-        client_ip = cf_ip or (request.client.host if request.client else "unknown")
-        if not rate_limiter.is_allowed(client_ip):
-            logger.warning("Rate limit exceeded for %s", client_ip)
-            return JSONResponse(status_code=429, content={"error": "Too Many Requests. Slow down."})
-
-        # ALWAYS ALLOW ASSETS & HEALTH CHECK & TIP PAGE & WS CLIENTS
-        if (
+        request = Request(scope, receive=receive)
+        
+        # 1. Identify if request is from Cloudflare Tunnel
+        is_public = _is_public_request(request)
+        cf_ip = request.headers.get("cf-connecting-ip")
+        path = request.url.path
+        
+        cfg = _get_config()
+        security_cfg = cfg.get("security", {})
+        allowed_paths = security_cfg.get("allowed_public_paths", [
+            "/tip", "/tip/", "/api/donate", "/api/webhook/*", "/api/config", "/assets", "/favicon.ico", "/manifest.json"
+        ])
+        
+        is_allowed_public = (
             path.startswith("/assets")
             or path.startswith("/uploads")
             or path.startswith("/api/payment/")
             or path.startswith("/api/donate")
-            or path == "/api/config"
             or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
                         "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
-        ):
-            return await call_next(request)
-
-        # WEBHOOK SECURITY SHORT-CIRCUIT
-        if path.startswith("/api/webhook/"):
-            required_secret = security_cfg.get("webhook_secret")
-            if required_secret:
-                query_secret = request.query_params.get("secret")
-                header_secret = request.headers.get("x-webhook-secret")
-                if query_secret != required_secret and header_secret != required_secret:
-                    webhook_logger.log("Unknown", "Failed", f"Invalid Secret for {path}")
-                    logger.warning("Invalid webhook secret for %s from %s", path, client_ip)
-                    return JSONResponse(status_code=401, content={"error": "Unauthorized Webhook"})
-
-        # PERMISSIONS CHECK
-        is_allowed = (
-            path in allowed_paths
+            or path.startswith("/api/webhook/")
+            or path in allowed_paths
             or "*" in allowed_paths
             or any(
                 (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
@@ -226,12 +159,98 @@ async def tunnel_security_middleware(request: Request, call_next):
             )
         )
 
-        if not is_allowed:
-            logger.warning("Blocked external access to: %s from %s", path, client_ip)
-            return JSONResponse(status_code=403, content={"error": "Access Denied via Public Internet", "path": path})
+        # 2. Check basic auth if this is an admin path and password is configured
+        is_public_bypass = False
+        if not is_allowed_public:
+            db_password = security_cfg.get("dashboard_password") or os.environ.get("DASHBOARD_PASSWORD")
+            if db_password:
+                auth_header = request.headers.get("authorization")
+                authenticated = False
+                if auth_header and auth_header.startswith("Basic "):
+                    try:
+                        import base64
+                        encoded = auth_header.split(" ", 1)[1]
+                        decoded = base64.b64decode(encoded).decode("utf-8")
+                        if ":" in decoded:
+                            user, pwd = decoded.split(":", 1)
+                            if user == "admin" and pwd == db_password:
+                                authenticated = True
+                    except Exception as e:
+                        logger.error("Basic auth decoding error: %s", e)
+                
+                if not authenticated:
+                    response = Response(
+                        status_code=401,
+                        headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
+                        content="Unauthorized"
+                    )
+                    await response(scope, receive, send)
+                    return
+                # Authenticated admin gets full access
+                is_public_bypass = True
 
+        # Inject state for endpoints
+        scope["state"] = {"is_public": is_public and not is_public_bypass}
 
-    return await call_next(request)
+        if is_public and not is_public_bypass:
+            # AUTO-REDIRECT ROOT TO TIP
+            if path in ("/", ""):
+                response = RedirectResponse("/tip")
+                await response(scope, receive, send)
+                return
+
+            # RATE LIMITING
+            client_ip = cf_ip or (request.client.host if request.client else "unknown")
+            if not rate_limiter.is_allowed(client_ip):
+                logger.warning("Rate limit exceeded for %s", client_ip)
+                response = JSONResponse(status_code=429, content={"error": "Too Many Requests. Slow down."})
+                await response(scope, receive, send)
+                return
+
+            # ALWAYS ALLOW ASSETS & HEALTH CHECK & TIP PAGE & WS CLIENTS
+            if (
+                path.startswith("/assets")
+                or path.startswith("/uploads")
+                or path.startswith("/api/payment/")
+                or path.startswith("/api/donate")
+                or path == "/api/config"
+                or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
+                            "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
+            ):
+                return await self.app(scope, receive, send)
+
+            # WEBHOOK SECURITY SHORT-CIRCUIT
+            if path.startswith("/api/webhook/"):
+                required_secret = security_cfg.get("webhook_secret")
+                if required_secret:
+                    query_secret = request.query_params.get("secret")
+                    header_secret = request.headers.get("x-webhook-secret")
+                    if query_secret != required_secret and header_secret != required_secret:
+                        webhook_logger.log("Unknown", "Failed", f"Invalid Secret for {path}")
+                        logger.warning("Invalid webhook secret for %s from %s", path, client_ip)
+                        response = JSONResponse(status_code=401, content={"error": "Unauthorized Webhook"})
+                        await response(scope, receive, send)
+                        return
+
+            # PERMISSIONS CHECK
+            is_allowed = (
+                path in allowed_paths
+                or "*" in allowed_paths
+                or any(
+                    (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
+                    for a in allowed_paths
+                )
+            )
+
+            if not is_allowed:
+                logger.warning("Blocked external access to: %s from %s", path, client_ip)
+                response = JSONResponse(status_code=403, content={"error": "Access Denied via Public Internet", "path": path})
+                await response(scope, receive, send)
+                return
+
+        return await self.app(scope, receive, send)
+
+app.add_middleware(TunnelSecurityASGIMiddleware)
 
 _CORS_ORIGINS = ConfigManager.get_config().get("security", {}).get(
     "cors_origins", ["*"]
