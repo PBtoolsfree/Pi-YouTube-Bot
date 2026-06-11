@@ -168,6 +168,13 @@ class TunnelSecurityASGIMiddleware:
             )
         )
 
+        # 1.5. AUTO-REDIRECT ROOT TO TIP FOR PUBLIC REQUESTS
+        # Do this BEFORE any authentication checks!
+        if is_public and path in ("/", ""):
+            response = RedirectResponse("/tip")
+            await response(scope, receive, send)
+            return
+
         # 2. Check basic auth if this is an admin path and password is configured
         is_public_bypass = False
         if not is_allowed_public:
@@ -202,11 +209,6 @@ class TunnelSecurityASGIMiddleware:
         scope["state"] = {"is_public": is_public and not is_public_bypass}
 
         if is_public and not is_public_bypass:
-            # AUTO-REDIRECT ROOT TO TIP
-            if path in ("/", ""):
-                response = RedirectResponse("/tip")
-                await response(scope, receive, send)
-                return
 
             # RATE LIMITING
             client_ip = cf_ip or (request.client.host if request.client else "unknown")
