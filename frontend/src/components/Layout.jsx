@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     LayoutDashboard, Settings, Cpu, Activity, Power, Monitor, Shield, Users,
     ShieldBan, Volume2, Heart, Share2, Beaker, Sparkles, IndianRupee, Cloud,
-    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server
+    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server, History
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -108,6 +108,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
                                 <NavItem id="viewers" icon={<Users />} label="Audience" active={activeTab} onClick={setActiveTab} dot={navDot('viewers')} dotColor={dotColor} />
                                 <NavItem id="loyalty" icon={<Heart />} label="Loyalty" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
+                                <NavItem id="tip_history" icon={<History />} label="Tip History" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="giveaways" icon={<Gift />} label="Giveaways" active={activeTab} onClick={setActiveTab} dot={navDot('giveaways')} dotColor={dotColor} />
                                 <NavItem id="redeems" icon={<Clapperboard />} label="Rewards Shop" active={activeTab} onClick={setActiveTab} dot={navDot('redeems')} dotColor={dotColor} />
                                 <NavItem id="streamer_bot" icon={<Share2 />} label="Integrations" active={activeTab} onClick={setActiveTab} dot={navDot('streamer_bot')} dotColor={dotColor} />

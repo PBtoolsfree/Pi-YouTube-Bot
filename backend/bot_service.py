@@ -2175,7 +2175,7 @@ class BotService:
         # SEPARATE ACTION: Bot Alerts
         await self._fire_sb_alert("LOYALTY", eng_text, "System", "Loyalty", action_name="Bot Alerts")
 
-    async def trigger_donation_alert(self, user, amount, message, transaction_id=None, skip_verification=False):
+    async def trigger_donation_alert(self, user, amount, message, transaction_id=None, skip_verification=False, source="Oracle Cloud Tip Page"):
         """
         Public method to trigger the full donation flow:
         1. TTS Audio (Priority)
@@ -2311,11 +2311,11 @@ class BotService:
                 logger.error(f"Failed to award points for tip: {e}")
 
         # 5. Save History (local history is saved as played=True)
-        self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=True)
+        self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=True, source=source)
 
         return {"status": "success", "processed": True}
 
-    async def trigger_app_alert(self, user, amount, do_tts=True):
+    async def trigger_app_alert(self, user, amount, do_tts=True, source="App Webhook"):
         """
         Specialized flow exclusively for generic app notifications (Paytm, PhonePe, GPay, etc).
         Triggers a distinct overlay categorization ("APP_NOTIFICATION")
@@ -2411,7 +2411,7 @@ class BotService:
                 logger.error(f"Failed to award points for app tip: {e}")
 
         # 6. History (local history is saved as played=True)
-        self._save_donation_history(user, amount, message, tx_id, played=True)
+        self._save_donation_history(user, amount, message, tx_id, played=True, source=source)
         
         return {"status": "success", "processed": True}
 
@@ -2437,7 +2437,7 @@ class BotService:
         except Exception as e:
             logger.error(f"Failed to send local Pi webhook: {e}")
 
-    def _save_donation_history(self, user, amount, message, transaction_id=None, played=True):
+    def _save_donation_history(self, user, amount, message, transaction_id=None, played=True, source="App Notification"):
         """
         Saves Tip Page donations to json.
         Used by the 'Recent Transactions' OBS Overlay.
@@ -2464,7 +2464,8 @@ class BotService:
                 "amount": amount,
                 "message": message,
                 "transaction_id": transaction_id,
-                "played": played
+                "played": played,
+                "source": source
             }
             # Prepend (Newest First)
             history.insert(0, entry)

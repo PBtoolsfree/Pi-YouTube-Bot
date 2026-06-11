@@ -29,6 +29,7 @@ const ModerationPage = lazy(() => import('./pages/Moderation'))
 const ViewersPage = lazy(() => import('./pages/Viewers'))
 const AudioEnginePage = lazy(() => import('./pages/AudioEngine'))
 const LoyaltyPage = lazy(() => import('./pages/Loyalty'))
+const TipHistoryPage = lazy(() => import('./pages/TipHistory'))
 const PersonalitiesPage = lazy(() => import('./pages/Personalities'))
 const StreamerBotPage = lazy(() => import('./pages/StreamerBot'))
 const TestingPage = lazy(() => import('./pages/Testing'))
@@ -64,6 +65,8 @@ function App() {
     return (
       hostname.includes('vercel.app') ||
       hostname.includes('trycloudflare.com') ||
+      hostname.includes('qzz.io') ||
+      hostname.includes('pbherotip') ||
       window.location.pathname === '/tip'
     )
   })
@@ -245,6 +248,7 @@ function App() {
         {activeTab === 'moderation' && <ModerationPage config={config} onSave={handleSaveConfig} logs={logs} />}
         {activeTab === 'viewers' && <ViewersPage />}
         {activeTab === 'loyalty' && <LoyaltyPage />}
+        {activeTab === 'tip_history' && <TipHistoryPage />}
         {activeTab === 'personalities' && <PersonalitiesPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'streamer_bot' && <StreamerBotPage logs={logs} config={config} onSave={handleSaveConfig} backendStatus={backendStatus} />}
         {activeTab === 'ignore_list' && <IgnoreListPage config={config} onSave={handleSaveConfig} />}
