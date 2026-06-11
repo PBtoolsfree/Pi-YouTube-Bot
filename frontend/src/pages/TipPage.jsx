@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import QRCode from 'react-qr-code'
 import axios from 'axios'
-import { Heart, Send, CheckCircle, ShieldCheck, Clock, Loader2, AlertCircle, X, Share2, Copy, Smartphone, Download, Mail } from 'lucide-react'
+import { Heart, Send, CheckCircle, ShieldCheck, Clock, Loader2, AlertCircle, X, Share2, Copy, Smartphone, Download, Mail, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { createClient } from '@supabase/supabase-js'
@@ -434,11 +434,21 @@ export default function TipPage() {
     return (
         <div className="min-h-screen bg-[#0a0a0b] text-white flex flex-col font-sans selection:bg-purple-500/30" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             {/* Navbar */}
-            <nav className="px-4 py-3 sm:p-6 flex justify-center border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-10" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}>
+            <nav className="relative px-4 py-3 sm:p-6 flex justify-center border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-10" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}>
                 <div className="flex items-center gap-3">
                     <img src="/logo.jpg" alt="PB Hero Live" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full object-cover shadow-lg shadow-green-900/30 ring-2 ring-green-500/30" />
                     <span className="font-bold text-lg sm:text-xl tracking-tight">PB Hero <span className="text-green-400">Live</span></span>
                 </div>
+                
+                {/* Admin Button */}
+                <a 
+                    href="/"
+                    title="Admin Dashboard"
+                    className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 p-2 sm:px-3 sm:py-2 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-zinc-400 hover:text-white transition-all active:scale-95"
+                >
+                    <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="hidden sm:inline text-sm font-medium">Admin</span>
+                </a>
             </nav>
 
             <div className="flex-1 flex flex-col items-center px-4 py-6 sm:p-6 md:p-12 gap-6 sm:gap-8">
