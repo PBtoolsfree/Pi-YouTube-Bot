@@ -256,6 +256,10 @@ class TunnelSecurityASGIMiddleware:
                 )
             )
 
+            # Restrict POST/PUT/DELETE for /api/config publicly
+            if request.method != "GET" and path == "/api/config":
+                is_allowed = False
+
             if not is_allowed:
                 logger.warning("Blocked external access to: %s from %s", path, client_ip)
                 response = JSONResponse(status_code=403, content={"error": "Access Denied via Public Internet", "path": path})

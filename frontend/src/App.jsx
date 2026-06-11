@@ -61,10 +61,6 @@ function App() {
     // SAFEGUARD: Access env vars safely
     // ONLY force public mode if we are on a known public domain (Vercel, Cloudflare, etc)
     // OR if the user is explicitly visiting /tip
-    
-    // Secret bypass for the user to access Cloud Settings
-    if (window.location.search.includes('admin=true')) return false;
-
     const hostname = window.location.hostname;
     return (
       hostname.includes('vercel.app') ||
