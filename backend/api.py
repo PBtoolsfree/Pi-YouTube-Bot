@@ -157,6 +157,9 @@ class TunnelSecurityASGIMiddleware:
             or path.startswith("/uploads")
             or path.startswith("/api/payment/")
             or path.startswith("/api/donate")
+            or path.startswith("/overlay")
+            or path.startswith("/obs")
+            or path.startswith("/ws/")
             or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
                         "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
             or path.startswith("/api/webhook/")
