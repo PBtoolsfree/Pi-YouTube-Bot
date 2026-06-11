@@ -160,8 +160,10 @@ class TunnelSecurityASGIMiddleware:
             or path.startswith("/overlay")
             or path.startswith("/obs")
             or path.startswith("/ws/")
+            or (path in ["/", ""] and "mode" in request.query_params)
             or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
-                        "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
+                        "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client",
+                        "/public-avatar-overlay", "/giveawayspin"]
             or path.startswith("/api/webhook/")
             or path in allowed_paths
             or "*" in allowed_paths
