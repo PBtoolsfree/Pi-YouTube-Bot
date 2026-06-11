@@ -2,11 +2,20 @@
 # =============================================================================
 #  Pi YouTube Bot — Cloud VPS Update Script
 #  Updates the Tip Page and API backend on the Cloud Server
+#  Usage: bash scripts/update_cloud.sh            (backend only)
+#         bash scripts/update_cloud.sh --frontend  (backend + frontend rebuild)
 # =============================================================================
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+REBUILD_FRONTEND=false
+for arg in "$@"; do
+    if [[ "$arg" == "--frontend" ]]; then
+        REBUILD_FRONTEND=true
+    fi
+done
 
 echo "============================================================"
 echo " 🔄 UPDATING PI BOT CLOUD SERVER..."
@@ -31,16 +40,20 @@ else
     .venv/bin/pip install -r requirements.txt --quiet
 fi
 
-# Rebuild frontend
-echo "⚛️ Rebuilding frontend Tip Page..."
-if [[ -d "frontend" ]]; then
-    cd frontend
-    npm install --silent
-    npm run build
-    cd "$PROJECT_DIR"
+# Rebuild frontend only if --frontend flag is passed
+if [[ "$REBUILD_FRONTEND" == "true" ]]; then
+    echo "⚛️ Rebuilding frontend Tip Page..."
+    if [[ -d "frontend" ]]; then
+        cd frontend
+        npm install --silent
+        npm run build
+        cd "$PROJECT_DIR"
+    else
+        echo "❌ ERROR: 'frontend/' directory not found."
+        exit 1
+    fi
 else
-    echo "❌ ERROR: 'frontend/' directory not found."
-    exit 1
+    echo "⏭️ Skipping frontend rebuild (use --frontend flag to rebuild)"
 fi
 
 # Restart cloud service
@@ -53,5 +66,6 @@ else
 fi
 
 echo "============================================================"
-echo " 🎉 CLOUD TIP PAGE UPDATE COMPLETED!"
+echo " 🎉 CLOUD UPDATE COMPLETED!"
 echo "============================================================"
+

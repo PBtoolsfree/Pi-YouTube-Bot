@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import axios from 'axios'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import {
@@ -15,9 +15,7 @@ function safeFixed(value, digits = 1, fallback = "0") {
 }
 
 export default function Dashboard({ logs }) {
-    const [showAllLogs, setShowAllLogs] = useState(false)
-    const LOG_LIMIT = 5
-    const displayedLogs = showAllLogs ? logs : logs.slice(0, LOG_LIMIT)
+    const displayedLogs = logs.slice(0, 5)
     const modActions = logs.filter(l => l.category === 'MOD').length
     const chatCount = logs.filter(l => l.category === 'CHAT').length
 
@@ -206,16 +204,6 @@ export default function Dashboard({ logs }) {
                                 )}
                             </tbody>
                         </table>
-                        {logs.length > LOG_LIMIT && (
-                            <div className="border-t border-zinc-800 px-4 py-2 bg-zinc-900/50 flex justify-center">
-                                <button
-                                    onClick={() => setShowAllLogs(prev => !prev)}
-                                    className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors px-3 py-1 rounded hover:bg-zinc-800"
-                                >
-                                    {showAllLogs ? `Show Less` : `Show More (${logs.length - LOG_LIMIT} more)`}
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </Card>
             </div>
