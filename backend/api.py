@@ -2017,53 +2017,7 @@ async def websocket_overlay_endpoint(websocket: WebSocket):
         if websocket in active_overlay_websockets:
             active_overlay_websockets.remove(websocket)
 
-@app.websocket("/ws/pi-client")
-async def websocket_pi_client_endpoint(websocket: WebSocket):
-    # Security Token Check
-    cfg = _get_config()
-    secret = cfg.get("security", {}).get("webhook_secret")
-    if secret:
-        token = websocket.query_params.get("token")
-        if token != secret:
-            logger.warning("Pi client WebSocket connection rejected: Invalid Token")
-            await websocket.close(code=1008, reason="Unauthorized")
-            return
-            
-    await websocket.accept()
-    active_pi_websockets.append(websocket)
-    logger.info("Local Pi Bot connected to Cloud WebSocket.")
-    
-    # Push pending/queued tips upon connection
-    try:
-        pending = bot.get_pending_donations()
-        # Draining oldest-first (reverse of pending newest-first)
-        for item in reversed(pending):
-            logger.info(f"Draining pending alert: {item['user']} - {item['amount']}")
-            payload = {
-                "user": item["user"],
-                "amount": item["amount"],
-                "message": item["message"],
-                "transaction_id": item["transaction_id"]
-            }
-            if item.get("message") == "Tip via App" or (item.get("transaction_id") or "").startswith("app_alert_"):
-                payload["type"] = "app_alert"
-                payload["do_tts"] = True
-            else:
-                payload["type"] = "donation_alert"
-                
-            await websocket.send_json(payload)
-            bot.mark_donation_as_played(item["transaction_id"])
-            # Small delay between historical queued alerts
-            await asyncio.sleep(15)
-            
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        if websocket in active_pi_websockets:
-            active_pi_websockets.remove(websocket)
-        logger.info("Local Pi Bot disconnected from Cloud WebSocket.")
+
 
 # --- SUBSCRIBER API ---
 class SubscriberUpdate(BaseModel):
@@ -2916,17 +2870,48 @@ async def websocket_pi_client_endpoint(websocket: WebSocket):
             return
             
     await pi_clients.connect(websocket)
+    active_pi_websockets.append(websocket)
     logger.info("Pi client connected successfully!")
+    
+    # Push pending/queued tips upon connection
     try:
+        pending = bot.get_pending_donations()
+        # Draining oldest-first (reverse of pending newest-first)
+        for item in reversed(pending):
+            logger.info(f"Draining pending alert: {item['user']} - {item['amount']}")
+            payload = {
+                "user": item["user"],
+                "amount": item["amount"],
+                "message": item["message"],
+                "transaction_id": item["transaction_id"]
+            }
+            if item.get("message") == "Tip via App" or (item.get("transaction_id") or "").startswith("app_alert_"):
+                payload["type"] = "app_alert"
+                payload["do_tts"] = True
+            else:
+                payload["type"] = "donation_alert"
+                
+            await websocket.send_json(payload)
+            bot.mark_donation_as_played(item["transaction_id"])
+            # Small delay between historical queued alerts
+            await asyncio.sleep(15)
+            
         while True:
-            # We don't expect messages from the Pi, but we keep the connection open
             data = await websocket.receive_text()
+            try:
+                event = json.loads(data)
+                await bot.handle_pi_client_event(event, websocket=websocket)
+            except Exception as parse_err:
+                logger.error(f"Error handling Pi event message: {parse_err}")
     except WebSocketDisconnect:
-        pi_clients.disconnect(websocket)
-        logger.info("Pi client disconnected.")
+        pass
     except Exception as e:
-        pi_clients.disconnect(websocket)
         logger.error(f"Pi client error: {e}")
+    finally:
+        pi_clients.disconnect(websocket)
+        if websocket in active_pi_websockets:
+            active_pi_websockets.remove(websocket)
+        logger.info("Pi client disconnected.")
 
 # --- FRONTEND STATIC SERVING ---
 # Order matters: API/WS routes are defined above.

@@ -45,12 +45,16 @@ class CloudAlertClientService:
             try:
                 logger.info(f"Connecting to Cloud WebSocket: {url}...")
                 async with websockets.connect(connect_url) as ws:
+                    self.ws = ws
                     logger.info("Successfully connected to Cloud Alert WebSocket!")
                     self.connected = True
                     if not hasattr(self.bot, "worker_health"):
                         self.bot.worker_health = {}
                     self.bot.worker_health["cloud_client"] = {"status": "connected"}
                     await self.bot._log_ui("SYSTEM", "Connected to Cloud Alert server")
+                    
+                    # Request initial viewers sync immediately
+                    await self.send_event({"type": "request_viewer_sync"})
                     
                     while self.is_running:
                         msg = await ws.recv()
@@ -60,6 +64,7 @@ class CloudAlertClientService:
                         except Exception as parse_err:
                             logger.error(f"Error parsing cloud event: {parse_err}")
             except Exception as e:
+                self.ws = None
                 self.connected = False
                 if not hasattr(self.bot, "worker_health"):
                     self.bot.worker_health = {}
@@ -67,6 +72,13 @@ class CloudAlertClientService:
                 logger.warning(f"Cloud Alert Client connection lost: {e}. Retrying in 5 seconds...")
                 await self.bot._log_ui("SYSTEM", "Cloud Alert connection lost. Reconnecting...")
                 await asyncio.sleep(5)
+
+    async def send_event(self, event):
+        if self.connected and getattr(self, "ws", None):
+            try:
+                await self.ws.send(json.dumps(event))
+            except Exception as e:
+                logger.error(f"Error sending event to Cloud: {e}")
 
     async def _handle_cloud_event(self, event):
         etype = event.get("type")
@@ -112,8 +124,31 @@ class CloudAlertClientService:
             if hasattr(self.bot, "_log_ui"):
                 await self.bot._log_ui("DONATION", "History sync update")
 
+        elif etype == "viewer_point_update":
+            username = event.get("username")
+            data = event.get("data")
+            if username and data:
+                self.bot.viewers.viewers[username] = data
+                self.bot.viewers._notify_viewer_update(username, "viewer_point_update")
+
+        elif etype == "full_viewer_sync":
+            viewers_data = event.get("viewers", {})
+            self.bot.viewers.viewers = viewers_data
+            logger.info(f"Successfully synced {len(viewers_data)} viewers from Cloud Database!")
+            self.bot.viewers._notify_viewer_update(event="full_viewer_sync")
+
+        elif etype == "send_chat":
+            msg = event.get("message")
+            if msg:
+                asyncio.create_task(self.bot._send_chat(msg))
+
+        elif etype == "subscriber_count_sync":
+            count = event.get("count", 0)
+            self.bot.set_subscriber_count(count, save=True)
+
     def stop(self):
         self.is_running = False
         if self.task:
             self.task.cancel()
+        self.ws = None
         logger.info("Cloud Alert Client stopped.")

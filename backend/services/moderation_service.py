@@ -3,6 +3,7 @@ import logging
 import asyncio
 import json
 import re
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +82,40 @@ class ModerationService:
                 if re.search(f"^{pattern}$", message, re.IGNORECASE) or re.search(f"\\b{pattern}\\b", message, re.IGNORECASE):
                     return True, bl_cfg.get("message", "Blacklisted word detected!")
 
-        # D. Excess Symbols
+        # D. Excess Symbols & Emoji Filter
         sym_cfg = filters.get("excess_symbols", {})
         if sym_cfg.get("enabled"):
-            symbols = "!@#$%^&*()_+-=[]{}|;':\",./<>?~`"
-            count = sum(1 for char in message if char in symbols)
-            if count >= sym_cfg.get("limit", 3):
-                return True, sym_cfg.get("message", "Too many symbols!")
-        
+            symbols = "!@#$%^&*()_+-=[]{}|;':\",.//<>?~`"
+            limit = sym_cfg.get("limit", 10)
+            
+            def _is_emoji(char):
+                """Detect emojis via Unicode category and codepoint ranges."""
+                cp = ord(char)
+                # Fast ASCII shortcut
+                if cp < 128:
+                    return False
+                # Unicode emoji ranges
+                if (0x1F600 <= cp <= 0x1F64F or  # Emoticons
+                    0x1F300 <= cp <= 0x1F5FF or  # Misc Symbols & Pictographs
+                    0x1F680 <= cp <= 0x1F6FF or  # Transport & Map
+                    0x1F700 <= cp <= 0x1F77F or  # Alchemical Symbols
+                    0x1F780 <= cp <= 0x1F7FF or  # Geometric Shapes Extended
+                    0x1F800 <= cp <= 0x1F8FF or  # Supplemental Arrows-C
+                    0x1F900 <= cp <= 0x1F9FF or  # Supplemental Symbols & Pictographs
+                    0x1FA00 <= cp <= 0x1FA6F or  # Chess Symbols
+                    0x1FA70 <= cp <= 0x1FAFF or  # Symbols & Pictographs Extended-A
+                    0x2600  <= cp <= 0x26FF  or  # Misc Symbols (☀️ ⚡ etc.)
+                    0x2700  <= cp <= 0x27BF  or  # Dingbats
+                    0xFE00  <= cp <= 0xFE0F  or  # Variation Selectors
+                    0x1F1E0 <= cp <= 0x1F1FF):   # Flags (Regional Indicator)
+                    return True
+                # Fallback: Unicode category So = Symbol, Other
+                return unicodedata.category(char) == 'So'
+            
+            count = sum(1 for char in message if char in symbols or _is_emoji(char))
+            if count >= limit:
+                return True, sym_cfg.get("message", f"Too many symbols/emojis! (Max {limit})")
+
         # E. Repetition Filter
         rep_cfg = filters.get("repetition_filter", {})
         if rep_cfg.get("enabled"):
@@ -140,7 +167,11 @@ class ModerationService:
             for word in words:
                 if re.match(url_pattern, word, re.IGNORECASE):
                     continue
-                if len(word) > 20:
+                # Skip non-Latin scripts (Hindi/Devanagari, Arabic, CJK, etc.)
+                # These scripts have high char-density by nature — not gibberish
+                if any(ord(c) > 0x0900 for c in word):
+                    continue
+                if len(word) > 25:  # Raised from 20 to avoid false positives
                     return True, "Word is too long (gibberish/spam)!"
                 if len(word) > 12:
                     unique_chars = len(set(word.lower()))

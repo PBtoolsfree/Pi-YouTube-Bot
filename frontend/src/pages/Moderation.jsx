@@ -78,6 +78,7 @@ export default function ModerationPage({ config, onSave }) {
 
         if (mode === 'strict') {
             update.moderation.protection_logic.max_warnings = 1
+            update.moderation.protection_logic.warning_window = 120
             update.moderation.protection_logic.timeout_duration = 3600
             update.moderation.filters.spam_protection.limit = 3
             update.moderation.filters.excess_symbols.limit = 5
@@ -85,6 +86,7 @@ export default function ModerationPage({ config, onSave }) {
             update.moderation.filters.caps_protection.limit = 50
         } else if (mode === 'balanced') {
             update.moderation.protection_logic.max_warnings = 3
+            update.moderation.protection_logic.warning_window = 60
             update.moderation.protection_logic.timeout_duration = 600
             update.moderation.filters.spam_protection.limit = 5
             update.moderation.filters.excess_symbols.limit = 10
@@ -92,6 +94,7 @@ export default function ModerationPage({ config, onSave }) {
             update.moderation.filters.caps_protection.limit = 70
         } else if (mode === 'chill') {
             update.moderation.protection_logic.max_warnings = 5
+            update.moderation.protection_logic.warning_window = 30
             update.moderation.protection_logic.timeout_duration = 60
             update.moderation.filters.spam_protection.limit = 10
             update.moderation.filters.excess_symbols.limit = 20
@@ -470,6 +473,22 @@ export default function ModerationPage({ config, onSave }) {
                                 </div>
                             </div>
 
+                            {localConfig.moderation?.filters?.spam_protection?.enabled && (
+                                <div className="flex items-center justify-between pl-1 border-l-2 border-indigo-500/30">
+                                    <div>
+                                        <div className="text-xs font-medium text-zinc-400">Spam Window</div>
+                                        <div className="text-[10px] text-zinc-500">Time window in seconds</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="number" min="1" max="60" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
+                                            value={localConfig.moderation?.filters?.spam_protection?.window ?? 5}
+                                            onChange={(e) => updateNested('moderation.filters.spam_protection.window', parseInt(e.target.value))} />
+                                        <span className="text-[10px] text-zinc-500 w-10">sec</span>
+                                    </div>
+                                </div>
+                            )}
+
+
                             <div className="flex items-center justify-between">
                                 <div>
                                     <div className="text-xs font-medium text-zinc-300">Emoji / Symbol Limit</div>
@@ -525,6 +544,20 @@ export default function ModerationPage({ config, onSave }) {
                                         className="bg-zinc-950 border-zinc-700 text-zinc-100 h-8 w-24"
                                         value={localConfig.moderation?.protection_logic?.timeout_duration ?? 60}
                                         onChange={(e) => updateNested('moderation.protection_logic.timeout_duration', parseInt(e.target.value))}
+                                    />
+                                    <span className="text-xs text-zinc-500">seconds</span>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-zinc-800 space-y-2">
+                                <label className="text-xs font-medium text-zinc-300">Chances Time Window</label>
+                                <p className="text-[10px] text-zinc-500">How long before chances reset (e.g., 5 mistakes in 60s = timeout).</p>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number"
+                                        className="bg-zinc-950 border-zinc-700 text-zinc-100 h-8 w-24"
+                                        value={localConfig.moderation?.protection_logic?.warning_window ?? 60}
+                                        onChange={(e) => updateNested('moderation.protection_logic.warning_window', parseInt(e.target.value))}
                                     />
                                     <span className="text-xs text-zinc-500">seconds</span>
                                 </div>

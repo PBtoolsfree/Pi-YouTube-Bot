@@ -73,6 +73,7 @@ class BotService:
 
         # Sub-Services
         self.viewers = ViewerService()
+        self.viewers.bot = self
         self.moderation = ModerationService(sb_ws_getter=lambda: self.sb_ws, config_loader=self.load_config)
         self.ai_handler = AIHandler(self.ai_engine)
         self.gambling = GambleService(self.audio)
@@ -973,6 +974,17 @@ class BotService:
                     await self._handle_message(MockChat(author, message, msg_id, user_id, is_sponsor, is_sub))
             
             elif is_alert:
+                # Forward to Cloud Server if running as local client
+                from backend.config_manager import ConfigManager
+                is_client = ConfigManager.get_config().get("cloud_alert_enabled", False) and os.environ.get("RUN_MODE") != "cloud"
+                if is_client:
+                    if getattr(self, "cloud_alert_client", None):
+                        self._spawn_task(self.cloud_alert_client.send_event({
+                            "type": "sb_event",
+                            "data": data
+                        }))
+                    return
+
                 msg_data = data.get("data", {})
                 logger.info(f"RAW ROOT: {data}") # Log to Terminal
                 await self._log_ui("DEBUG", f"RAW ROOT: {data}") # Log to UI
@@ -1359,26 +1371,46 @@ class BotService:
             
             if caught and not force_ai:
                 logic = mod_cfg.get("protection_logic", {})
-                new_warns = viewer_data.get("warnings", 0) + 1
+                max_warnings = logic.get("max_warnings", 2)
+                warning_window = logic.get("warning_window", 60)
+                
+                # Retrieve warning history
+                warning_history = viewer_data.get("warning_history", [])
+                if not isinstance(warning_history, list):
+                    warning_history = []
+                    
+                # Append current time
+                warning_history.append(now)
+                
+                # Filter history by warning window
+                warning_history = [t for t in warning_history if now - t <= warning_window]
+                
+                viewer_data["warning_history"] = warning_history
+                new_warns = len(warning_history)
                 viewer_data["warnings"] = new_warns
                 self.viewers._save_viewers()
 
-                if new_warns <= logic.get("max_warnings", 0): 
+                if new_warns < max_warnings:
                     if not is_muted:
                         warn_msg = reason.replace("{author}", author)
-                        await self._send_chat(f"@{author} {warn_msg}")
-                        await self._log_ui("MOD", f"WARNING: {author} - {reason}")
+                        remaining = max_warnings - new_warns
+                        await self._send_chat(f"⚠️ @{author} {warn_msg} (Warning {new_warns}/{max_warnings} in {warning_window}s — {remaining} more before timeout!)")
+                        await self._log_ui("MOD", f"WARNING {new_warns}/{max_warnings}: {author} - {reason}")
                         self.moderation.set_user_mute(author, now + 2)
                 else:
-                    duration = 30 
+                    duration = logic.get("timeout_duration", 60)
                     await self.moderation.trigger_timeout(author, duration, channel_id=channel_id)
                     
                     self.session_stats["timeouts_triggered"] = int(self.session_stats.get("timeouts_triggered", 0)) + 1
                     
-                    msg = f"@{author} You are timed out for {duration} seconds. Reason: Repeated spam violations."
+                    mins = duration // 60
+                    dur_str = f"{mins} minute{'s' if mins != 1 else ''}" if mins >= 1 else f"{duration} seconds"
+                    msg = f"🚫 @{author} You have been timed out for {dur_str} (Broken {max_warnings} rules in {warning_window}s). Reason: {reason}"
                     await self._send_chat(msg)
-                    await self._log_ui("MOD", f"TIMEOUT: {author} for {duration}s.")
+                    await self._log_ui("MOD", f"TIMEOUT: {author} for {duration}s. Reason: {reason}")
+                    
                     viewer_data["warnings"] = 0
+                    viewer_data["warning_history"] = []
                     self.moderation.set_user_mute(author, now + duration + 5)
                     self.viewers._save_viewers()
                 return 1
@@ -1387,6 +1419,22 @@ class BotService:
         
         if self.audio and not message.strip().startswith(("!", "/")):
             await self.audio.speak(f"{author} says: {message}", "secret")
+
+        # Forward to Cloud Server if running as local client
+        from backend.config_manager import ConfigManager
+        is_client = ConfigManager.get_config().get("cloud_alert_enabled", False) and os.environ.get("RUN_MODE") != "cloud"
+        if is_client:
+            if getattr(self, "cloud_alert_client", None):
+                self._spawn_task(self.cloud_alert_client.send_event({
+                    "type": "chat_message",
+                    "author": author,
+                    "message": message,
+                    "msg_id": msg_id,
+                    "channel_id": channel_id,
+                    "is_sponsor": getattr(chat_obj.author, 'is_sponsor', False),
+                    "is_sub": getattr(chat_obj.author, 'is_subscriber', False)
+                }))
+            return None
 
         # Secret Word Check (Dynamic Event)
         if getattr(self, "_secret_word_active", False) and self._secret_word and self._secret_word.lower() in message.lower():
@@ -1898,6 +1946,15 @@ class BotService:
         the %message% arg to YouTube chat.
         No YouTube API is used — SB handles the platform connection.
         """
+        # Cloud Server: Broadcast back to connected local Pi clients
+        if os.environ.get("RUN_MODE") == "cloud":
+            if getattr(self, "pi_clients", None):
+                asyncio.create_task(self.pi_clients.broadcast({
+                    "type": "send_chat",
+                    "message": message
+                }))
+            return
+
         config = self.load_config()
         sb_cfg = config.get("streamer_bot", {})
         if not sb_cfg.get("enabled"):
@@ -1947,6 +2004,68 @@ class BotService:
             except Exception as e:
                 logger.error(f"[CHAT] All Streamer.bot methods failed: {e}")
 
+    async def handle_pi_client_event(self, event, websocket=None):
+        etype = event.get("type")
+        if etype == "chat_message":
+            author = event.get("author")
+            message = event.get("message")
+            msg_id = event.get("msg_id")
+            channel_id = event.get("channel_id")
+            is_sponsor = event.get("is_sponsor", False)
+            is_sub = event.get("is_sub", False)
+            
+            class MockChat:
+                class Author:
+                    def __init__(self, name, channel_id=None, sponsor=False, sub=False): 
+                        self.name = name
+                        self.channelId = channel_id
+                        self.is_sponsor = sponsor
+                        self.is_subscriber = sub
+                def __init__(self, author, message, msg_id, channel_id, sponsor=False, sub=False):
+                    self.author = self.Author(author, channel_id, sponsor, sub)
+                    self.message = message
+                    self.msg_id = msg_id
+                    self.id = msg_id
+            
+            await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub))
+            
+        elif etype == "sb_event":
+            sb_data = event.get("data")
+            if sb_data:
+                await self._handle_sb_event(sb_data)
+
+        elif etype == "viewer_api_action":
+            action = event.get("action")
+            params = event.get("params", {})
+            logger.info(f"Executing viewer API action from Pi: {action} with params {params}")
+            if action == "add_points":
+                self.viewers.add_points(params.get("author"), params.get("amount"))
+            elif action == "redeem":
+                self.viewers.redeem(params.get("author"), params.get("cost"))
+            elif action == "deduct_points":
+                self.viewers.deduct_points(params.get("author"), params.get("amount"))
+            elif action == "set_points":
+                self.viewers.set_points(params.get("author"), params.get("amount"))
+            elif action == "transfer_points":
+                self.viewers.transfer_points(params.get("sender"), params.get("receiver"), params.get("amount"))
+            elif action == "delete_viewer":
+                self.viewers.delete_viewer(params.get("author"))
+            elif action == "reset_viewer":
+                self.viewers.reset_viewer(params.get("author"))
+            elif action == "import_viewers":
+                new_viewers = params.get("viewers", {})
+                logger.info(f"Importing {len(new_viewers)} viewers from Pi client backup...")
+                self.viewers.viewers = new_viewers
+                self.viewers.mark_dirty()
+                self.viewers._save_viewers()
+
+        elif etype == "request_viewer_sync":
+            if websocket:
+                logger.info("Pi client requested viewer sync. Sending full database...")
+                await websocket.send_json({
+                    "type": "full_viewer_sync",
+                    "viewers": self.viewers.viewers
+                })
 
     async def _log_ui(self, type, message, author=None, meta=None):
         # Always coerce message to string to prevent frontend crashes

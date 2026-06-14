@@ -33,6 +33,34 @@ class ViewerService:
                 v["points"] = v.get("count", 0) * 10
                 self._dirty = True
 
+    def _should_bypass_db(self):
+        from backend.config_manager import ConfigManager
+        is_cloud = os.environ.get("RUN_MODE") == "cloud"
+        cloud_enabled = ConfigManager.get_config().get("cloud_alert_enabled", False)
+        return cloud_enabled and not is_cloud
+
+    def _forward_to_cloud(self, action, **kwargs):
+        if self._should_bypass_db() and getattr(self, "bot", None) and getattr(self.bot, "cloud_alert_client", None):
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.bot.cloud_alert_client.send_event({
+                        "type": "viewer_api_action",
+                        "action": action,
+                        "params": kwargs
+                    }))
+                else:
+                    asyncio.run_coroutine_threadsafe(
+                        self.bot.cloud_alert_client.send_event({
+                            "type": "viewer_api_action",
+                            "action": action,
+                            "params": kwargs
+                        }),
+                        loop
+                    )
+            except Exception as e:
+                logger.error(f"Failed to forward viewer action {action} to cloud: {e}")
+
     async def start(self):
         """Start background tasks. Call after event loop is running."""
         if not self._auto_save_started:
@@ -78,6 +106,9 @@ class ViewerService:
 
     def _save_viewers(self):
         """Internal save method. Safe to call, but prefer marking dirty."""
+        if self._should_bypass_db():
+            self._dirty = False
+            return
         import sqlite3
         db_path = self.viewers_path.replace('.json', '.db')
         try:
@@ -98,6 +129,8 @@ class ViewerService:
 
     def _save_single_viewer(self, username, user_data):
         """Save a single viewer's data to the SQLite database immediately."""
+        if self._should_bypass_db():
+            return
         import sqlite3
         db_path = self.viewers_path.replace('.json', '.db')
         try:
@@ -117,6 +150,8 @@ class ViewerService:
         self._dirty = False
         self._last_save = time.time()
         logger.info("ViewerService database reloaded.")
+        if self._should_bypass_db():
+            self._forward_to_cloud("import_viewers", viewers=self.viewers)
 
     async def _auto_save_loop(self):
         """Periodically checks if data needs saving."""
@@ -144,7 +179,27 @@ class ViewerService:
             except Exception:
                 pass  # Non-critical — don't crash the bot for a UI notification
 
+        # Cloud-to-Pi Client Sync
+        if os.environ.get("RUN_MODE") == "cloud" and author and getattr(self, "bot", None):
+            vdata = self.viewers.get(author)
+            if vdata and getattr(self.bot, "pi_clients", None):
+                asyncio.create_task(self.bot.pi_clients.broadcast({
+                    "type": "viewer_point_update",
+                    "username": author,
+                    "data": vdata
+                }))
+
     def update_viewer(self, author, trigger_welcome_cb, trigger_rank_up_cb, check_loyalty_cb, channel_id=None):
+        if self._should_bypass_db():
+            if author not in self.viewers:
+                self.viewers[author] = {
+                    "count": 0, "points": 0, "warnings": 0,
+                    "last_seen": time.time(), "last_date": time.strftime("%Y-%m-%d"),
+                    "consecutive_days": 1, "rank": "Noob"
+                }
+                if channel_id:
+                    self.viewers[author]["channel_id"] = channel_id
+            return self.viewers[author]
         now = time.time()
         today = time.strftime("%Y-%m-%d", time.localtime(now))
         
@@ -251,6 +306,9 @@ class ViewerService:
         return self.viewers[author]
 
     def add_points(self, author, amount, rank_cb=None):
+        if self._should_bypass_db():
+            self._forward_to_cloud("add_points", author=author, amount=amount)
+            return
         if author not in self.viewers: return
         
         v = self.viewers[author]
@@ -269,6 +327,9 @@ class ViewerService:
         self._save_single_viewer(author, v)
 
     def redeem(self, author, cost):
+        if self._should_bypass_db():
+            self._forward_to_cloud("redeem", author=author, cost=cost)
+            return True
         if author not in self.viewers: return False
         if self.viewers[author]["points"] >= cost:
             self.viewers[author]["points"] -= cost
@@ -299,9 +360,10 @@ class ViewerService:
     def get_viewer(self, author):
         return self.viewers.get(author, {"count": 1})
 
-
-
     def deduct_points(self, author, amount):
+        if self._should_bypass_db():
+            self._forward_to_cloud("deduct_points", author=author, amount=amount)
+            return True
         if author not in self.viewers: return False
         if self.viewers[author]["points"] >= amount:
             self.viewers[author]["points"] -= amount
@@ -312,6 +374,9 @@ class ViewerService:
 
     def set_points(self, author, amount):
         """Set a viewer's points to an exact value."""
+        if self._should_bypass_db():
+            self._forward_to_cloud("set_points", author=author, amount=amount)
+            return True
         if author not in self.viewers: return False
         self.viewers[author]["points"] = max(0, int(amount))
         self.viewers[author]["rank"] = self.get_rank(self.viewers[author]["points"])["name"]
@@ -322,15 +387,13 @@ class ViewerService:
 
     def transfer_points(self, sender, receiver, amount):
         """Transfer points from one viewer to another."""
+        if self._should_bypass_db():
+            self._forward_to_cloud("transfer_points", sender=sender, receiver=receiver, amount=amount)
+            return True
         if amount <= 0: return False
         if sender not in self.viewers: return False
         
-        # We don't require the receiver to exist first, it can be created if needed, 
-        # but add_points doesn't create users automatically. 
-        # So we ensure the receiver exists first by calling get_viewer or letting the bot do it.
-        # But wait, self.viewers[sender] check is enough for sender.
         if receiver not in self.viewers:
-            # Let's create a minimal profile for receiver so points aren't lost
             self.viewers[receiver] = {"count": 0, "points": 0, "consecutive_days": 1, "rank": "Noob"}
 
         if self.viewers[sender]["points"] >= amount:
@@ -350,6 +413,12 @@ class ViewerService:
 
     def delete_viewer(self, author):
         """Remove a viewer from the database."""
+        if self._should_bypass_db():
+            self._forward_to_cloud("delete_viewer", author=author)
+            if author in self.viewers:
+                del self.viewers[author]
+                self._notify_viewer_update(author, "delete")
+            return True
         if author in self.viewers:
             del self.viewers[author]
             self.mark_dirty()
@@ -369,6 +438,9 @@ class ViewerService:
 
     def reset_viewer(self, author):
         """Reset a viewer's points and streak to 0."""
+        if self._should_bypass_db():
+            self._forward_to_cloud("reset_viewer", author=author)
+            return True
         if author not in self.viewers: return False
         self.viewers[author]["points"] = 0
         self.viewers[author]["consecutive_days"] = 0
