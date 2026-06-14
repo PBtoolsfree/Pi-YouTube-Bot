@@ -128,6 +128,56 @@ class YouTubeService:
             logger.error(f"YouTube Mod Remove Error: {e}")
             return False, f"YouTube API Error: {str(e)}"
 
+    async def send_chat_message(self, message: str, live_chat_id: str = None):
+        """Sends a message directly to YouTube live chat."""
+        return await asyncio.to_thread(self._send_chat_message_sync, message, live_chat_id)
+
+    def _send_chat_message_sync(self, message: str, live_chat_id: str = None):
+        creds = self._get_credentials()
+        if not creds:
+            return False, "Not authenticated with YouTube."
+
+        try:
+            service = build('youtube', 'v3', credentials=creds)
+            
+            if not live_chat_id:
+                config = self.config_loader()
+                live_chat_id = config.get("youtube", {}).get("live_chat_id")
+            
+            if not live_chat_id:
+                # Fallback to fetching it
+                request = service.liveBroadcasts().list(
+                    part="snippet",
+                    broadcastStatus="active",
+                    broadcastType="all"
+                )
+                response = request.execute()
+                items = response.get("items", [])
+                
+                if not items:
+                    return False, "No active live stream found."
+                    
+                live_chat_id = items[0]["snippet"]["liveChatId"]
+                
+            insert_request = service.liveChatMessages().insert(
+                part="snippet",
+                body={
+                    "snippet": {
+                        "liveChatId": live_chat_id,
+                        "type": "textMessageEvent",
+                        "textMessageDetails": {
+                            "messageText": message
+                        }
+                    }
+                }
+            )
+            insert_request.execute()
+            return True, "Message sent"
+            
+        except Exception as e:
+            logger.error(f"YouTube Chat Send Error: {e}")
+            return False, f"Error: {str(e)}"
+
     async def fetch_trending_gaming(self):
         """Fetches top trending gaming videos and shorts over the last 24 hours, prioritizing small channels."""
         # Using a developer key is safer for general API calls if OAuth creds are missing.

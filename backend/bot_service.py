@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
-        "claim", "points", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
+        "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards"
     }
     if cleaned_cmd in builtin_commands:
@@ -1600,7 +1600,7 @@ class BotService:
                 await self._log_ui("LOYALTY", f"{author} claimed loot box: +{pts}")
             else:
                 await self._send_chat(f"@{author} There is no active Loot Box right now!")
-        elif cmd == "!points":
+        elif cmd == "!points" or cmd == "!ponits":
             v = self.viewers.get_viewer(author)
             pts = v.get("points", 0)
             
@@ -2033,7 +2033,8 @@ class BotService:
         config = self.load_config()
         sb_cfg = config.get("streamer_bot", {})
         if not sb_cfg.get("enabled"):
-            logger.debug("[CHAT] Streamer.bot disabled — skipping chat message.")
+            logger.debug("[CHAT] Streamer.bot disabled — falling back to YouTube API.")
+            asyncio.create_task(self.youtube_api.send_chat_message(message))
             return
 
         payload = json.dumps({
@@ -2076,8 +2077,12 @@ class BotService:
                         logger.info(f"[CHAT] Sent via ephemeral SB DoAction: {message[:60]}")
                     except Exception as e:
                         logger.warning(f"[CHAT-TEMP] SendMessage failed: {e}")
+                        logger.info("[CHAT] Falling back to YouTube API")
+                        asyncio.create_task(self.youtube_api.send_chat_message(message))
             except Exception as e:
                 logger.error(f"[CHAT] All Streamer.bot methods failed: {e}")
+                logger.info("[CHAT] Falling back to YouTube API")
+                asyncio.create_task(self.youtube_api.send_chat_message(message))
 
     async def handle_pi_client_event(self, event, websocket=None):
         etype = event.get("type")
