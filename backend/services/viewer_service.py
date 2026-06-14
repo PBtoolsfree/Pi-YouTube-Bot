@@ -34,10 +34,13 @@ class ViewerService:
                 self._dirty = True
 
     def _should_bypass_db(self):
-        from backend.config_manager import ConfigManager
         is_cloud = os.environ.get("RUN_MODE") == "cloud"
-        cloud_enabled = ConfigManager.get_config().get("cloud_alert_enabled", False)
-        return cloud_enabled and not is_cloud
+        if is_cloud:
+            return False
+        if getattr(self, "bot", None) and getattr(self.bot, "cloud_alert_client", None):
+            return self.bot.cloud_alert_client.is_running
+        from backend.config_manager import ConfigManager
+        return ConfigManager.get_config().get("cloud_alert_enabled", False)
 
     def _forward_to_cloud(self, action, **kwargs):
         if self._should_bypass_db() and getattr(self, "bot", None) and getattr(self.bot, "cloud_alert_client", None):

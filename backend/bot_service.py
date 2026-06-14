@@ -975,8 +975,7 @@ class BotService:
             
             elif is_alert:
                 # Forward to Cloud Server if running as local client
-                from backend.config_manager import ConfigManager
-                is_client = ConfigManager.get_config().get("cloud_alert_enabled", False) and os.environ.get("RUN_MODE") != "cloud"
+                is_client = self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud"
                 if is_client:
                     if getattr(self, "cloud_alert_client", None):
                         self._spawn_task(self.cloud_alert_client.send_event({
@@ -1420,9 +1419,7 @@ class BotService:
         if self.audio and not message.strip().startswith(("!", "/")):
             await self.audio.speak(f"{author} says: {message}", "secret")
 
-        # Forward to Cloud Server if running as local client
-        from backend.config_manager import ConfigManager
-        is_client = ConfigManager.get_config().get("cloud_alert_enabled", False) and os.environ.get("RUN_MODE") != "cloud"
+        is_client = self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud"
         if is_client:
             if getattr(self, "cloud_alert_client", None):
                 self._spawn_task(self.cloud_alert_client.send_event({
