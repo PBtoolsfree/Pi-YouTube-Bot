@@ -15,7 +15,9 @@ def deploy():
     files_to_upload = [
         ('backend/bot_service.py', 'backend/bot_service.py'),
         ('backend/api.py', 'backend/api.py'),
-        ('backend/services/cloud_alert_client.py', 'backend/services/cloud_alert_client.py')
+        ('backend/services/cloud_alert_client.py', 'backend/services/cloud_alert_client.py'),
+        ('backend/services/viewer_service.py', 'backend/services/viewer_service.py'),
+        ('backend/services/moderation_service.py', 'backend/services/moderation_service.py')
     ]
 
     print("Zipping frontend dist...")
