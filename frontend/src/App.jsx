@@ -29,6 +29,7 @@ const ModerationPage = lazy(() => import('./pages/Moderation'))
 const ViewersPage = lazy(() => import('./pages/Viewers'))
 const AudioEnginePage = lazy(() => import('./pages/AudioEngine'))
 const LoyaltyPage = lazy(() => import('./pages/Loyalty'))
+const LoyaltyManagerPage = lazy(() => import('./pages/LoyaltyManager'))
 const TipHistoryPage = lazy(() => import('./pages/TipHistory'))
 const PersonalitiesPage = lazy(() => import('./pages/Personalities'))
 const StreamerBotPage = lazy(() => import('./pages/StreamerBot'))
@@ -247,7 +248,7 @@ function App() {
         {activeTab === 'orchestrator' && <Orchestrator config={config} onSave={handleSaveConfig} />}
         {activeTab === 'moderation' && <ModerationPage config={config} onSave={handleSaveConfig} logs={logs} />}
         {activeTab === 'viewers' && <ViewersPage />}
-        {activeTab === 'loyalty' && <LoyaltyPage />}
+        {activeTab === 'loyalty' && (config?.is_cloud ? <LoyaltyManagerPage /> : <LoyaltyPage />)}
         {activeTab === 'tip_history' && <TipHistoryPage />}
         {activeTab === 'personalities' && <PersonalitiesPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'streamer_bot' && <StreamerBotPage logs={logs} config={config} onSave={handleSaveConfig} backendStatus={backendStatus} />}
