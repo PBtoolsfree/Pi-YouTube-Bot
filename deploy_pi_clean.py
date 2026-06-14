@@ -1,5 +1,6 @@
 import paramiko
 import os
+import shutil
 
 def clean_and_deploy_pi():
     server = '172.168.30.135'
@@ -19,7 +20,11 @@ def clean_and_deploy_pi():
         ('backend/services/moderation_service.py', 'backend/services/moderation_service.py'),
         ('frontend/src/pages/Moderation.jsx', 'frontend/src/pages/Moderation.jsx'),
         ('frontend/src/App.jsx', 'frontend/src/App.jsx'),
-        ('frontend/src/components/Layout.jsx', 'frontend/src/components/Layout.jsx')
+        ('frontend/src/components/Layout.jsx', 'frontend/src/components/Layout.jsx'),
+        ('frontend/src/pages/Dashboard.jsx', 'frontend/src/pages/Dashboard.jsx'),
+        ('frontend/src/components/ServiceStatus.jsx', 'frontend/src/components/ServiceStatus.jsx'),
+        ('frontend/src/pages/Settings.jsx', 'frontend/src/pages/Settings.jsx'),
+        ('frontend/src/pages/StreamerBot.jsx', 'frontend/src/pages/StreamerBot.jsx')
     ]
 
     # Files/directories to DELETE from the local Pi (load reduction & security)
@@ -32,6 +37,10 @@ def clean_and_deploy_pi():
         'cloudflared.exe',
         'cloudflared.log'
     ]
+
+    print("Zipping frontend dist locally...")
+    shutil.make_archive(os.path.join(local_dir, 'dist_upload'), 'zip', os.path.join(local_dir, 'frontend', 'dist'))
+    files_to_upload.append(('dist_upload.zip', 'dist_upload.zip'))
 
     try:
         client = paramiko.SSHClient()
@@ -79,9 +88,9 @@ def clean_and_deploy_pi():
         sftp.close()
         print("SFTP operations completed.")
 
-        # 3. Rebuild frontend and restart Pi Bot service
+        # 3. Extract frontend and restart Pi Bot service
         commands = [
-            f"cd {remote_dir}/frontend && npm run build",
+            f"cd {remote_dir} && unzip -o dist_upload.zip -d frontend/dist && rm dist_upload.zip",
             "echo 1234 | sudo -S systemctl restart pibot || echo 1234 | sudo -S systemctl restart bot_service || echo 1234 | sudo -S systemctl restart pi-youtube-bot"
         ]
         
@@ -102,6 +111,12 @@ def clean_and_deploy_pi():
                 print("STDERR:", safe_err)
             
         client.close()
+        
+        # Cleanup local zip
+        local_zip_path = os.path.join(local_dir, 'dist_upload.zip')
+        if os.path.exists(local_zip_path):
+            os.remove(local_zip_path)
+            
         print("Deployment and cleanup complete.")
     except Exception as e:
         import sys

@@ -16,7 +16,7 @@ try:
     client.connect(host, port=port, username=user, password=password, timeout=10)
     
     # Read the last 100 lines of the bot log to see WebSocket connection attempts
-    stdin, stdout, stderr = client.exec_command('tail -n 100 ~/pi-youtube-bot/logs/pibot.log')
+    stdin, stdout, stderr = client.exec_command('ls -la ~/.ssh')
     
     print("--- STDOUT ---")
     for line in stdout:

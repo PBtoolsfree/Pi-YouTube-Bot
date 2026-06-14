@@ -54,7 +54,7 @@ export default function StreamerBotPage({ logs, config, onSave, backendStatus })
 
     return (
         <div className="space-y-6 pb-10">
-            <PageStatusBar services={['bot', 'streamerBot', 'email']} />
+            <PageStatusBar services={['bot', 'streamerBot']} />
             <div className="flex justify-between items-start px-1">
                 <div className="flex flex-col gap-4">
                     <div>

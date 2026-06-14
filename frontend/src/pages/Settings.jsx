@@ -48,7 +48,6 @@ export default function SettingsPage({ config, onSave }) {
 
     const sections = [
         { id: 'youtube', label: 'YouTube & Auth', icon: <Youtube className="h-4 w-4" /> },
-        { id: 'general', label: 'Bot Settings', icon: <Server className="h-4 w-4" /> },
         { id: 'ai', label: 'AI & Personality', icon: <MessageSquare className="h-4 w-4" /> },
         { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
         { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
@@ -323,7 +322,7 @@ export default function SettingsPage({ config, onSave }) {
 
     return (
         <div className="pb-10 space-y-6">
-            <PageStatusBar services={['bot', 'youtube', 'email', 'streamerBot', 'ai', 'tts']} />
+            <PageStatusBar services={['bot', 'youtube', 'streamerBot', 'ai', 'tts']} />
 
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-1">
@@ -636,34 +635,7 @@ export default function SettingsPage({ config, onSave }) {
                     </div>
                 )}
 
-                {activeSection === 'general' && (
-                    <div className="grid gap-6 md:grid-cols-2">
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Chat Commands</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-6">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-zinc-300">Enable Commands</label>
-                                    <Switch
-                                        checked={localConfig.commands?.enabled || false}
-                                        onCheckedChange={(c) => updateNested('commands.enabled', c)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Prefix</label>
-                                    <Input
-                                        value={localConfig.commands?.prefix || '!'}
-                                        onChange={(e) => updateNested('commands.prefix', e.target.value)}
-                                        className="w-24 bg-zinc-950 border-zinc-700 font-mono text-center text-sm text-zinc-100 h-9"
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
 
-
-                    </div>
-                )}
 
                 {activeSection === 'ai' && (
                     <div className="space-y-6">

@@ -80,12 +80,6 @@ export function PageStatusBar({ services = [], extra = [] }) {
             active: status.youtube,
             color: 'red',
         },
-        email: {
-            label: 'Email',
-            icon: <Mail className="h-3 w-3" />,
-            active: status.email,
-            color: 'blue',
-        },
         streamerBot: {
             label: 'Streamer.bot',
             icon: <Link2 className="h-3 w-3" />,

@@ -51,6 +51,19 @@ from backend.services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
 
+def is_valid_command(cmd_name: str, config: dict) -> bool:
+    cleaned_cmd = cmd_name.lstrip("!")
+    builtin_commands = {
+        "claim", "points", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
+        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards"
+    }
+    if cleaned_cmd in builtin_commands:
+        return True
+    custom_commands = config.get("custom_commands", {})
+    if f"!{cleaned_cmd}" in custom_commands or cleaned_cmd in custom_commands:
+        return True
+    return False
+
 class BotService:
     def __init__(self, audio=None, ai=None, config_path="config.json"):
         self.audio = audio
@@ -470,12 +483,44 @@ class BotService:
 
     async def _leaderboard_mod_sync_loop(self):
         """Automatically manages YouTube Mod status for the Top 3 leaderboard viewers. Runs every 5 minutes."""
-        rewards_file = os.path.join(os.path.dirname(__file__), "..", "data", "active_rewards.json")
         while self.is_running:
             try:
-                # 1. Fetch current top 3
-                leaderboard = self.viewers.get_leaderboard(limit=3)
-                top_3_names = [v['name'] for v in leaderboard]
+                await self.sync_leaderboard_mods()
+            except Exception as e:
+                logger.error(f"Leaderboard Mod Sync Loop Error: {e}")
+            await asyncio.sleep(300) # Check every 5 minutes
+
+    async def sync_leaderboard_mods(self):
+        """Automatically manages YouTube Mod status for the Top 3 leaderboard viewers."""
+        if not hasattr(self, "_mod_sync_lock"):
+            self._mod_sync_lock = asyncio.Lock()
+
+        async with self._mod_sync_lock:
+            rewards_file = os.path.join(os.path.dirname(__file__), "..", "data", "active_rewards.json")
+            try:
+                # 1. Fetch current top 3 (excluding the broadcaster/owner channel)
+                leaderboard = self.viewers.get_leaderboard(limit=5)
+                config = self.load_config()
+                b_id = config.get("youtube", {}).get("channel_id")
+                b_name = config.get("youtube", {}).get("channel_name", "").lower()
+                
+                top_3_names = []
+                for v in leaderboard:
+                    v_name = v['name']
+                    v_cid = v.get('channel_id')
+                    
+                    is_b = False
+                    if b_id and v_cid == b_id:
+                        is_b = True
+                    if b_name and v_name.lower() == b_name:
+                        is_b = True
+                        
+                    if is_b:
+                        continue
+                    
+                    top_3_names.append(v_name)
+                    if len(top_3_names) >= 3:
+                        break
                 
                 # 2. Load existing rewards
                 rewards = []
@@ -583,11 +628,8 @@ class BotService:
                     updated_rewards.extend(assigned_mods)
                     with open(rewards_file, "w") as f:
                         json.dump(updated_rewards, f, indent=4)
-
             except Exception as e:
-                logger.error(f"Leaderboard Mod Sync Error: {e}")
-            
-            await asyncio.sleep(300) # Check every 5 minutes
+                logger.error(f"Leaderboard Mod Sync Execution Error: {e}")
 
     async def _goal_monitoring_loop(self):
         """Periodically checks goal progress and activates reward windows.
@@ -1448,26 +1490,68 @@ class BotService:
         # 3. AI Triggers
         should_respond = force_ai
         prompt = message
-        
-        # Explicit Trigger Rule — Agent ONLY replies when specifically called
         msg_lower = message.lower().strip()
-        # Strict phrases: message must START with "bot" (followed by space), or contain specific call phrases
-        bot_call_phrases = ["hey bot", "pi bot", "@bot", "@pi bot", "bot bhai", "bot bata", "bot batao"]
-        if msg_lower.startswith("bot ") or any(phrase in msg_lower for phrase in bot_call_phrases):
-            should_respond = True
-            
-        # Highly Engaging Commands (Handled by AI)
-        if msg_lower.startswith("bot roast") or msg_lower.startswith("bot hype"):
-            should_respond = True
-            force_ai = True # Override cooldowns for these explicit commands
+
+        # Load AI triggers configuration
+        ai_triggers = config.get("moderation", {}).get("ai_triggers", {})
+        ai_enabled = ai_triggers.get("enabled", True)
         
-        # Gate by Streamer.bot connection status (unless forced for testing/manual chat)
+        if ai_enabled:
+            ai_prefixes = [p.lower().strip() for p in ai_triggers.get("prefixes", []) if p.strip()]
+            ai_keywords = [k.lower().strip() for k in ai_triggers.get("keywords", []) if k.strip()]
+            
+            # Prefix matching (e.g. "!ai", "!ask")
+            for pref in ai_prefixes:
+                if msg_lower.startswith(f"{pref} ") or msg_lower == pref:
+                    should_respond = True
+                    if msg_lower.startswith(f"{pref} "):
+                        prompt = message[len(pref):].strip()
+                    break
+            
+            # Keyword matching (e.g. "bot")
+            if not should_respond:
+                for kw in ai_keywords:
+                    if msg_lower.startswith(f"{kw} ") or msg_lower == kw:
+                        should_respond = True
+                        break
+                    variations = [f"hey {kw}", f"pi {kw}", f"@{kw}", f"@pi {kw}", f"{kw} bhai", f"{kw} bata", f"{kw} batao"]
+                    if any(v in msg_lower for v in variations):
+                        should_respond = True
+                        break
+
+            # Highly Engaging Commands (Handled by AI) for any wake keyword
+            for kw in ai_keywords:
+                if msg_lower.startswith(f"{kw} roast") or msg_lower.startswith(f"{kw} hype"):
+                    should_respond = True
+                    force_ai = True
+                    break
+
+        # Gate by Streamer.bot connection status (unless forced for testing/manual chat or in cloud mode)
         sb_enabled = config.get("streamer_bot", {}).get("enabled", False)
-        if sb_enabled and not self.is_sb_connected and not force_ai:
+        is_cloud = os.environ.get("RUN_MODE") == "cloud"
+        if sb_enabled and not self.is_sb_connected and not force_ai and not is_cloud:
             should_respond = False
 
-        if message.startswith("!"):
-                await self._handle_command(author, message, chat_obj)
+        # Command Parsing & Routing
+        cmd_cfg = config.get("commands", {})
+        cmd_enabled = cmd_cfg.get("enabled", True)
+        cmd_prefix = cmd_cfg.get("prefix", "!")
+        
+        is_command_run = False
+        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
+            remaining = message[len(cmd_prefix):].strip()
+            parts = remaining.split(" ")
+            cmd_name = parts[0].lower().strip()
+            
+            if is_valid_command(cmd_name, config):
+                normalized_message = "!" + cmd_name
+                if len(parts) > 1:
+                    normalized_message += " " + " ".join(parts[1:])
+                await self._handle_command(author, normalized_message, chat_obj)
+                is_command_run = True
+
+        if is_command_run:
+            pass
         elif should_respond:
             # Check cooldowns (skip if forced)
             if not force_ai:

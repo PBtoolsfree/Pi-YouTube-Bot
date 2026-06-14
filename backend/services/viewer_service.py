@@ -130,6 +130,27 @@ class ViewerService:
         except Exception as e:
             logger.error(f"Error saving viewers to DB: {e}")
 
+    def force_save_to_db(self):
+        """Force write all in-memory viewers to local SQLite db, bypassing database bypass check."""
+        import sqlite3
+        db_path = self.viewers_path.replace('.json', '.db')
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute('CREATE TABLE IF NOT EXISTS viewers (username TEXT PRIMARY KEY, data TEXT)')
+            
+            cursor.execute('BEGIN TRANSACTION')
+            for user, user_data in self.viewers.items():
+                cursor.execute('INSERT OR REPLACE INTO viewers (username, data) VALUES (?, ?)', 
+                               (user, json.dumps(user_data)))
+            conn.commit()
+            conn.close()
+            self._dirty = False
+            self._last_save = time.time()
+            logger.info(f"Force saved {len(self.viewers)} viewers to local DB for backup.")
+        except Exception as e:
+            logger.error(f"Error force saving viewers to DB: {e}")
+
     def _save_single_viewer(self, username, user_data):
         """Save a single viewer's data to the SQLite database immediately."""
         if self._should_bypass_db():

@@ -168,7 +168,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <StatusBadge on={svc.ai} icon={<Brain className="h-3 w-3" />} label="AI" color="purple" />
                                 <StatusBadge on={svc.tts} icon={<Volume2 className="h-3 w-3" />} label="TTS" color="amber" />
                                 <StatusBadge on={svc.youtube} icon={<Youtube className="h-3 w-3" />} label="YT" color="red" />
-                                <StatusBadge on={svc.email} icon={<Mail className="h-3 w-3" />} label="Email" color="blue" />
                                 <StatusBadge on={svc.streamer} icon={<Link2 className="h-3 w-3" />} label="SB" color="cyan" />
                             </div>
                         )}

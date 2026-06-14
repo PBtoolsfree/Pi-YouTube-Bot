@@ -2666,6 +2666,11 @@ def _get_backups_dir() -> str:
 
 def _create_backup_zip(buf: io.BytesIO):
     """Write all backed-up files/dirs into buf as a zip archive."""
+    try:
+        bot.viewers.force_save_to_db()
+    except Exception as e:
+        logger.error(f"Failed to force save viewers before backup: {e}")
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for fname in _BACKUP_FILES:
             fpath = os.path.join(_PROJECT_ROOT_BACKUP, fname)

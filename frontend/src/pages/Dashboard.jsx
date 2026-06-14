@@ -292,16 +292,6 @@ function FeaturesPanel() {
             canToggle: false,
         },
         {
-            key: 'email',
-            label: 'Email Alerts',
-            desc: 'IMAP notification reader',
-            icon: <Mail className="h-4 w-4" />,
-            color: 'blue',
-            active: emailOk,
-            statusLabel: workers.email_alerts?.status,
-            canToggle: false,
-        },
-        {
             key: 'streamer_bot',
             label: 'Streamer.bot',
             desc: 'Action integrations',
