@@ -36,7 +36,7 @@ def update_oracle_cloud():
         
         print("Running update script on Oracle Cloud...")
         # Run the update command
-        cmd = "cd ~/pibot && bash scripts/update_cloud.sh"
+        cmd = "cd ~/pibot && bash scripts/update_cloud.sh --frontend"
         stdin, stdout, stderr = client.exec_command(cmd)
         
         # Print output in real-time
