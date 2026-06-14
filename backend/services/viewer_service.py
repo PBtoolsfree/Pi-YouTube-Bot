@@ -332,6 +332,7 @@ class ViewerService:
                 asyncio.create_task(rank_cb(author, new_rank))
         
         self._save_single_viewer(author, v)
+        self._notify_viewer_update(author, "add_points")
 
     def redeem(self, author, cost):
         if self._should_bypass_db():
@@ -376,6 +377,7 @@ class ViewerService:
             self.viewers[author]["points"] -= amount
             self.mark_dirty()
             self._save_single_viewer(author, self.viewers[author])
+            self._notify_viewer_update(author, "deduct_points")
             return True
         return False
 
@@ -400,8 +402,7 @@ class ViewerService:
         if amount <= 0: return False
         if sender not in self.viewers: return False
         
-        if receiver not in self.viewers:
-            self.viewers[receiver] = {"count": 0, "points": 0, "consecutive_days": 1, "rank": "Noob"}
+        if receiver not in self.viewers: return False
 
         if self.viewers[sender]["points"] >= amount:
             self.viewers[sender]["points"] -= amount

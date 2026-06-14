@@ -1254,14 +1254,15 @@ class BotService:
         message = chat_obj.message
         
         # 0. Check Ignore Text List (Silent Ignore)
-        config = self.load_config()
-        mod_cfg = config.get("moderation", {})
-        ignore_text_list = mod_cfg.get("ignore_text_list", [])
-        msg_lower = message.lower()
-        for ignore_text in ignore_text_list:
-            if ignore_text and ignore_text.lower() in msg_lower:
-                logger.info(f"Silently ignoring message from {author} containing ignored text: '{ignore_text}'")
-                return None
+        if not message.startswith("!"):
+            config = self.load_config()
+            mod_cfg = config.get("moderation", {})
+            ignore_text_list = mod_cfg.get("ignore_text_list", [])
+            msg_lower = message.lower()
+            for ignore_text in ignore_text_list:
+                if ignore_text and ignore_text.lower() in msg_lower:
+                    logger.info(f"Silently ignoring message from {author} containing ignored text: '{ignore_text}'")
+                    return None
         
         # Unique ID for Deduplication
         msg_id = getattr(chat_obj, 'msg_id', None) or getattr(chat_obj, 'id', None)
@@ -1568,15 +1569,26 @@ class BotService:
             if len(args) < 2:
                 await self._send_chat(f"@{author} Usage: !give <username> <amount>")
                 return
-            target = args[0].replace('@', '')
+            target = args[0].replace('@', '').strip()
             try:
                 amount = int(args[1])
+                if amount <= 0:
+                    await self._send_chat(f"@{author} Amount must be positive!")
+                    return
+                if target not in self.viewers.viewers:
+                    await self._send_chat(f"@{author} transfer failed! Target user '{target}' has never visited this stream.")
+                    return
+                v = self.viewers.get_viewer(author)
+                if v.get("points", 0) < amount:
+                    await self._send_chat(f"@{author} transfer failed! Insufficient points (You have {v.get('points', 0)}).")
+                    return
+                
                 success = self.viewers.transfer_points(author, target, amount)
                 if success:
                     self.gambling._log_economy_action(author, "give", amount, target=target, win=True, payout=amount)
                     await self._send_chat(f"@{author} successfully gave {amount} Points to {target}!")
                 else:
-                    await self._send_chat(f"@{author} transfer failed! Do you have enough points?")
+                    await self._send_chat(f"@{author} transfer failed!")
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number for amount.")
 
