@@ -107,7 +107,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="moderation" icon={<Shield />} label="Moderation" active={activeTab} onClick={setActiveTab} dot={navDot('moderation')} dotColor={dotColor} />
                                 <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
                                 <NavItem id="viewers" icon={<Users />} label="Audience" active={activeTab} onClick={setActiveTab} dot={navDot('viewers')} dotColor={dotColor} />
-                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
+                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty Log" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
                                 <NavItem id="tip_history" icon={<History />} label="Tip History" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="giveaways" icon={<Gift />} label="Giveaways" active={activeTab} onClick={setActiveTab} dot={navDot('giveaways')} dotColor={dotColor} />
                                 <NavItem id="redeems" icon={<Clapperboard />} label="Rewards Shop" active={activeTab} onClick={setActiveTab} dot={navDot('redeems')} dotColor={dotColor} />
@@ -158,7 +158,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
             <main className="flex-1 flex flex-col overflow-hidden bg-background">
                 <header className="h-16 border-b flex items-center px-8 justify-between bg-white/5 backdrop-blur-sm shadow-sm z-10 border-white/5">
                     <h1 className="font-bold text-2xl capitalize text-zinc-100 tracking-tight">
-                        {activeTab.replace(/_/g, ' ')}
+                        {activeTab === 'loyalty' ? 'Loyalty Log' : activeTab.replace(/_/g, ' ')}
                     </h1>
                     <div className="flex items-center gap-4">
                         {/* Quick status badges */}
