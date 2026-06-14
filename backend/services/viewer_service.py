@@ -301,9 +301,13 @@ class ViewerService:
             if streak >= 2:
                 bonus_pts = int(daily_bonus * streak_mult)
             
-            self.add_points(author, bonus_pts) # We don't trigger rank up cb here to avoid double notifications, wait, let's just add it directly
+            self.add_points(author, bonus_pts)
+            if getattr(self, "bot", None) and getattr(self.bot, "gambling", None) and os.environ.get("RUN_MODE") == "cloud":
+                self.bot.gambling._log_economy_action(author, "daily_bonus", bonus_pts, target=f"Streak: {streak} days", win=True, payout=bonus_pts)
 
         self.add_points(author, pts_per_msg, trigger_rank_up_cb) 
+        if getattr(self, "bot", None) and getattr(self.bot, "gambling", None) and os.environ.get("RUN_MODE") == "cloud":
+            self.bot.gambling._log_economy_action(author, "chat_message", pts_per_msg, target="Chat reward", win=True, payout=pts_per_msg)
         
         self._notify_viewer_update(author, "message")
         return self.viewers[author]

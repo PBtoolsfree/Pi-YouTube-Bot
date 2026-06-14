@@ -17,7 +17,8 @@ def deploy():
         ('backend/api.py', 'backend/api.py'),
         ('backend/services/cloud_alert_client.py', 'backend/services/cloud_alert_client.py'),
         ('backend/services/viewer_service.py', 'backend/services/viewer_service.py'),
-        ('backend/services/moderation_service.py', 'backend/services/moderation_service.py')
+        ('backend/services/moderation_service.py', 'backend/services/moderation_service.py'),
+        ('backend/services/loyalty_games.py', 'backend/services/loyalty_games.py')
     ]
 
     print("Zipping frontend dist...")

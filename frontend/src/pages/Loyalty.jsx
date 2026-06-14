@@ -105,7 +105,14 @@ export default function LoyaltyPage() {
                 h.game?.toLowerCase().includes(search.toLowerCase())
 
             // Filter by action type
-            const matchesAction = actionFilter === "all" || h.game === actionFilter
+            let matchesAction = false
+            if (actionFilter === "all") {
+                matchesAction = true
+            } else if (actionFilter === "admin") {
+                matchesAction = h.game?.startsWith("admin_")
+            } else {
+                matchesAction = h.game === actionFilter
+            }
 
             return matchesSearch && matchesAction
         })
@@ -178,6 +185,9 @@ export default function LoyaltyPage() {
                                     <option value="bat" className="bg-zinc-950 text-zinc-300">Bat Solo</option>
                                     <option value="bat_duel" className="bg-zinc-950 text-zinc-300">Bat Duel</option>
                                     <option value="boss_fight" className="bg-zinc-950 text-zinc-300">Boss Fight</option>
+                                    <option value="daily_bonus" className="bg-zinc-950 text-zinc-300">Daily Bonus</option>
+                                    <option value="chat_message" className="bg-zinc-950 text-zinc-300">Chat Reward</option>
+                                    <option value="admin" className="bg-zinc-950 text-zinc-300">Admin Actions</option>
                                 </select>
                             </div>
                         </div>
@@ -215,7 +225,7 @@ export default function LoyaltyPage() {
                                         </td>
                                         <td className="px-6 py-3.5 text-center">
                                             <span className="text-zinc-400 text-xs font-semibold px-2 py-1 rounded bg-zinc-950 border border-zinc-800 uppercase tracking-wider">
-                                                {h.game === 'bat_duel' ? 'Duel' : h.game === 'boss_fight' ? 'Boss' : h.game}
+                                                {h.game === 'bat_duel' ? 'Duel' : h.game === 'boss_fight' ? 'Boss' : h.game === 'daily_bonus' ? 'Bonus' : h.game === 'chat_message' ? 'Chat' : h.game === 'admin_add' ? 'Admin Add' : h.game === 'admin_deduct' ? 'Admin Ded' : h.game === 'admin_set' ? 'Admin Set' : h.game}
                                             </span>
                                         </td>
                                         <td className="px-6 py-3.5 text-right font-mono text-zinc-400 text-xs">
@@ -227,19 +237,48 @@ export default function LoyaltyPage() {
                                                 <span className="text-orange-400">{h.target}</span>
                                             ) : h.game === 'bat_duel' ? (
                                                 <span>vs: <strong className="text-zinc-200">{h.target}</strong></span>
+                                            ) : (h.game === 'daily_bonus' || h.game === 'chat_message' || h.game?.startsWith('admin_')) ? (
+                                                <span>{h.target || 'System Action'}</span>
                                             ) : (
                                                 <span>Bet: <strong className="text-zinc-200">{(h.bet || h.amount || 0).toLocaleString()}</strong></span>
                                             )}
                                         </td>
                                         <td className="px-6 py-3.5 text-right font-mono font-bold">
-                                            <span className={h.game === 'give' ? 'text-blue-400' : h.game === 'boss_fight' ? 'text-orange-400' : h.win ? 'text-emerald-400' : 'text-rose-500/70'}>
-                                                {h.game === 'give' ? (h.amount || 0).toLocaleString() : h.game === 'boss_fight' ? '-' + (h.amount || 0).toLocaleString() : h.win ? '+' + (h.payout || h.amount || 0).toLocaleString() : '-' + (h.bet || h.amount || 0).toLocaleString()}
+                                            <span className={
+                                                h.game === 'give' ? 'text-blue-400' : 
+                                                h.game === 'boss_fight' ? 'text-orange-400' : 
+                                                (h.game === 'daily_bonus' || h.game === 'chat_message' || h.game === 'admin_add') ? 'text-emerald-400' :
+                                                h.game === 'admin_deduct' ? 'text-rose-500/70' :
+                                                h.game === 'admin_set' ? (h.win ? 'text-emerald-400' : 'text-rose-500/70') :
+                                                h.win ? 'text-emerald-400' : 'text-rose-500/70'
+                                            }>
+                                                {h.game === 'give' ? (h.amount || 0).toLocaleString() : 
+                                                 h.game === 'boss_fight' ? '-' + (h.amount || 0).toLocaleString() : 
+                                                 (h.game === 'daily_bonus' || h.game === 'chat_message' || h.game === 'admin_add') ? '+' + (h.payout || h.amount || 0).toLocaleString() :
+                                                 h.game === 'admin_deduct' ? '-' + (h.amount || 0).toLocaleString() :
+                                                 h.game === 'admin_set' ? (h.win ? '+' : '-') + (h.payout || h.amount || 0).toLocaleString() :
+                                                 h.win ? '+' + (h.payout || h.amount || 0).toLocaleString() : 
+                                                 '-' + (h.bet || h.amount || 0).toLocaleString()}
                                             </span>
                                         </td>
                                         <td className="px-6 py-3.5 text-center">
                                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold border 
-                                                ${h.game === 'give' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : h.game === 'boss_fight' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : h.win ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                                {h.game === 'give' ? 'SENT' : h.game === 'boss_fight' ? 'ATTACK' : h.win ? 'WIN' : 'LOSS'}
+                                                ${h.game === 'give' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                                                  h.game === 'boss_fight' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 
+                                                  (h.game === 'daily_bonus' || h.game === 'chat_message') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                  h.game === 'admin_add' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                                  h.game === 'admin_deduct' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                                  h.game === 'admin_set' ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' :
+                                                  h.win ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                                                  'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                                {h.game === 'give' ? 'SENT' : 
+                                                 h.game === 'boss_fight' ? 'ATTACK' : 
+                                                 h.game === 'daily_bonus' ? 'BONUS' :
+                                                 h.game === 'chat_message' ? 'REWARD' :
+                                                 h.game === 'admin_add' ? 'ADDED' :
+                                                 h.game === 'admin_deduct' ? 'DEDUCTED' :
+                                                 h.game === 'admin_set' ? 'SET' :
+                                                 h.win ? 'WIN' : 'LOSS'}
                                             </span>
                                         </td>
                                     </tr>

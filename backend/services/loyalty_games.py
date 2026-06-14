@@ -51,6 +51,20 @@ class GambleService:
                 
             with open(self.history_file, "w") as f:
                 json.dump(history, f, indent=4)
+                
+            # If running on cloud, broadcast to local Pi clients
+            if getattr(self, "bot", None) and os.environ.get("RUN_MODE") == "cloud":
+                if getattr(self.bot, "pi_clients", None):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(self.bot.pi_clients.broadcast({
+                                "type": "new_history_entry",
+                                "entry": entry
+                            }))
+                    except Exception as e:
+                        self.logger.error(f"Failed to broadcast new history entry: {e}")
         except Exception as e:
             self.logger.error(f"Failed to log gamble history: {e}")
 
@@ -82,6 +96,20 @@ class GambleService:
                 
             with open(self.history_file, "w") as f:
                 json.dump(history, f, indent=4)
+                
+            # If running on cloud, broadcast to local Pi clients
+            if getattr(self, "bot", None) and os.environ.get("RUN_MODE") == "cloud":
+                if getattr(self.bot, "pi_clients", None):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(self.bot.pi_clients.broadcast({
+                                "type": "new_history_entry",
+                                "entry": entry
+                            }))
+                    except Exception as e:
+                        self.logger.error(f"Failed to broadcast new history entry: {e}")
         except Exception as e:
             self.logger.error(f"Failed to log economy history: {e}")
 
@@ -397,6 +425,20 @@ class BossFightService:
                 
             with open(self.history_file, "w") as f:
                 json.dump(history, f, indent=4)
+                
+            # If running on cloud, broadcast to local Pi clients
+            if getattr(self, "bot", None) and os.environ.get("RUN_MODE") == "cloud":
+                if getattr(self.bot, "pi_clients", None):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(self.bot.pi_clients.broadcast({
+                                "type": "new_history_entry",
+                                "entry": entry
+                            }))
+                    except Exception as e:
+                        self.logger.error(f"Failed to broadcast new history entry: {e}")
         except Exception as e:
             self.logger.error(f"Failed to log economy history: {e}")
 

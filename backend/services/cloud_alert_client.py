@@ -55,6 +55,7 @@ class CloudAlertClientService:
                     
                     # Request initial viewers sync immediately
                     await self.send_event({"type": "request_viewer_sync"})
+                    await self.send_event({"type": "request_history_sync"})
                     
                     while self.is_running:
                         msg = await ws.recv()
@@ -145,6 +146,43 @@ class CloudAlertClientService:
         elif etype == "subscriber_count_sync":
             count = event.get("count", 0)
             self.bot.set_subscriber_count(count, save=True)
+
+        elif etype == "full_history_sync":
+            history = event.get("history", [])
+            logger.info(f"Successfully synced {len(history)} history logs from Cloud Server!")
+            try:
+                history_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "gambling_history.json")
+                os.makedirs(os.path.dirname(history_file), exist_ok=True)
+                with open(history_file, "w") as f:
+                    json.dump(history, f, indent=4)
+                self.bot.viewers._notify_viewer_update(event="history_sync")
+            except Exception as e:
+                logger.error(f"Failed to write synced history logs: {e}")
+
+        elif etype == "new_history_entry":
+            entry = event.get("entry")
+            if entry:
+                logger.info(f"Received new history log entry from Cloud: {entry.get('user')} - {entry.get('game')}")
+                try:
+                    history_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "gambling_history.json")
+                    os.makedirs(os.path.dirname(history_file), exist_ok=True)
+                    history = []
+                    if os.path.exists(history_file):
+                        with open(history_file, "r") as f:
+                            try:
+                                loaded = json.load(f)
+                                if isinstance(loaded, list):
+                                    history = loaded
+                            except Exception:
+                                pass
+                    history.insert(0, entry)
+                    if len(history) > 1000:
+                        history = history[:1000]
+                    with open(history_file, "w") as f:
+                        json.dump(history, f, indent=4)
+                    self.bot.viewers._notify_viewer_update(event="new_history_entry")
+                except Exception as e:
+                    logger.error(f"Failed to write new history log entry: {e}")
 
     def stop(self):
         self.is_running = False

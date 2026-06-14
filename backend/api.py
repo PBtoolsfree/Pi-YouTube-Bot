@@ -629,12 +629,23 @@ async def set_viewer_points(name: str, payload: Dict[str, Any]):
     amount = int(payload.get("amount", 0))
     if action == "add":
         bot.viewers.add_points(name, amount)
+        if os.environ.get("RUN_MODE") == "cloud":
+            bot.gambling._log_economy_action(name, "admin_add", amount, target="Admin Action", win=True, payout=amount)
     elif action == "deduct":
         if not bot.viewers.deduct_points(name, amount):
             raise HTTPException(400, "Insufficient points")
+        if os.environ.get("RUN_MODE") == "cloud":
+            bot.gambling._log_economy_action(name, "admin_deduct", amount, target="Admin Action", win=False, payout=0)
     else:
+        old_points = bot.viewers.get_viewer(name).get("points", 0) if bot.viewers.get_viewer(name) else 0
         if not bot.viewers.set_points(name, amount):
             raise HTTPException(404, "Viewer not found")
+        diff = amount - old_points
+        if os.environ.get("RUN_MODE") == "cloud" and diff != 0:
+            if diff > 0:
+                bot.gambling._log_economy_action(name, "admin_set", diff, target="Admin Action", win=True, payout=diff)
+            else:
+                bot.gambling._log_economy_action(name, "admin_set", abs(diff), target="Admin Action", win=False, payout=0)
     return {"status": "ok", "points": bot.viewers.get_viewer(name).get("points", 0)}
 
 @app.delete("/api/viewers/{name}")

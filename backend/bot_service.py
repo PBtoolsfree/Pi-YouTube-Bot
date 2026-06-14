@@ -77,7 +77,9 @@ class BotService:
         self.moderation = ModerationService(sb_ws_getter=lambda: self.sb_ws, config_loader=self.load_config)
         self.ai_handler = AIHandler(self.ai_engine)
         self.gambling = GambleService(self.audio)
+        self.gambling.bot = self
         self.boss_fight = BossFightService()
+        self.boss_fight.bot = self
 
         # Meme Redeem Service
         self.redeem_svc = RedeemService()
@@ -2062,6 +2064,23 @@ class BotService:
                 await websocket.send_json({
                     "type": "full_viewer_sync",
                     "viewers": self.viewers.viewers
+                })
+        elif etype == "request_history_sync":
+            if websocket:
+                logger.info("Pi client requested history sync. Sending full history...")
+                history_file = os.path.join(os.path.dirname(__file__), "..", "data", "gambling_history.json")
+                history = []
+                if os.path.exists(history_file):
+                    try:
+                        with open(history_file, "r") as f:
+                            loaded = json.load(f)
+                            if isinstance(loaded, list):
+                                history = loaded
+                    except Exception:
+                        pass
+                await websocket.send_json({
+                    "type": "full_history_sync",
+                    "history": history[:200]
                 })
 
     async def _log_ui(self, type, message, author=None, meta=None):
