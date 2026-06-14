@@ -331,7 +331,6 @@ class BotService:
         self.dynamic_engagement_task = self._spawn_managed_loop("dynamic_engagement", self._dynamic_engagement_loop)
         self._spawn_managed_loop("stream_context", self._stream_context_loop)
 
-
         # Start Memory Cleanup Loop (YouTube + Brain)
         self._spawn_managed_loop("memory_cleanup", self._memory_cleanup_loop)
 
@@ -354,29 +353,10 @@ class BotService:
         self._spawn_managed_loop("auto_message", self._auto_message_loop)
 
     async def _monitor_loop(self):
-        """Direct connection to YouTube live chat when Streamer.bot is disconnected or disabled."""
+        """Direct connection to YouTube live chat as a fallback, always running."""
         while self.is_running:
             try:
                 config = self.load_config()
-                sb_enabled = config.get("streamer_bot", {}).get("enabled", False)
-                
-                # If Streamer.bot is enabled but disconnected, we pause the direct YouTube chat listener
-                if sb_enabled and not self.is_sb_connected:
-                    if getattr(self, "chat", None) and self.chat.is_alive():
-                        self.chat.terminate()
-                        self.chat = None
-                        await self._log_ui("SYSTEM", "Streamer.bot is enabled but disconnected. Direct YouTube chat listener paused.")
-                    await asyncio.sleep(5)
-                    continue
-
-                if sb_enabled and self.is_sb_connected:
-                    if getattr(self, "chat", None) and self.chat.is_alive():
-                        self.chat.terminate()
-                        self.chat = None
-                        await self._log_ui("SYSTEM", "Streamer.bot connected. Pausing direct YouTube chat listener.")
-                    await asyncio.sleep(5)
-                    continue
-
                 video_id = config.get("youtube", {}).get("video_id")
                 if not video_id:
                     await asyncio.sleep(5)
