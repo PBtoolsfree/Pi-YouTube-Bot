@@ -2355,6 +2355,10 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
         elif "redirect_uri_mismatch" in error_msg:
             error_msg = f"Redirect URI mismatch. Add {actual_redirect} as an Authorized Redirect URI in Google Cloud Console."
         elif "invalid_grant" in error_msg:
+            current_config = bot.load_config()
+            if current_config.get("youtube", {}).get("oauth_credentials", {}).get("refresh_token"):
+                print(">>> [OAuth Callback] Caught invalid_grant, but valid credentials exist. Assuming double request.")
+                return RedirectResponse("/settings?oauth=success")
             error_msg = "Authorization code expired or already used. Please try signing in again."
         return RedirectResponse(f"/settings?oauth=error&message={urllib.parse.quote(error_msg)}")
 
