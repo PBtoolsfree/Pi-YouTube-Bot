@@ -111,8 +111,9 @@ crontab -e
 
 ## Uninstall
 
+To cleanly remove all services, configuration, cron jobs, and optionally all dependencies and files:
 ```bash
-bash ~/pi-youtube-bot/scripts/uninstall.sh
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/master/scripts/complete_uninstall.sh | bash
 ```
 
 ---

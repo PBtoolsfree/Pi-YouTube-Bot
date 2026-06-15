@@ -582,7 +582,7 @@ pi-youtube-bot/
 │   ├── setup.sh           # Production installer
 │   ├── start.sh           # systemd entry point
 │   ├── update.sh          # Update + rollback
-│   ├── uninstall.sh       # Clean removal
+│   ├── complete_uninstall.sh # Clean removal of all files/services
 │   └── auto-update.sh     # Daily cron
 ├── docs/                  # Detailed documentation
 ├── tests/                 # Smoke tests
