@@ -1435,11 +1435,10 @@ class BotService:
         if self.audio and not message.strip().startswith(("!", "/")):
             await self.audio.speak(f"{author} says: {message}", "secret")
 
-        is_client = self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud"
-        if is_client:
-            if getattr(self, "cloud_alert_client", None):
+        if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
+            if not is_forwarded:
                 self._spawn_task(self.cloud_alert_client.send_event({
-                    "type": "chat_message",
+                    "type": "sync_chat_message",
                     "author": author,
                     "message": message,
                     "msg_id": msg_id,
@@ -2078,7 +2077,7 @@ class BotService:
 
     async def handle_pi_client_event(self, event, websocket=None):
         etype = event.get("type")
-        if etype == "chat_message":
+        if etype == "chat_message" or etype == "sync_chat_message":
             author = event.get("author")
             message = event.get("message")
             msg_id = event.get("msg_id")
