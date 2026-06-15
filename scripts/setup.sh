@@ -27,10 +27,25 @@ if [[ "$OSTYPE" != "linux-gnu"* ]]; then
     error "This setup script is only compatible with Linux/Raspberry Pi OS."
 fi
 
-# Detect project directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_DIR="$( dirname "$SCRIPT_DIR" )"
+# Detect project directory robustly (especially when piped to bash via curl)
+if [[ -f "backend/api.py" && -d "frontend" ]]; then
+    PROJECT_DIR="$(pwd)"
+else
+    # Check if pibot repository already exists in home directory
+    if [[ -d "$HOME/pibot" && -f "$HOME/pibot/backend/api.py" ]]; then
+        PROJECT_DIR="$HOME/pibot"
+        echo "🔄 Repository already exists. Pulling latest updates..."
+        cd "$PROJECT_DIR"
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+        git pull origin "$BRANCH" || git pull || true
+    else
+        echo "📥 Cloning repository to $HOME/pibot..."
+        git clone https://github.com/PBtoolsfree/pibot.git "$HOME/pibot"
+        PROJECT_DIR="$HOME/pibot"
+    fi
+fi
 cd "$PROJECT_DIR"
+
 
 info "Project directory detected: $PROJECT_DIR"
 
