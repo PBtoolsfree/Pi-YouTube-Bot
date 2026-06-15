@@ -7,7 +7,11 @@ echo "1. Pulling latest code from GitHub..."
 git pull origin master
 
 echo "2. Installing dependencies (if any new ones)..."
-pip install -r requirements.txt
+if [ -d ".venv" ]; then
+    .venv/bin/pip install -r requirements.txt
+else
+    pip install -r requirements.txt --break-system-packages || pip install -r requirements.txt
+fi
 
 echo "3. Restarting PiBot service..."
 sudo systemctl restart pibot
