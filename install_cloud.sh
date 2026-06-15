@@ -10,6 +10,18 @@ if [ ! -d "bot-cloud" ]; then
 fi
 
 cd bot-cloud
+
+# Migrate existing configuration files if they exist in the parent directory
+if [ -f "../config.json" ] && [ ! -f "config.json" ]; then
+    echo "Migrating existing config.json to bot-cloud..."
+    cp ../config.json config.json
+fi
+
+if [ -f "../.env" ] && [ ! -f ".env" ]; then
+    echo "Migrating existing .env to bot-cloud..."
+    cp ../.env .env
+fi
+
 chmod +x scripts/setup.sh
 echo "Starting cloud bot setup..."
 ./scripts/setup.sh

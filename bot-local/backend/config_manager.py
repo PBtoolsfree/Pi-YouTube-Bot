@@ -222,7 +222,7 @@ class ConfigManager:
 
         # YouTube
         if cfg.get("youtube", {}).get("enabled", True):
-            if not cfg["youtube"].get("channel_id"):
+            if not cfg.get("youtube", {}).get("channel_id"):
                 msg = "YouTube enabled but 'channel_id' missing. Bot may fail to moderate/sync."
                 logger.warning(msg)
                 warnings.append(msg)
