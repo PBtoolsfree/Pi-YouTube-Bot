@@ -357,17 +357,6 @@ class BotService:
                 logger.error(f"[AutoMsg] Error: {e}")
             await asyncio.sleep(30)  # Check every 30 seconds
 
-    async def _memory_cleanup_loop(self):
-        """Purge YouTube memory & brain chat_history older than 7 days. Runs every 6 hours."""
-        while self.is_running:
-            try:
-                yt_deleted = youtube_memory.cleanup_old_messages(7)
-                brain_deleted = self.brain.cleanup_old_chats(7)
-                if yt_deleted or brain_deleted:
-                    await self._log_ui("SYSTEM", f"Memory Cleanup: {yt_deleted} YT + {brain_deleted} brain messages purged (>7 days)")
-            except Exception as e:
-                logger.error(f"Memory Cleanup Error: {e}")
-            await asyncio.sleep(6 * 3600)  # Every 6 hours
 
     async def _rewards_expiration_loop(self):
         """Checks for expired temporary rewards (like 7-day YouTube Moderator). Runs every minute."""
@@ -1298,18 +1287,7 @@ class BotService:
         except Exception as e:
             logger.error(f"Goal Logic Error: {e}")
 
-        # BRAIN: Remember everything
-        self.brain.remember(author, message, user_id=getattr(chat_obj, 'msg_id', None))
-
-        # YOUTUBE MEMORY: Save message (7-day retention)
-        yt_row_id = None
-        if self.yt_memory_enabled:
-            try:
-                yt_row_id = youtube_memory.save_message(author, message, user_id=channel_id)
-            except Exception as e:
-                logger.error(f"YouTube Memory Save Error: {e}")
-
-
+        # Removed AI memory logs
         # Analytics
         self.session_stats["messages_processed"] = int(self.session_stats.get("messages_processed", 0)) + 1
         self.session_chatters[author] = int(self.session_chatters.get(author, 0)) + 1

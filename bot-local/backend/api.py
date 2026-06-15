@@ -2510,129 +2510,6 @@ async def callback_sheets(request: Request, code: Optional[str] = None, state: O
         traceback.print_exc()
         return RedirectResponse(f"/settings?oauth_sheets=error&message={urllib.parse.quote(str(e))}")
 
-
-
-
-
-# --- YOUTUBE MEMORY ENDPOINTS ---
-from backend.services import youtube_memory
-
-@app.get("/api/youtube-memory/users")
-async def get_yt_memory_users():
-    """List all YouTube users with message counts."""
-    try:
-        users = youtube_memory.get_all_users()
-        return {"users": users}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.get("/api/youtube-memory/user/{username}")
-async def get_yt_memory_user(username: str, limit: int = 50):
-    """Get conversation history for a specific user."""
-    try:
-        messages = youtube_memory.get_user_messages(username, limit)
-        return {"user": username, "messages": messages, "count": len(messages)}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.delete("/api/youtube-memory/user/{username}")
-async def delete_yt_memory_user(username: str):
-    """Delete all history for a user."""
-    try:
-        deleted = youtube_memory.delete_user_history(username)
-        return {"status": "success", "deleted": deleted}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.get("/api/youtube-memory/stats")
-async def get_yt_memory_stats():
-    """Get YouTube memory statistics."""
-    try:
-        return youtube_memory.get_memory_stats()
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.post("/api/youtube-memory/cleanup")
-async def trigger_yt_memory_cleanup():
-    """Manually trigger cleanup of messages older than 7 days."""
-    try:
-        yt_deleted = youtube_memory.cleanup_old_messages(7)
-        brain_deleted = bot.brain.cleanup_old_chats(7)
-        return {
-            "status": "success",
-            "youtube_deleted": yt_deleted,
-            "brain_deleted": brain_deleted,
-            "message": f"Cleaned up {yt_deleted + brain_deleted} old messages"
-        }
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ---------------------------------------------------------------------------
-
-@app.get("/api/chat/logs")
-async def get_chat_logs(n: int = 50):
-    """Return the last N chat messages from YouTube Memory."""
-    try:
-        # Get all users' recent messages combined
-        all_users = youtube_memory.get_all_users()
-        all_msgs = []
-        for u in all_users:
-            msgs = youtube_memory.get_user_messages(u["user"], limit=n)
-            all_msgs.extend(msgs)
-        # Sort by timestamp desc, take top N
-        all_msgs.sort(key=lambda m: m.get("timestamp", 0), reverse=True)
-        return all_msgs[:n]
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/api/chat/logs/stats")
-async def get_chat_log_stats():
-    """Return chat session stats from YouTube Memory."""
-    try:
-        return youtube_memory.get_memory_stats()
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/api/chat/logs/files")
-async def list_chat_log_files():
-    """Deprecated — YouTube Memory uses SQLite, no file list."""
-    return {"files": [], "note": "Migrated to YouTube Memory (SQLite)"}
-
-
-@app.get("/api/chat/logs/export")
-async def export_chat_logs_csv():
-    """Export YouTube Memory as CSV."""
-    import csv
-    import tempfile
-    try:
-        all_users = youtube_memory.get_all_users()
-        all_msgs = []
-        for u in all_users:
-            all_msgs.extend(youtube_memory.get_user_messages(u["user"], limit=500))
-        all_msgs.sort(key=lambda m: m.get("timestamp", 0))
-
-        if not all_msgs:
-            raise HTTPException(404, "No messages in YouTube Memory.")
-
-        from fastapi.responses import FileResponse as FR
-        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, newline='')
-        writer = csv.writer(tmp)
-        writer.writerow(["timestamp", "user", "message", "ai_reply"])
-        for m in all_msgs:
-            from datetime import datetime
-            ts = datetime.fromtimestamp(m.get("timestamp", 0)).strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow([ts, m.get("user", ""), m.get("message", ""), m.get("ai_reply", "")])
-        tmp.close()
-        return FR(tmp.name, media_type="text/csv", filename="youtube_memory_export.csv")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
 # --- BACKUP SYSTEM ---
 import zipfile
 import shutil
@@ -2780,9 +2657,6 @@ async def backup_restore(filename: str):
         ConfigManager.get_config(force_reload=True)
         # Close SQLite database connections & reload memory
         bot.viewers.reload()
-        bot.brain.close_conn()
-        from backend.services import youtube_memory
-        youtube_memory.close_conn()
         return {"status": "restored", "filename": filename}
     except Exception as e:
         logger.exception("Backup restore failed")
@@ -2810,9 +2684,6 @@ async def backup_import(file: UploadFile = File(...)):
         ConfigManager.get_config(force_reload=True)
         # Close SQLite database connections & reload memory
         bot.viewers.reload()
-        bot.brain.close_conn()
-        from backend.services import youtube_memory
-        youtube_memory.close_conn()
         return {"status": "imported", "filename": file.filename}
     except Exception as e:
         logger.exception("Backup import failed")
