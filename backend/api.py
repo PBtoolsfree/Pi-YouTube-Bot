@@ -1843,8 +1843,7 @@ async def test_sheets_connection():
     """
     Forces a connection attempt
     """
-    loop = asyncio.get_event_loop()
-    success = await loop.run_in_executor(None, bot.sheets.connect)
+    success = await bot.sheets.connect()
     if success:
         return {"status": "success", "message": f"Connected to Sheet: {bot.sheets.sheet.title if bot.sheets.sheet else 'Unknown'}"}
     else:
