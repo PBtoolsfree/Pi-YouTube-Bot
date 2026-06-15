@@ -1240,7 +1240,7 @@ class BotService:
         except Exception as e:
             logger.error(f"Failed to trigger action {action_name}: {e}")
 
-    async def _handle_message(self, chat_obj, force_ai=False):
+    async def _handle_message(self, chat_obj, force_ai=False, is_forwarded=False):
         author = chat_obj.author.name.lower()
         if author.startswith('@'):
             author = author[1:]
@@ -1361,6 +1361,9 @@ class BotService:
         )
         rank_info = self.viewers.get_rank(viewer_data.get("points", 0))
         
+        if is_forwarded:
+            return None
+        
         # 2. Moderation Filters
         if mod_cfg.get("enabled", True):
             if author not in self.mod_locks:
@@ -1442,7 +1445,8 @@ class BotService:
                     "msg_id": msg_id,
                     "channel_id": channel_id,
                     "is_sponsor": getattr(chat_obj.author, 'is_sponsor', False),
-                    "is_sub": getattr(chat_obj.author, 'is_subscriber', False)
+                    "is_sub": getattr(chat_obj.author, 'is_subscriber', False),
+                    "is_forwarded": True
                 }))
 
         # Secret Word Check (Dynamic Event)
@@ -2081,6 +2085,7 @@ class BotService:
             channel_id = event.get("channel_id")
             is_sponsor = event.get("is_sponsor", False)
             is_sub = event.get("is_sub", False)
+            is_forwarded = event.get("is_forwarded", False)
             
             class MockChat:
                 class Author:
@@ -2095,7 +2100,7 @@ class BotService:
                     self.msg_id = msg_id
                     self.id = msg_id
             
-            await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub))
+            await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded)
             
         elif etype == "sb_event":
             sb_data = event.get("data")
