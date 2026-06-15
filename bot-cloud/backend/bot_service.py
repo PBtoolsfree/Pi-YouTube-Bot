@@ -1361,11 +1361,9 @@ class BotService:
         )
         rank_info = self.viewers.get_rank(viewer_data.get("points", 0))
         
-        if is_forwarded:
-            return None
         
         # 2. Moderation Filters
-        if mod_cfg.get("enabled", True):
+        if mod_cfg.get("enabled", True) and not is_forwarded:
             if author not in self.mod_locks:
                 self.mod_locks[author] = asyncio.Lock()
                 # Cap mod_locks dict at 500 entries to prevent memory leak safely
@@ -1509,7 +1507,7 @@ class BotService:
         cmd_prefix = cmd_cfg.get("prefix", "!")
         
         is_command_run = False
-        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
+        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()) and not is_forwarded:
             remaining = message[len(cmd_prefix):].strip()
             parts = remaining.split(" ")
             cmd_name = parts[0].lower().strip()
@@ -2085,6 +2083,7 @@ class BotService:
             is_sponsor = event.get("is_sponsor", False)
             is_sub = event.get("is_sub", False)
             is_forwarded = event.get("is_forwarded", False)
+            force_ai = event.get("force_ai", False)
             
             class MockChat:
                 class Author:
@@ -2099,7 +2098,7 @@ class BotService:
                     self.msg_id = msg_id
                     self.id = msg_id
             
-            await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded)
+            await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded, force_ai=force_ai)
             
         elif etype == "sb_event":
             sb_data = event.get("data")

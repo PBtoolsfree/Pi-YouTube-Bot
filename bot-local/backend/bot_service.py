@@ -1404,7 +1404,8 @@ class BotService:
                     "channel_id": channel_id,
                     "is_sponsor": getattr(chat_obj.author, 'is_sponsor', False),
                     "is_sub": getattr(chat_obj.author, 'is_subscriber', False),
-                    "is_forwarded": True
+                    "is_forwarded": True,
+                    "force_ai": force_ai
                 }))
 
         # Secret Word Check (Dynamic Event)

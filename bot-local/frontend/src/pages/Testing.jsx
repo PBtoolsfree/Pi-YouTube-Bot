@@ -178,24 +178,23 @@ export default function TestingPage() {
                     </CardHeader>
                     <CardContent className="pt-4">
                         <form onSubmit={handleAiTest} className="space-y-4">
-                            <div className="space-y-2 opacity-50 pointer-events-none">
+                            <div className="space-y-2">
                                 <Label htmlFor="ai-prompt" className="text-xs font-medium text-zinc-400">Simulate Viewer Prompt</Label>
                                 <div className="flex gap-2">
                                     <Input
                                         id="ai-prompt"
-                                        placeholder="AI has been moved to the Cloud VPS..."
+                                        placeholder="Type something to ask AI..."
                                         value={aiPrompt}
                                         onChange={(e) => setAiPrompt(e.target.value)}
                                         className="bg-zinc-950 border-zinc-700 text-zinc-100 text-sm h-9"
-                                        disabled
                                     />
-                                    <Button type="submit" size="sm" disabled className="h-9 px-3">
-                                        <Send className="h-3.5 w-3.5" />
+                                    <Button type="submit" size="sm" disabled={loading || !aiPrompt.trim()} className="h-9 px-3">
+                                        {loading ? <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" /> : <Send className="h-3.5 w-3.5" />}
                                     </Button>
                                 </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
-                                ☁️ AI Testing is now handled directly on your Cloud Dashboard to reduce local Pi load.
+                                This will forward the test to your Cloud VPS AI Engine.
                             </p>
                         </form>
                     </CardContent>

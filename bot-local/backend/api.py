@@ -550,7 +550,8 @@ async def streamer_bot_chat(payload: Dict[str, Any]):
 async def manual_chat(payload: Dict[str, str]):
     prompt = payload.get("prompt")
     if not prompt: raise HTTPException(400, "Prompt required")
-    return await bot.handle_sb_chat("Tester", prompt, force_ai=True)
+    await bot.handle_sb_chat("Tester", prompt, force_ai=True)
+    return {"response": "Message forwarded to Cloud VPS. The AI response will be spoken via TTS and sent to chat automatically."}
 
 @app.get("/api/audio/status")
 async def get_audio_status():
