@@ -282,6 +282,17 @@ class AudioService:
                 }))
             return
 
+        if os.environ.get("RUN_MODE") == "cloud":
+            logger.info("Cloud mode: Forwarding TTS to Pi clients...")
+            if self.broadcast_func:
+                asyncio.create_task(self.broadcast_func({
+                    "type": "play_tts",
+                    "text": text,
+                    "channel": channel,
+                    "voice": voice
+                }))
+            return
+
         if channel not in self.queues:
             logger.warning("Unknown audio channel: %s — defaulting to public", channel)
             channel = "public"

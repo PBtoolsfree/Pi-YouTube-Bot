@@ -147,6 +147,13 @@ class CloudAlertClientService:
             if msg:
                 asyncio.create_task(self.bot._send_chat(msg))
 
+        elif etype == "play_tts":
+            text = event.get("text")
+            channel = event.get("channel", "public")
+            voice = event.get("voice")
+            if text and self.bot.audio:
+                asyncio.create_task(self.bot.audio.speak(text, channel=channel, voice=voice))
+
         elif etype == "subscriber_count_sync":
             count = event.get("count", 0)
             self.bot.set_subscriber_count(count, save=True)
