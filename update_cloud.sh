@@ -29,10 +29,34 @@ if [ -d "frontend" ]; then
     cd ..
 fi
 
-echo "Restarting service..."
+echo "Fixing service path for bot-cloud architecture..."
 if systemctl list-units --type=service | grep -q "pibot-cloud.service"; then
+    # Rewrite service to point to bot-cloud
+    CURRENT_USER=$(whoami)
+    PROJECT_DIR=$(pwd)
+    SERVICE_FILE="/etc/systemd/system/pibot-cloud.service"
+    
+    sudo bash -c "cat <<EOF > $SERVICE_FILE
+[Unit]
+Description=Pi Bot Cloud Service
+After=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$PROJECT_DIR/bot-cloud
+Environment=RUN_MODE=cloud
+ExecStart=/bin/bash $PROJECT_DIR/bot-cloud/scripts/start.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+    sudo systemctl daemon-reload
     sudo systemctl restart pibot-cloud.service
-    echo "Service restarted successfully."
+    echo "Service updated and restarted successfully."
 else
     echo "Service not found in systemd. You can start it manually: cd bot-cloud && ./scripts/start.sh"
 fi
