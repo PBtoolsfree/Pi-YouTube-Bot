@@ -2707,6 +2707,17 @@ def _restore_backup_zip(zip_bytes: bytes):
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with zf.open(member) as src, open(dest, "wb") as dst:
                     dst.write(src.read())
+                
+                # Cloud node safety check: Preserve is_cloud=True
+                if member == "config.json" and os.environ.get("RUN_MODE") == "cloud":
+                    try:
+                        with open(dest, "r") as f:
+                            cfg = json.load(f)
+                        cfg["is_cloud"] = True
+                        with open(dest, "w") as f:
+                            json.dump(cfg, f, indent=4)
+                    except BaseException as e:
+                        logger.error(f"Failed to enforce is_cloud on restore: {e}")
 
 @app.get("/api/backup/export")
 async def backup_export():

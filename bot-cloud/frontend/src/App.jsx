@@ -246,6 +246,7 @@ function App() {
         {activeTab === 'dashboard' && <Dashboard logs={logs} />}
         {activeTab === 'goals' && <GoalsPage backendStatus={backendStatus} />}
         {activeTab === 'orchestrator' && <Orchestrator config={config} onSave={handleSaveConfig} />}
+        {activeTab === 'backup' && <BackupPage />}
         {activeTab === 'moderation' && <ModerationPage config={config} onSave={handleSaveConfig} logs={logs} />}
         {activeTab === 'viewers' && <ViewersPage />}
         {activeTab === 'loyalty' && (config?.is_cloud ? <LoyaltyManagerPage /> : <LoyaltyPage />)}
