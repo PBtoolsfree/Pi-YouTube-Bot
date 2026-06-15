@@ -1434,7 +1434,6 @@ class BotService:
                     "is_sponsor": getattr(chat_obj.author, 'is_sponsor', False),
                     "is_sub": getattr(chat_obj.author, 'is_subscriber', False)
                 }))
-            return None
 
         # Secret Word Check (Dynamic Event)
         if getattr(self, "_secret_word_active", False) and self._secret_word and self._secret_word.lower() in message.lower():
