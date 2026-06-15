@@ -7,5 +7,5 @@
 # Change to the bot-local directory
 cd "$(dirname "$0")/../bot-local"
 
-# Execute the local start script
-exec ./scripts/start.sh
+# Execute the local start script explicitly using bash
+exec bash ./scripts/start.sh
