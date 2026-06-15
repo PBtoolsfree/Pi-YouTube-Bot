@@ -1262,21 +1262,31 @@ class BotService:
         # Unique ID for Deduplication
         msg_id = getattr(chat_obj, 'msg_id', None) or getattr(chat_obj, 'id', None)
         
-        # Secondary content-based deduplication to prevent Streamer.bot + pytchat double processing
-        ts_window = int(time.time()/5) if not force_ai else time.time()
-        content_hash = f"{author}:{message}:{ts_window}"
+        # Secondary content-based deduplication to prevent Streamer.bot + YouTube API double processing
+        content_hash = f"{author}:{message}"
+        now = time.time()
         
         if (msg_id and msg_id in self.message_dedup_cache) and not force_ai:
             logger.info(f"Duplicate Message Ignored (msg_id): {msg_id}")
             return None
             
-        if content_hash in self.message_dedup_cache and not force_ai:
+        if not hasattr(self, "_content_dedup_dict"):
+            self._content_dedup_dict = {}
+            
+        # Clean up cache if it gets too large
+        if len(self._content_dedup_dict) > 500:
+            cutoff = now - 30
+            self._content_dedup_dict = {k: v for k, v in self._content_dedup_dict.items() if v > cutoff}
+            
+        last_seen = self._content_dedup_dict.get(content_hash, 0)
+        if now - last_seen < 15 and not force_ai:
             logger.info(f"Duplicate Message Ignored (content): {content_hash}")
             return None
             
+        self._content_dedup_dict[content_hash] = now
+            
         if msg_id:
             self.message_dedup_cache.append(msg_id)
-        self.message_dedup_cache.append(content_hash)
 
         # GOALS LOGIC - REWARD WINDOW
         try:
