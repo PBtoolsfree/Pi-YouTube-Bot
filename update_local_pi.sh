@@ -31,6 +31,13 @@ fi
 
 echo "Restarting service..."
 if systemctl list-units --type=service | grep -q "pibot.service"; then
+    # Fix old service paths if migrating to split architecture
+    if grep -q "ExecStart=.*/pibot/scripts/start.sh" /etc/systemd/system/pibot.service 2>/dev/null; then
+        echo "Updating systemd service path to new bot-local architecture..."
+        sudo sed -i 's|/pibot/scripts/start.sh|/pibot/bot-local/scripts/start.sh|g' /etc/systemd/system/pibot.service
+        sudo sed -i 's|WorkingDirectory=.*/pibot$|WorkingDirectory='"$(pwd)"'|g' /etc/systemd/system/pibot.service
+        sudo systemctl daemon-reload
+    fi
     sudo systemctl restart pibot.service
     echo "Service restarted successfully."
 else
