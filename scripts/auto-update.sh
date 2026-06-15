@@ -15,7 +15,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="/tmp/pibot_auto_update.lock"
 LOG_FILE="$PROJECT_DIR/logs/auto-update.log"
 MAX_LOG_LINES=1000
-BRANCH="main"
+BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
 STALE_LOCK_SECS=3600  # 1 hour
 
 # ── Log rotation ───────────────────────────────────────────────────────────────

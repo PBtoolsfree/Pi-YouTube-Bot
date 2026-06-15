@@ -8,7 +8,7 @@ set -uo pipefail
 INSTALL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$INSTALL_DIR/.venv"
 LOG_FILE="$INSTALL_DIR/logs/start.log"
-BRANCH="main"
+BRANCH=$(git -C "$INSTALL_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
 
 mkdir -p "$INSTALL_DIR/logs"
 

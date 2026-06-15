@@ -28,7 +28,8 @@ fi
 
 # Pull latest code
 echo "📥 Pulling latest code from GitHub..."
-git pull origin main
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+git pull origin "$BRANCH"
 
 # Update python environment
 echo "🐍 Updating dependencies..."

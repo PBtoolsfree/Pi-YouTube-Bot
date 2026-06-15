@@ -3,7 +3,7 @@
 ## Manual Update (Recommended)
 
 ```bash
-bash ~/pi-youtube-bot/scripts/update.sh
+bash ~/pibot/scripts/update.sh
 ```
 
 The update script automatically:
@@ -22,7 +22,7 @@ The update script automatically:
 Run even if already up to date (useful after config changes):
 
 ```bash
-bash ~/pi-youtube-bot/scripts/update.sh --force
+bash ~/pibot/scripts/update.sh --force
 ```
 
 ---
@@ -34,7 +34,7 @@ Set up once:
 ```bash
 crontab -e
 # Add (runs every day at 3:00 AM):
-0 3 * * * /bin/bash $HOME/pi-youtube-bot/scripts/auto-update.sh >> $HOME/pi-youtube-bot/logs/auto-update.log 2>&1
+0 3 * * * /bin/bash $HOME/pibot/scripts/auto-update.sh >> $HOME/pibot/logs/auto-update.log 2>&1
 ```
 
 The auto-update script:
@@ -48,7 +48,7 @@ The auto-update script:
 ## Update via Docker
 
 ```bash
-cd ~/pi-youtube-bot
+cd ~/pibot
 docker compose pull
 docker compose up -d --build
 ```
@@ -59,16 +59,16 @@ docker compose up -d --build
 
 ```bash
 # View last update log
-tail -50 ~/pi-youtube-bot/logs/update.log
+tail -50 ~/pibot/logs/update.log
 
 # View auto-update log
-tail -50 ~/pi-youtube-bot/logs/auto-update.log
+tail -50 ~/pibot/logs/auto-update.log
 
 # Current version
-cat ~/pi-youtube-bot/VERSION
+cat ~/pibot/VERSION
 
 # Git log (recent changes)
-git -C ~/pi-youtube-bot log --oneline -10
+git -C ~/pibot log --oneline -10
 ```
 
 ---
@@ -78,7 +78,7 @@ git -C ~/pi-youtube-bot log --oneline -10
 If an update breaks something and auto-rollback didn't work:
 
 ```bash
-cd ~/pi-youtube-bot
+cd ~/pibot
 
 # Find previous good commit
 git log --oneline -10
@@ -100,8 +100,8 @@ sudo systemctl restart pibot
 ```bash
 BACKUP="pibot-backup-$(date +%Y%m%d).tar.gz"
 tar -czf ~/$BACKUP \
-    ~/pi-youtube-bot/config.json \
-    ~/pi-youtube-bot/.env \
-    ~/pi-youtube-bot/data/
+    ~/pibot/config.json \
+    ~/pibot/.env \
+    ~/pibot/data/
 echo "Backup saved: ~/$BACKUP"
 ```

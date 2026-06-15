@@ -47,7 +47,7 @@ If the server detects requests arriving through a public Cloudflare Tunnel or pr
 Run the automated cloud installer script on your VPS:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/main/scripts/deploy_cloud.sh | bash
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/master/scripts/deploy_cloud.sh | bash
 ```
 
 ### What the Installer Does Automatically:
@@ -177,7 +177,7 @@ bash scripts/update_cloud.sh
 ```
 
 ### What this update script does:
-1. Pulls the latest code updates from the GitHub repository (`main` branch).
+1. Pulls the latest code updates from the GitHub repository (`master` branch).
 2. Updates any Python dependencies in `.venv` if `requirements.txt` was changed.
 3. Rebuilds the frontend Tip Page inside `frontend/` (`npm install` & `npm run build`).
 4. Restarts only the `pibot-cloud.service` to apply updates immediately.

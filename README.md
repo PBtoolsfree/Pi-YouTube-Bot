@@ -95,12 +95,12 @@ It handles AI chat responses, live donation alerts, TTS audio, Telegram notifica
 ### Quick Install (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pi-youtube-bot/main/scripts/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/master/scripts/setup.sh | bash
 ```
 
 ### What it does (automatically):
 1. Installs Python 3, Node.js v20, npm, FFmpeg, Git
-2. Clones the repository to `~/pi-youtube-bot`
+2. Clones the repository to `~/pibot`
 3. Creates Python virtual environment (`.venv`)
 4. Installs all Python & npm dependencies
 5. Builds the React frontend (`npm run build`)
@@ -111,7 +111,7 @@ curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pi-youtube-bot/main/scri
 ### After Install:
 ```bash
 # Edit your configuration
-nano ~/pi-youtube-bot/config.json
+nano ~/pibot/config.json
 
 # Restart to apply
 sudo systemctl restart pibot
@@ -129,7 +129,7 @@ For running only the public Tip Page and webhook payment handlers in the cloud (
 ### Quick Install (Recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/main/scripts/deploy_cloud.sh | bash
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/master/scripts/deploy_cloud.sh | bash
 ```
 
 ### What it does (automatically):
@@ -166,8 +166,8 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # 3. Clone repository
-git clone https://github.com/PBtoolsfree/pi-youtube-bot.git ~/pi-youtube-bot
-cd ~/pi-youtube-bot
+git clone https://github.com/PBtoolsfree/pibot.git ~/pibot
+cd ~/pibot
 
 # 4. Configure
 cp config.example.json config.json
@@ -442,7 +442,7 @@ sudo systemctl restart pibot    # Restart
 sudo systemctl status pibot     # Status
 
 sudo journalctl -fu pibot       # Live logs
-tail -f ~/pi-youtube-bot/logs/pibot.log  # File logs
+tail -f ~/pibot/logs/pibot.log  # File logs
 ```
 
 ---
@@ -451,10 +451,10 @@ tail -f ~/pi-youtube-bot/logs/pibot.log  # File logs
 
 ```bash
 # Standard update (with rollback on failure)
-bash ~/pi-youtube-bot/scripts/update.sh
+bash ~/pibot/scripts/update.sh
 
 # Force reinstall even if already up to date
-bash ~/pi-youtube-bot/scripts/update.sh --force
+bash ~/pibot/scripts/update.sh --force
 ```
 
 The update script:
@@ -471,7 +471,7 @@ The update script:
 ```bash
 crontab -e
 # Add this line (runs every day at 3 AM):
-0 3 * * * /bin/bash $HOME/pi-youtube-bot/scripts/auto-update.sh >> $HOME/pi-youtube-bot/logs/auto-update.log 2>&1
+0 3 * * * /bin/bash $HOME/pibot/scripts/auto-update.sh >> $HOME/pibot/logs/auto-update.log 2>&1
 ```
 
 ---
@@ -482,18 +482,18 @@ crontab -e
 # Backup config and data only (what matters)
 BACKUP="pibot-backup-$(date +%Y%m%d).tar.gz"
 tar -czf ~/$BACKUP \
-    ~/pi-youtube-bot/config.json \
-    ~/pi-youtube-bot/.env \
-    ~/pi-youtube-bot/data/ \
-    ~/pi-youtube-bot/logs/
+    ~/pibot/config.json \
+    ~/pibot/.env \
+    ~/pibot/data/ \
+    ~/pibot/logs/
 echo "Backup: $BACKUP"
 
 # Full backup
 tar -czf ~/pibot-full-$(date +%Y%m%d).tar.gz \
-    --exclude="~/pi-youtube-bot/.venv" \
-    --exclude="~/pi-youtube-bot/node_modules" \
-    --exclude="~/pi-youtube-bot/frontend/dist" \
-    ~/pi-youtube-bot/
+    --exclude="~/pibot/.venv" \
+    --exclude="~/pibot/node_modules" \
+    --exclude="~/pibot/frontend/dist" \
+    ~/pibot/
 ```
 
 ---
@@ -558,7 +558,7 @@ vcgencmd measure_temp        # CPU temperature
 vcgencmd get_throttled       # Throttling status
 
 # Check log file size
-du -sh ~/pi-youtube-bot/logs/
+du -sh ~/pibot/logs/
 ```
 
 > Keep CPU temp < 70°C for sustained performance. Consider active cooling.
@@ -568,7 +568,7 @@ du -sh ~/pi-youtube-bot/logs/
 ## 🗂️ Project Structure
 
 ```
-pi-youtube-bot/
+pibot/
 ├── backend/               # FastAPI application
 │   ├── api.py             # All HTTP/WebSocket routes
 │   ├── bot_service.py     # Core orchestration

@@ -14,8 +14,8 @@ Look for Python import errors or config issues.
 ### Dashboard (port 8000) is blank / shows "cannot connect"
 
 1. Check service is running: `sudo systemctl status pibot`
-2. Check frontend was built: `ls ~/pi-youtube-bot/frontend/dist/`
-3. If dist is missing: `cd ~/pi-youtube-bot/frontend && npm run build`
+2. Check frontend was built: `ls ~/pibot/frontend/dist/`
+3. If dist is missing: `cd ~/pibot/frontend && npm run build`
 4. Restart: `sudo systemctl restart pibot`
 
 ### Config changes aren't taking effect
@@ -34,7 +34,7 @@ sudo systemctl restart pibot
 1. Confirm `audio.gaming_pc_ip` is set to your PC's local IP
 2. Check Windows firewall: allow UDP inbound on port 1234
 3. Open OBS Media Source and set input to `udp://0.0.0.0:1234`
-4. Check debug log: `tail -f ~/pi-youtube-bot/logs/audio_debug.log`
+4. Check debug log: `tail -f ~/pibot/logs/audio_debug.log`
 
 ### `ffmpeg: command not found`
 
@@ -93,14 +93,14 @@ sudo apt-get install -y nodejs
 
 The update script automatically rolls back. Check:
 ```bash
-cat ~/pi-youtube-bot/logs/update.log | tail -30
+cat ~/pibot/logs/update.log | tail -30
 sudo systemctl restart pibot
 ```
 
 ### Permission denied on setup.sh
 
 ```bash
-chmod +x setup.sh && bash setup.sh
+chmod +x scripts/setup.sh && bash scripts/setup.sh
 ```
 
 ---
@@ -114,9 +114,9 @@ chmod +x setup.sh && bash setup.sh
 
 ### Donation not triggering alert
 
-1. Enable debug: check `/api/debug/email` for email scanning
-2. Test directly: `POST /api/donate` with amount > min_amount
-3. Check `paytm_alerts.enabled: true` in config
+ 1. Enable debug: check `/api/debug/email` for email scanning
+ 2. Test directly: `POST /api/donate` with amount > min_amount
+ 3. Check `paytm_alerts.enabled: true` in config
 
 ---
 
@@ -140,8 +140,8 @@ curl -X POST http://localhost:8000/api/chat \
   -d '{"prompt":"Hello!"}'
 
 # Update
-bash ~/pi-youtube-bot/update.sh
+bash ~/pibot/scripts/update.sh
 
 # View logs
-tail -f ~/pi-youtube-bot/logs/pibot.log
+tail -f ~/pibot/logs/pibot.log
 ```

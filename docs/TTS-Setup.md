@@ -98,5 +98,5 @@ Or use the dashboard's "Test Audio" button.
 
 Check the audio debug log:
 ```bash
-tail -f ~/pi-youtube-bot/logs/audio_debug.log
+tail -f ~/pibot/logs/audio_debug.log
 ```

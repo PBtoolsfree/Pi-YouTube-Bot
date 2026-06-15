@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import time
+import argparse
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,12 +22,16 @@ def print_warning():
     print("="*60)
 
 def main():
-    print_warning()
-    
-    confirm = input("\nAre you absolutely sure you want to pull from GitHub? (yes/no): ").strip().lower()
-    if confirm not in ['yes', 'y']:
-        print("Update cancelled. No changes were made.")
-        sys.exit(0)
+    parser = argparse.ArgumentParser(description="Manually update Pi Bot codebase from GitHub.")
+    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt (non-interactive mode).")
+    args = parser.parse_args()
+
+    if not args.yes:
+        print_warning()
+        confirm = input("\nAre you absolutely sure you want to pull from GitHub? (yes/no): ").strip().lower()
+        if confirm not in ['yes', 'y']:
+            print("Update cancelled. No changes were made.")
+            sys.exit(0)
         
     print("\n[Step 1/4] Creating mandatory full backup...")
     backup_script = os.path.join(PROJECT_ROOT, "scripts", "backup_manager.py")
@@ -42,8 +47,13 @@ def main():
     
     print("\n[Step 2/4] Pulling latest code from GitHub...")
     try:
+        # Get current active branch dynamically
+        branch_result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+        branch = branch_result.stdout.strip() or "master"
+        print(f"Active branch detected: {branch}")
+        
         # ONLY run git pull. No resets, no cleans.
-        subprocess.run(["git", "pull", "origin", "main"], cwd=PROJECT_ROOT, check=True)
+        subprocess.run(["git", "pull", "origin", branch], cwd=PROJECT_ROOT, check=True)
     except subprocess.CalledProcessError as e:
         print(f"\n❌ ERROR: Git pull failed! Please check for merge conflicts. Error: {e}")
         print("Your data is still safe in the 'backups/' directory.")

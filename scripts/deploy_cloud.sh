@@ -26,7 +26,8 @@ else
         PROJECT_DIR="$HOME/pibot"
         echo "🔄 Repository already exists. Pulling latest updates..."
         cd "$PROJECT_DIR"
-        git pull origin main || git pull || true
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+        git pull origin "$BRANCH" || git pull || true
     else
         echo "📥 Cloning repository to $HOME/pibot..."
         git clone https://github.com/PBtoolsfree/pibot.git "$HOME/pibot"

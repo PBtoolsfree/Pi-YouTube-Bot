@@ -14,12 +14,12 @@
 ## Quick Install (One Command)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pi-youtube-bot/main/scripts/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/PBtoolsfree/pibot/master/scripts/setup.sh | bash
 ```
 
 **The installer handles everything automatically:**
 1. Installs system packages (Python 3.10+, Node.js 20, npm, FFmpeg, Git)
-2. Clones repo to `~/pi-youtube-bot`
+2. Clones repo to `~/pibot`
 3. Creates Python virtual environment (`.venv`)
 4. Installs all Python & npm dependencies
 5. Builds the React frontend
@@ -46,8 +46,8 @@ node --version   # Must be v20+
 
 ### 3. Clone repository
 ```bash
-git clone https://github.com/PBtoolsfree/pi-youtube-bot.git ~/pi-youtube-bot
-cd ~/pi-youtube-bot
+git clone https://github.com/PBtoolsfree/pibot.git ~/pibot
+cd ~/pibot
 ```
 
 ### 4. Configure
@@ -104,7 +104,7 @@ sudo journalctl -fu pibot         # Live logs
 ```bash
 crontab -e
 # Add (runs daily 3 AM):
-0 3 * * * /bin/bash $HOME/pi-youtube-bot/scripts/auto-update.sh >> $HOME/pi-youtube-bot/logs/auto-update.log 2>&1
+0 3 * * * /bin/bash $HOME/pibot/scripts/auto-update.sh >> $HOME/pibot/logs/auto-update.log 2>&1
 ```
 
 ---

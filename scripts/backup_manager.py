@@ -83,7 +83,12 @@ def do_push_code():
     # 4. Commit and push
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     run_cmd(f'git commit -m "Auto-backup from Pi: {ts}"')
-    run_cmd("git push origin main")
+    
+    # Get current active branch dynamically
+    branch_result = subprocess.run("git rev-parse --abbrev-ref HEAD", shell=True, cwd=PROJECT_ROOT, capture_output=True, text=True)
+    branch = branch_result.stdout.strip() or "master"
+    
+    run_cmd(f"git push origin {branch}")
     print("\n✅ Source code pushed to GitHub safely.")
 
 def main():
