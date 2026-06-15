@@ -32,7 +32,8 @@ if [[ "$OSTYPE" != "linux-gnu"* ]]; then
 fi
 
 # Detect directory containing this script safely (handles curl | bash piping and set -u)
-if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+set +u
+if [[ -n "${BASH_SOURCE[0]}" ]]; then
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
 else
@@ -42,6 +43,7 @@ else
         PROJECT_ROOT="$HOME/pibot"
     fi
 fi
+set -u
 
 # Prompt for absolute confirmation
 read -r -p "Are you absolutely sure you want to proceed with full uninstallation? [y/N]: " CONFIRM_ALL
