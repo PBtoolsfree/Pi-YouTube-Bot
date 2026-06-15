@@ -44,9 +44,9 @@ After=network.target
 [Service]
 Type=simple
 User=$CURRENT_USER
-WorkingDirectory=$PROJECT_DIR/bot-cloud
+WorkingDirectory=$PROJECT_DIR
 Environment=RUN_MODE=cloud
-ExecStart=/bin/bash $PROJECT_DIR/bot-cloud/scripts/start.sh
+ExecStart=/bin/bash $PROJECT_DIR/scripts/start.sh
 Restart=always
 RestartSec=5
 
