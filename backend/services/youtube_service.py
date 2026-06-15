@@ -35,6 +35,13 @@ class YouTubeService:
             logger.error(f"Failed to load YouTube credentials: {e}")
             return None
 
+    def _build_service_sync(self, creds=None, api_key=None):
+        if creds:
+            return build('youtube', 'v3', credentials=creds)
+        if api_key:
+            return build('youtube', 'v3', developerKey=api_key)
+        return None
+
     async def add_moderator(self, channel_id_to_mod):
         """Adds a moderator to the authenticated user's YouTube channel."""
         config = self.config_loader()
@@ -188,7 +195,7 @@ class YouTubeService:
         service = None
         if creds:
              try:
-                 service = build('youtube', 'v3', credentials=creds)
+                 service = await asyncio.to_thread(self._build_service_sync, creds=creds)
              except Exception as e:
                  logger.error(f"Failed to build YouTube service with OAuth: {e}")
         
@@ -196,7 +203,7 @@ class YouTubeService:
             api_key = config.get("youtube", {}).get("api_key")
             if api_key:
                 try:
-                    service = build('youtube', 'v3', developerKey=api_key)
+                    service = await asyncio.to_thread(self._build_service_sync, api_key=api_key)
                 except Exception as e:
                     logger.error(f"Failed to build YouTube service with API key: {e}")
                     return None
@@ -329,7 +336,7 @@ class YouTubeService:
         service = None
         if creds:
              try:
-                 service = build('youtube', 'v3', credentials=creds)
+                 service = await asyncio.to_thread(self._build_service_sync, creds=creds)
              except Exception as e:
                  logger.error(f"Failed to build YouTube service with OAuth: {e}")
         
@@ -337,7 +344,7 @@ class YouTubeService:
             api_key = config.get("youtube", {}).get("api_key")
             if api_key:
                 try:
-                    service = build('youtube', 'v3', developerKey=api_key)
+                    service = await asyncio.to_thread(self._build_service_sync, api_key=api_key)
                 except Exception as e:
                     logger.error(f"Failed to build YouTube service with API key: {e}")
                     return "Database Error: Could not authenticate with YouTube API."
@@ -382,14 +389,17 @@ class YouTubeService:
         service = None
         if creds:
              try:
-                 service = build('youtube', 'v3', credentials=creds)
+                 service = await asyncio.to_thread(self._build_service_sync, creds=creds)
              except Exception:
                  pass
         
         if not service:
              api_key = config.get("youtube", {}).get("api_key")
              if api_key:
-                 service = build('youtube', 'v3', developerKey=api_key)
+                 try:
+                     service = await asyncio.to_thread(self._build_service_sync, api_key=api_key)
+                 except Exception:
+                     pass
                  
         if not service:
              return None
@@ -420,7 +430,7 @@ class YouTubeService:
             return "Not authenticated with YouTube. Please log in via the dashboard."
 
         try:
-            service = build('youtube', 'v3', credentials=creds)
+            service = await asyncio.to_thread(self._build_service_sync, creds=creds)
             
             # Fetch the last broadcast
             request = service.liveBroadcasts().list(
@@ -491,7 +501,7 @@ class YouTubeService:
             return None
         
         try:
-            service = build('youtube', 'v3', credentials=creds)
+            service = await asyncio.to_thread(self._build_service_sync, creds=creds)
             request = service.liveBroadcasts().list(
                 part="snippet",
                 broadcastStatus="active",

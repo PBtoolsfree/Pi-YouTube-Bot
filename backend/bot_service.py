@@ -11,9 +11,12 @@ import time
 import httpx
 from typing import Any, Dict, List, Optional, Callable
 
+import sys
+
 try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    if sys.version_info < (3, 13):
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 except ImportError:
     pass
 
@@ -366,10 +369,18 @@ class BotService:
                     logger.info(f"Connecting to YouTube Chat: {video_id}")
                     if self.broadcast_func:
                         await self._log_ui("SYSTEM", f"Connecting to Video ID: {video_id} (Direct)")
-                    self.chat = pytchat.create(video_id=video_id)
+                    
+                    def _create_chat():
+                        import pytchat
+                        return pytchat.create(video_id=video_id, interruptable=False)
+                    
+                    self.chat = await asyncio.to_thread(_create_chat)
 
-                if self.chat.is_alive():
-                    for c in self.chat.get().sync_items():
+                if self.chat and self.chat.is_alive():
+                    def _get_items():
+                        return self.chat.get().sync_items()
+                    items = await asyncio.to_thread(_get_items)
+                    for c in items:
                         try:
                             await self._handle_message(c)
                         except Exception as msg_err:
@@ -1509,8 +1520,9 @@ class BotService:
         # Gate by Streamer.bot connection status (unless forced for testing/manual chat or in cloud mode)
         sb_enabled = config.get("streamer_bot", {}).get("enabled", False)
         is_cloud = os.environ.get("RUN_MODE") == "cloud"
-        if sb_enabled and not self.is_sb_connected and not force_ai and not is_cloud:
-            should_respond = False
+        # We now have a YouTube API fallback, so we don't need to suppress responses if SB is disconnected!
+        # if sb_enabled and not self.is_sb_connected and not force_ai and not is_cloud:
+        #     should_respond = False
 
         # Command Parsing & Routing
         cmd_cfg = config.get("commands", {})
@@ -2913,7 +2925,7 @@ class BotService:
                 # Auto-refresh if expired
                 if creds.expired and creds.refresh_token:
                     logger.info("OAuth token expired, refreshing...")
-                    creds.refresh(AuthRequest())
+                    await asyncio.to_thread(creds.refresh, AuthRequest())
                     # Save refreshed token back to config
                     config["youtube"]["oauth_credentials"]["token"] = creds.token
                     if creds.expiry:

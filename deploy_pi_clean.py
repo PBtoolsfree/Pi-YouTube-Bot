@@ -17,6 +17,7 @@ def clean_and_deploy_pi():
         ('backend/api.py', 'backend/api.py'),
         ('backend/services/cloud_alert_client.py', 'backend/services/cloud_alert_client.py'),
         ('backend/services/viewer_service.py', 'backend/services/viewer_service.py'),
+        ('backend/services/youtube_service.py', 'backend/services/youtube_service.py'),
         ('backend/services/moderation_service.py', 'backend/services/moderation_service.py'),
         ('frontend/src/pages/Moderation.jsx', 'frontend/src/pages/Moderation.jsx'),
         ('frontend/src/App.jsx', 'frontend/src/App.jsx'),

@@ -1938,7 +1938,7 @@ async def create_sheets_template(payload: Optional[Dict[str, str]] = None):
         # Auto-refresh if needed
         if not creds.token or (hasattr(creds, 'expired') and creds.expired):
             from google.auth.transport.requests import Request as AuthRequest
-            creds.refresh(AuthRequest())
+            await asyncio.to_thread(creds.refresh, AuthRequest())
 
         sheet_name = (payload or {}).get("name", "Pi Bot Transactions")
 
