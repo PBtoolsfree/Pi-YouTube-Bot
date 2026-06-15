@@ -1,3 +1,0 @@
-echo 1234 | sudo -S systemctl restart pibot
-echo 1234 | sudo -S systemctl restart bot_service
-echo 1234 | sudo -S systemctl restart pi-youtube-bot

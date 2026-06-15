@@ -44,7 +44,7 @@ fi
 # ── 2. Key Python Imports ──────────────────────────────────────────────────────
 section "Python Dependencies"
 
-MODULES=("fastapi" "uvicorn" "edge_tts" "httpx" "psutil" "pytchat" "dotenv")
+MODULES=("fastapi" "uvicorn" "edge_tts" "httpx" "psutil" "dotenv")
 for mod in "${MODULES[@]}"; do
     if "$VENV/bin/python" -c "import $mod" 2>/dev/null; then
         pass "import $mod"

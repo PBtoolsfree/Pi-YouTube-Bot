@@ -97,14 +97,14 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="local_pi_connection" icon={<Server />} label="Local Pi Connection" active={activeTab} onClick={setActiveTab} dot={navDot('local_pi_connection')} dotColor={dotColor} />
                                 <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
                                 <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
+                                <NavItem id="agent" icon={<Bot />} label="🤖 Agent" active={activeTab} onClick={setActiveTab} dot={navDot('agent')} dotColor={dotColor} />
+                                <NavItem id="personalities" icon={<Sparkles />} label="Personalities" active={activeTab} onClick={setActiveTab} dot={navDot('personalities')} dotColor={dotColor} />
+                                <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
                             </>
                         ) : (
                             <>
                                 <NavItem id="dashboard" icon={<Activity />} label="Dashboard" active={activeTab} onClick={setActiveTab} dot={navDot('dashboard')} dotColor={dotColor} />
                                 <NavItem id="goals" icon={<Target />} label="Goals" active={activeTab} onClick={setActiveTab} dot={navDot('goals')} dotColor={dotColor} />
-                                <NavItem id="agent" icon={<Bot />} label="🤖 Agent" active={activeTab} onClick={setActiveTab} dot={navDot('agent')} dotColor={dotColor} />
-                                <NavItem id="personalities" icon={<Sparkles />} label="Personalities" active={activeTab} onClick={setActiveTab} dot={navDot('personalities')} dotColor={dotColor} />
-                                <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
                                 <NavItem id="moderation" icon={<Shield />} label="Moderation" active={activeTab} onClick={setActiveTab} dot={navDot('moderation')} dotColor={dotColor} />
                                 <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
                                 <NavItem id="viewers" icon={<Users />} label="Audience" active={activeTab} onClick={setActiveTab} dot={navDot('viewers')} dotColor={dotColor} />
