@@ -4,7 +4,7 @@
 #  Cleanly removes all services, logs, configuration, cron jobs, and 
 #  optionally system packages (Node.js, FFmpeg) and the project directories.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 # Text styling
 RED='\033[0;31m'
@@ -31,8 +31,7 @@ if [[ "$OSTYPE" != "linux-gnu"* ]]; then
     error "This script is only compatible with Linux/Raspberry Pi OS."
 fi
 
-# Detect directory containing this script safely (handles curl | bash piping and set -u)
-set +u
+# Detect directory containing this script safely (handles curl | bash piping)
 if [[ -n "${BASH_SOURCE[0]}" ]]; then
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
@@ -43,7 +42,6 @@ else
         PROJECT_ROOT="$HOME/pibot"
     fi
 fi
-set -u
 
 # Prompt for absolute confirmation
 read -r -p "Are you absolutely sure you want to proceed with full uninstallation? [y/N]: " CONFIRM_ALL
