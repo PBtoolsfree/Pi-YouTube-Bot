@@ -27,7 +27,7 @@ edge-tts>=7.0.0
 gTTS>=2.4.0
 
 # --- AI Providers ---
-openai>=1.0.0
+openai>=1.0.0,<1.56.0
 
 # --- Google / YouTube API ---
 google-auth>=2.20.0
