@@ -1306,18 +1306,7 @@ async def test_audio(request: Request):
 
 @app.post("/api/providers/test/{provider_id}")
 async def test_provider(provider_id: str, payload: Optional[Dict[str, Any]] = None):
-    # 1. Get Provider Config (from body or load from saved config)
-    if payload:
-        provider = payload
-    else:
-        config = bot.load_config()
-        provider = next((p for p in config["ai_topology"]["providers"] if p["id"] == provider_id), None)
-    
-    if not provider:
-        raise HTTPException(404, "Provider configuration not found. Please save first or send configuration in body.")
-    
-    # 2. Call AI Engine test
-    return await ai_engine.test_connection(provider)
+    return JSONResponse({"status": "error", "message": "AI services have been offloaded to the Cloud Node. Provider testing is not available here."}, status_code=501)
 
 
 

@@ -316,8 +316,6 @@ class BotService:
         self.dynamic_engagement_task = self._spawn_managed_loop("dynamic_engagement", self._dynamic_engagement_loop)
         self._spawn_managed_loop("stream_context", self._stream_context_loop)
 
-        # Start Memory Cleanup Loop (YouTube + Brain)
-        self._spawn_managed_loop("memory_cleanup", self._memory_cleanup_loop)
 
         # Start YouTube Stats Loop (Subscriber Count auto-update)
         self._spawn_managed_loop("youtube_stats", self._youtube_stats_loop)
