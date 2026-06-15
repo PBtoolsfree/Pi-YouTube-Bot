@@ -1,0 +1,147 @@
+name: Pi YouTube Bot — CI
+
+on:
+  push:
+    branches: [ main, security-production-update, rebuild-production-v3 ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ── Backend Tests ──────────────────────────────────────────────────────────
+  backend:
+    name: Backend — Python 3.11
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify key imports
+        run: |
+          python -c "import fastapi; print('fastapi:', fastapi.__version__)"
+          python -c "import uvicorn; print('uvicorn OK')"
+          python -c "import edge_tts; print('edge_tts OK')"
+          python -c "import httpx; print('httpx OK')"
+          python -c "import psutil; print('psutil OK')"
+
+      - name: Validate config example JSON
+        run: |
+          python -c "import json; json.load(open('config.example.json')); print('config.example.json: valid JSON')"
+
+      - name: Check no hardcoded secrets in Python files
+        run: |
+          # Fail if any real-looking key patterns are found in code (not examples/docs)
+          if grep -rn 'AIza[A-Za-z0-9_-]\{30,\}' backend/ --include='*.py'; then
+            echo "FAIL: Possible hardcoded Google API key found"
+            exit 1
+          fi
+          if grep -rn 'sk-[A-Za-z0-9]\{20,\}' backend/ --include='*.py'; then
+            echo "FAIL: Possible hardcoded OpenAI key found"
+            exit 1
+          fi
+          echo "Secret scan: CLEAN"
+
+      - name: Verify no raw open('config.json') in backend
+        run: |
+          COUNT=$(grep -rn 'open("config\.json"' backend/ --include='*.py' | wc -l)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "FAIL: Found $COUNT raw open('config.json') calls:"
+            grep -rn 'open("config\.json"' backend/ --include='*.py'
+            exit 1
+          fi
+          echo "Config access: CLEAN (all via ConfigManager)"
+
+      - name: Check VERSION file exists
+        run: |
+          test -f VERSION && echo "VERSION: $(cat VERSION)" || (echo "FAIL: VERSION file missing"; exit 1)
+
+  # ── Frontend Build ─────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend — Node 20
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify dist output
+        run: |
+          test -f frontend/dist/index.html && echo "Build: frontend/dist/index.html OK" \
+            || (echo "FAIL: frontend/dist/index.html missing"; exit 1)
+          COUNT=$(find frontend/dist -type f | wc -l)
+          echo "Build: $COUNT files in frontend/dist"
+
+  # ── Security Audit ─────────────────────────────────────────────────────────
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure .env is gitignored
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "FAIL: .env is tracked in git!"
+            exit 1
+          fi
+          echo "OK: .env is not tracked"
+
+      - name: Ensure config.json is gitignored
+        run: |
+          if git ls-files --error-unmatch config.json 2>/dev/null; then
+            echo "FAIL: config.json is tracked in git!"
+            exit 1
+          fi
+          echo "OK: config.json is not tracked"
+
+      - name: Ensure client_secret.json is gitignored
+        run: |
+          if git ls-files --error-unmatch client_secret.json 2>/dev/null; then
+            echo "FAIL: client_secret.json is tracked in git!"
+            exit 1
+          fi
+          echo "OK: client_secret.json is not tracked"
+
+      - name: Check required files exist
+        run: |
+          for f in README.md CHANGELOG.md VERSION .env.example config.example.json Dockerfile docker-compose.yml; do
+            test -f "$f" && echo "OK: $f" || (echo "FAIL: $f missing"; exit 1)
+          done
+
+      - name: Check scripts/ are executable-ready
+        run: |
+          for f in scripts/setup.sh scripts/update.sh scripts/uninstall.sh scripts/auto-update.sh scripts/start.sh; do
+            test -f "$f" && echo "OK: $f" || echo "WARN: $f missing"
+          done

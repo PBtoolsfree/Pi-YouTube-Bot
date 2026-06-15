@@ -1,0 +1,100 @@
+# ── Python ────────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# ── Node ──────────────────────────────────────────────────
+node_modules/
+
+
+# ── Secrets & Config (Never commit these) ─────────────────
+config.json
+pi_config.json
+.env
+# .env.example is intentionally tracked
+client_secret.json
+token.json
+*.credentials.json
+
+# ── Data & State (NEVER overwrite on Pi) ──────────────────
+viewers.json
+viewers.json.bak
+viewers.db
+viewers.db.*
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+subscriber_count.json
+data/
+session_report.json
+backups/
+recovered_data/
+
+# ── Logs ──────────────────────────────────────────────────
+logs/
+*.log
+audio_debug.log
+update.log
+ssh_out.txt
+logs.txt
+pi_logs.txt
+pi_crash_logs.txt
+pi_build_error.txt
+plink_out.txt
+gitlog.txt
+
+# ── Temp & Debug Files ────────────────────────────────────
+.env.bak
+tmp_fix_avatar.py
+upload_fix.py
+upload_fix_sftp.py
+old_bot_service.py
+
+# ── Media / Uploads ───────────────────────────────────────
+uploaded_media/
+*.mp3
+*.mp4
+!frontend/public/assets/*.mp4
+!frontend/public/assets/*.mp3
+!frontend/public/assets/*.png
+!frontend/dist/assets/*.mp4
+!frontend/dist/assets/*.mp3
+!frontend/dist/assets/*.png
+
+# ── Binaries ──────────────────────────────────────────────
+ffmpeg
+ffmpeg.exe
+ffplay.exe
+cloudflared
+cloudflared.log
+*.exe
+
+# ── IDE & OS ──────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Certificates ─────────────────────────────────────────
+certs/*.pem
+certs/*.crt
+certs/*.key
+
+# -- Google Sheets Service Account --------
+sheets_client_secret.json
+*.service_account.json
+!frontend/dist/
+!frontend/dist/
+frontend/dist
+*.zip

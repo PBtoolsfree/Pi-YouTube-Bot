@@ -1,0 +1,263 @@
+{
+    "_version": "3.0.0",
+    "_note": "Copy this file to config.json. Never commit config.json with real API keys.",
+    "youtube": {
+        "video_id": "",
+        "monitor_interval": 1
+    },
+    "streamer_bot": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 8080,
+        "endpoint": "/"
+    },
+    "server": {
+        "port": 8000,
+        "host": "0.0.0.0",
+        "force_localhost_redirect": false
+    },
+    "security": {
+        "webhook_secret": "",
+        "cors_origins": [
+            "*"
+        ],
+        "tunnel_domains": [
+            "trycloudflare.com",
+            "pbherotip"
+        ],
+        "allowed_public_paths": [
+            "/tip",
+            "/tip/",
+            "/api/donate",
+            "/api/webhook/*",
+            "/api/config",
+            "/assets",
+            "/favicon.ico",
+            "/manifest.json"
+        ],
+        "rate_limit_per_minute": 60
+    },
+    "ai_topology": {
+        "strategy": "hierarchical",
+        "system_prompt": "You are the Lead Assistant for Samrat's stream. Your tone is 'Bade Bhai' (Big Brother)\u2014respectful, calm, and knowledgeable. Answer questions about ScarFall 2.0 or the stream schedule in polite Hinglish. Use 'Ji' or 'Bhai' to address viewers. Keep it helpful and concise.",
+        "providers": [
+            {
+                "id": "ollama_local",
+                "name": "Local Ollama",
+                "type": "ollama",
+                "enabled": true,
+                "base_url": "http://localhost:11434",
+                "models": [
+                    {
+                        "id": "llama3",
+                        "priority": 1,
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "id": "openai_main",
+                "name": "OpenAI",
+                "type": "openai",
+                "enabled": true,
+                "api_key": "YOUR_OPENAI_KEY_HERE",
+                "models": [
+                    {
+                        "id": "gpt-4o",
+                        "priority": 1,
+                        "enabled": true
+                    },
+                    {
+                        "id": "gpt-3.5-turbo",
+                        "priority": 2,
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "id": "new_provider_example",
+                "name": "New Provider",
+                "type": "openai",
+                "api_key": "YOUR_API_KEY_HERE",
+                "enabled": true,
+                "models": [
+                    {
+                        "id": "tngtech/deepseek-r1t2-chimera:free",
+                        "priority": 1,
+                        "enabled": true
+                    }
+                ],
+                "base_url": "https://openrouter.ai/api/v1"
+            }
+        ],
+        "presets": [
+            {
+                "id": "roast",
+                "name": "Roast Master",
+                "description": "Savage but playful. Witty one-liners only.",
+                "icon_name": "flame",
+                "prompt": "You are the official 'Savage Moderator' for PB HERO LIVE. Use professional Hinglish to playfully roast viewers about their ScarFall 2.0 skills or funny comments. Keep it witty and 'OP' but never toxic or abusive. Max 2 lines. Always end with a laughing or fire emoji. \ud83d\udd25"
+            },
+            {
+                "id": "help",
+                "name": "Helpful Assistant",
+                "description": "Clear, simple explanations for beginners.",
+                "icon_name": "helping",
+                "prompt": "You are the Lead Assistant for Samrat's stream. Your tone is 'Bade Bhai' (Big Brother)\u2014respectful, calm, and knowledgeable. Answer questions about ScarFall 2.0 or the stream schedule in polite Hinglish. Use 'Ji' or 'Bhai' to address viewers. Keep it helpful and concise."
+            },
+            {
+                "id": "funny",
+                "name": "High Energy",
+                "description": "Goofy, meme-style, and humorous.",
+                "icon_name": "smile",
+                "prompt": "You are the Hype-Machine for PB HERO LIVE. Your job is to keep the 'Josh' high! Use high-energy Hinglish slangs like 'Gajab', 'Bawaal', and 'Level Up'. Celebrate every kill Samrat gets with maximum excitement. Use plenty of emojis like \ud83c\udfae\ud83d\udca5\ud83d\ude80. Short, loud, and energetic!"
+            },
+            {
+                "id": "custom",
+                "name": "Dynamic Custom",
+                "description": "Adapts personality based on user instruction.",
+                "icon_name": "sparkles",
+                "prompt": "You are a professional versatile AI for the channel. You must adapt your personality instantly based on the latest user instruction while maintaining a Desi Hinglish touch. Be extremely concise (under 20 words) to ensure the chat moves fast. No fluff, only direct and stylish responses"
+            }
+        ]
+    },
+    "audio": {
+        "enabled": true,
+        "voice": "en-IN-PrabhatNeural",
+        "rate": "+0%",
+        "volume": "+0%",
+        "udp_ports": {
+            "public": 8889,
+            "secret": 8888
+        },
+        "max_queue_size": 20,
+        "gaming_pc_ip": "172.168.30.193",
+        "auto_voices": {
+            "enabled": true,
+            "public": {
+                "en": "en-IN-PrabhatNeural",
+                "hi": "hi-IN-MadhurNeural",
+                "bn": "bn-IN-BashkarNeural",
+                "default": "en-IN-PrabhatNeural"
+            },
+            "private": {
+                "en": "en-IN-NeerjaNeural",
+                "hi": "hi-IN-SwaraNeural",
+                "bn": "bn-IN-TanishaaNeural",
+                "default": "en-IN-NeerjaNeural"
+            }
+        }
+    },
+    "moderation": {
+        "ignore_list": [
+            "pbherolive"
+        ],
+        "ai_triggers": {
+            "enabled": true,
+            "prefixes": [
+                "!ai",
+                "!ask"
+            ],
+            "keywords": [
+                "hey pi",
+                "bot"
+            ]
+        },
+        "protection_logic": {
+            "warning_enabled": true,
+            "max_warnings": 3,
+            "timeout_duration": 600
+        },
+        "filters": {
+            "spam_protection": {
+                "enabled": true,
+                "limit": 5,
+                "window": 5,
+                "message": "Too fast! Slow down."
+            },
+            "word_blacklist": {
+                "enabled": false,
+                "words": [
+                    "apple",
+                    "banana*"
+                ],
+                "message": "That word is not allowed."
+            },
+            "excess_symbols": {
+                "enabled": false,
+                "limit": 10,
+                "message": "Too many symbols."
+            },
+            "link_protection": {
+                "enabled": false,
+                "whitelist": ["youtube.com", "youtu.be"]
+            },
+            "caps_protection": {
+                "enabled": false,
+                "limit": 70
+            },
+            "length_protection": {
+                "enabled": false,
+                "limit": 300
+            },
+            "repetition_filter": {
+                "enabled": false
+            }
+        }
+    },
+    "cooldowns": {
+        "global": 15,
+        "user": 60,
+        "warning_message": "System busy hai, kripya pratiksha karein."
+    },
+    "commands": {
+        "prefix": "!",
+        "enabled": true,
+        "aliases": {}
+    },
+    "custom_commands": {
+        "!schedule": {
+            "response": "Stream starts at 8 PM IST daily! 🎮",
+            "cooldown": 30,
+            "enabled": true
+        }
+    },
+    "auto_messages": {
+        "enabled": false,
+        "messages": [
+            {
+                "id": "follow_reminder",
+                "text": "💜 Enjoying the stream? Hit that Subscribe button!",
+                "interval_minutes": 15,
+                "enabled": true
+            }
+        ]
+    },
+
+    "pc_control": {
+        "enabled": false,
+        "mac_address": "XX:XX:XX:XX:XX:XX",
+        "broadcast_ip": "172.168.30.255",
+        "ssh_host": "172.168.30.193",
+        "ssh_user": "pi"
+    },
+    "chat_logging": {
+        "enabled": true,
+        "save_path": "data/chat_logs",
+        "max_files": 30
+    },
+    "paytm_alerts": {
+        "enabled": false,
+        "min_amount": 0,
+        "tts_enabled": true
+    },
+    "goals": {
+        "enabled": true,
+        "active_goals": []
+    },
+    "logging": {
+        "level": "INFO",
+        "rotate_mb": 10,
+        "rotate_backups": 5
+    }
+}
