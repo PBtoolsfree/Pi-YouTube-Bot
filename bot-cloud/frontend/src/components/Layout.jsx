@@ -100,6 +100,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="agent" icon={<Bot />} label="🤖 Agent" active={activeTab} onClick={setActiveTab} dot={navDot('agent')} dotColor={dotColor} />
                                 <NavItem id="personalities" icon={<Sparkles />} label="Personalities" active={activeTab} onClick={setActiveTab} dot={navDot('personalities')} dotColor={dotColor} />
                                 <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
+                                <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
                                 <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                             </>
                         ) : (
