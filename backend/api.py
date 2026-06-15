@@ -966,8 +966,8 @@ async def get_system_status():
         yt_status = "running"
     elif sb_enabled and sb_status == "error":
         yt_status = "error"
-    elif not sb_enabled and not cfg.get("youtube", {}).get("video_id"):
-        yt_status = "config_missing"
+    elif not sb_enabled:
+        yt_status = yt_health_status
     else:
         yt_status = yt_health_status
 

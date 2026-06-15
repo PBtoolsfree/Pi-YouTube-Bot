@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import pytchat
 import logging
 import json
 import random
@@ -349,48 +348,8 @@ class BotService:
         # Start Goals Monitoring Loop
         self._spawn_managed_loop("goal_monitoring", self._goal_monitoring_loop)
         
-        # Start YouTube Monitor Loop (Pytchat standalone fallback)
-        self._spawn_managed_loop("youtube_monitor", self._monitor_loop)
-
         # Start Auto-Message Loop
         self._spawn_managed_loop("auto_message", self._auto_message_loop)
-
-    async def _monitor_loop(self):
-        """Direct connection to YouTube live chat as a fallback, always running."""
-        while self.is_running:
-            try:
-                config = self.load_config()
-                video_id = config.get("youtube", {}).get("video_id")
-                if not video_id:
-                    await asyncio.sleep(5)
-                    continue
-
-                if not self.chat or not self.chat.is_alive():
-                    logger.info(f"Connecting to YouTube Chat: {video_id}")
-                    if self.broadcast_func:
-                        await self._log_ui("SYSTEM", f"Connecting to Video ID: {video_id} (Direct)")
-                    
-                    def _create_chat():
-                        import pytchat
-                        return pytchat.create(video_id=video_id, interruptable=False)
-                    
-                    self.chat = await asyncio.to_thread(_create_chat)
-
-                if self.chat and self.chat.is_alive():
-                    def _get_items():
-                        return self.chat.get().sync_items()
-                    items = await asyncio.to_thread(_get_items)
-                    for c in items:
-                        try:
-                            await self._handle_message(c)
-                        except Exception as msg_err:
-                            logger.error(f"[HANDLE_MESSAGE] Unhandled error for msg from {getattr(getattr(c, 'author', None), 'name', 'unknown')}: {msg_err}")
-                            logger.error(traceback.format_exc())
-                
-                await asyncio.sleep(1)
-            except Exception as e:
-                logger.error(f"Monitor Loop Error: {e}")
-                await asyncio.sleep(5)
 
     async def _auto_message_loop(self):
         """Sends scheduled auto-messages at configured intervals."""
@@ -3034,16 +2993,6 @@ class BotService:
                         should_save = True
                         logger.info(f"Updated live_chat_id: {live_chat_id}")
                     
-                    # Auto-set video_id from active broadcast so pytchat monitor starts automatically
-                    if live_video_id and live_video_id != yt_cfg.get("video_id"):
-                        yt_cfg["video_id"] = live_video_id
-                        should_save = True
-                        logger.info(f"Auto-detected live video_id: {live_video_id}")
-                    elif not live_video_id and yt_cfg.get("video_id"):
-                        # Clear video_id when no active broadcast (stream ended)
-                        yt_cfg["video_id"] = ""
-                        should_save = True
-                        logger.info("No active broadcast — cleared video_id")
                     
                     if should_save:
                         config["youtube"] = yt_cfg
