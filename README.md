@@ -510,6 +510,14 @@ tar -czf ~/pibot-full-$(date +%Y%m%d).tar.gz \
 | High CPU | Check `htop` | Disable `reload=True` — already fixed in v3 |
 | Rollback happened | `cat logs/update.log` | Fix the issue, manually run `update.sh` |
 
+### Dashboard not opening
+
+If the dashboard does not open, run the health check script to see what is wrong:
+```bash
+bash scripts/check_dashboard.sh
+```
+This script will check if the service is running, if port 8000 is listening, and show recent logs and the correct local URL.
+
 **Quick health check:**
 ```bash
 curl -s http://localhost:8000/api/health | python3 -m json.tool
