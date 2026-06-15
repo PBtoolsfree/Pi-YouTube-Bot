@@ -1283,6 +1283,9 @@ class BotService:
 
     async def _handle_message(self, chat_obj, force_ai=False):
         author = chat_obj.author.name.lower()
+        if author.startswith('@'):
+            author = author[1:]
+            
         channel_id = getattr(chat_obj.author, 'channelId', None)
         message = chat_obj.message
         
@@ -1299,17 +1302,22 @@ class BotService:
         
         # Unique ID for Deduplication
         msg_id = getattr(chat_obj, 'msg_id', None) or getattr(chat_obj, 'id', None)
-        if not msg_id:
-            # Fallback: Hash of author + message + timestamp (approx)
-            # Use higher precision if forcing, to allow rapid manual testing
-            ts_window = int(time.time()/5) if not force_ai else time.time()
-            msg_id = f"{author}:{message}:{ts_window}"
-            
-        if msg_id in self.message_dedup_cache and not force_ai:
-            logger.info(f"Duplicate Message Ignored: {msg_id}")
-            return None
         
-        self.message_dedup_cache.append(msg_id)
+        # Secondary content-based deduplication to prevent Streamer.bot + pytchat double processing
+        ts_window = int(time.time()/5) if not force_ai else time.time()
+        content_hash = f"{author}:{message}:{ts_window}"
+        
+        if (msg_id and msg_id in self.message_dedup_cache) and not force_ai:
+            logger.info(f"Duplicate Message Ignored (msg_id): {msg_id}")
+            return None
+            
+        if content_hash in self.message_dedup_cache and not force_ai:
+            logger.info(f"Duplicate Message Ignored (content): {content_hash}")
+            return None
+            
+        if msg_id:
+            self.message_dedup_cache.append(msg_id)
+        self.message_dedup_cache.append(content_hash)
 
         # GOALS LOGIC - REWARD WINDOW
         try:
