@@ -2327,7 +2327,7 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
         
         # Run in thread — exchange_code uses synchronous 'requests' library internally
         # which blocks the event loop and causes ERR_EMPTY_RESPONSE
-        creds = await asyncio.to_thread(auth.exchange_code, code, redirect_uri)
+        creds = await asyncio.to_thread(auth.exchange_code, code, redirect_uri, state=state)
         
         # Save credentials to config
         if "youtube" not in current_config: current_config["youtube"] = {}
@@ -2493,7 +2493,7 @@ async def callback_sheets(request: Request, code: Optional[str] = None, state: O
         # Exchange code for tokens
         print(f">>> DEBUG: Calling auth.exchange_code with scopes={sheets_scopes}")
         try:
-             creds = auth.exchange_code(code, redirect_uri, sheets_scopes, client_secrets_file=sheets_secret)
+             creds = auth.exchange_code(code, redirect_uri, sheets_scopes, client_secrets_file=sheets_secret, state=state)
         except Exception as e:
              print(f">>> DEBUG: Error inside exchange_code call: {e}")
              raise e

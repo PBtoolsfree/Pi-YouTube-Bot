@@ -7,6 +7,8 @@ from google.auth.transport.requests import Request
 
 logger = logging.getLogger(__name__)
 
+_OAUTH_STATE_STORE = {}
+
 class AuthService:
     def __init__(self, config_loader):
         self.config_loader = config_loader
@@ -38,10 +40,13 @@ class AuthService:
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             prompt='consent')
+            
+        if getattr(flow, 'code_verifier', None):
+            _OAUTH_STATE_STORE[state] = flow.code_verifier
 
         return authorization_url, state
 
-    def exchange_code(self, code, redirect_uri=None, scopes=None, client_secrets_file=None):
+    def exchange_code(self, code, redirect_uri=None, scopes=None, client_secrets_file=None, state=None):
         """Exchanges the authorization code for tokens."""
         secrets_file = client_secrets_file or self.client_secrets_file
         if not os.path.exists(secrets_file):
@@ -54,6 +59,9 @@ class AuthService:
         flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
             secrets_file, scopes=target_scopes)
         flow.redirect_uri = redirect_uri or self.DEFAULT_REDIRECT_URI
+        
+        if state and state in _OAUTH_STATE_STORE:
+            flow.code_verifier = _OAUTH_STATE_STORE.pop(state)
         
         flow.fetch_token(code=code)
         
