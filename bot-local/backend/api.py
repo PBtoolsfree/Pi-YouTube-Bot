@@ -2573,6 +2573,17 @@ def _restore_backup_zip(zip_bytes: bytes):
                 with zf.open(member) as src, open(dest, "wb") as dst:
                     dst.write(src.read())
 
+                # Local node safety check: Preserve is_cloud=False
+                if member == "config.json" and os.environ.get("RUN_MODE") != "cloud":
+                    try:
+                        with open(dest, "r") as f:
+                            cfg = json.load(f)
+                        cfg["is_cloud"] = False
+                        with open(dest, "w") as f:
+                            json.dump(cfg, f, indent=4)
+                    except BaseException as e:
+                        logger.error(f"Failed to enforce is_cloud=False on restore: {e}")
+
 @app.get("/api/backup/export")
 async def backup_export():
     """Download a full backup of all critical files as a zip."""
