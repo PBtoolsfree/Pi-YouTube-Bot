@@ -2483,9 +2483,9 @@ class BotService:
             except Exception as e:
                 logger.error(f"Failed to award points for tip: {e}")
 
-            # Save History as played=False on the cloud
-            self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=False)
-            return {"status": "success", "processed": True, "queued": True}
+            # Save History as played=False on the cloud only if it wasn't broadcasted live
+            self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=ws_sent)
+            return {"status": "success", "processed": True, "queued": not ws_sent}
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
 
@@ -2553,7 +2553,8 @@ class BotService:
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
-            if getattr(self, "pi_clients", None):
+            ws_sent = False
+            if getattr(self, "pi_clients", None) and len(self.pi_clients.active_connections) > 0:
                 logger.info("Forwarding app alert to Cloud Pi Clients...")
                 asyncio.create_task(self.pi_clients.broadcast({
                     "type": "app_alert",
@@ -2562,6 +2563,7 @@ class BotService:
                     "do_tts": do_tts,
                     "transaction_id": tx_id
                 }))
+                ws_sent = True
             
             # Award loyalty points on the cloud!
             try:
@@ -2574,9 +2576,9 @@ class BotService:
             except Exception as e:
                 logger.error(f"Failed to award points for app tip: {e}")
 
-            # Save History as played=False on the cloud
-            self._save_donation_history(user, amount, message, tx_id, played=False)
-            return {"status": "success", "processed": True, "queued": True}
+            # Save History as played=False on the cloud only if it wasn't broadcasted live
+            self._save_donation_history(user, amount, message, tx_id, played=ws_sent)
+            return {"status": "success", "processed": True, "queued": not ws_sent}
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
 
