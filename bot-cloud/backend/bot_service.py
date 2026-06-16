@@ -2140,6 +2140,12 @@ class BotService:
                 self.viewers.mark_dirty()
                 self.viewers._save_viewers()
 
+        elif etype == "ack_alert":
+            tx_id = event.get("transaction_id")
+            if tx_id:
+                logger.info(f"Received ACK from Local Pi for transaction {tx_id}")
+                self.mark_donation_as_played(tx_id)
+
         elif etype == "request_viewer_sync":
             if websocket:
                 logger.info("Pi client requested viewer sync. Sending full database...")
@@ -2483,9 +2489,9 @@ class BotService:
             except Exception as e:
                 logger.error(f"Failed to award points for tip: {e}")
 
-            # Save History as played=False on the cloud only if it wasn't broadcasted live
-            self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=ws_sent)
-            return {"status": "success", "processed": True, "queued": not ws_sent}
+            # Save History as played=False on the cloud; it will be marked True upon ACK from Local Pi
+            self._save_donation_history(user, amount, message + verified_tag, transaction_id, played=False)
+            return {"status": "success", "processed": True, "queued": True}
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
 
@@ -2576,9 +2582,9 @@ class BotService:
             except Exception as e:
                 logger.error(f"Failed to award points for app tip: {e}")
 
-            # Save History as played=False on the cloud only if it wasn't broadcasted live
-            self._save_donation_history(user, amount, message, tx_id, played=ws_sent)
-            return {"status": "success", "processed": True, "queued": not ws_sent}
+            # Save History as played=False on the cloud; it will be marked True upon ACK from Local Pi
+            self._save_donation_history(user, amount, message, tx_id, played=False)
+            return {"status": "success", "processed": True, "queued": True}
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
 

@@ -99,16 +99,28 @@ class CloudAlertClientService:
                 transaction_id=tx_id,
                 skip_verification=True
             )
+            if tx_id:
+                asyncio.create_task(self.send_event({
+                    "type": "ack_alert",
+                    "transaction_id": tx_id
+                }))
         elif etype == "app_alert":
             user = event.get("user")
             amount = event.get("amount")
             do_tts = event.get("do_tts", True)
+            tx_id = event.get("transaction_id")
             
             await self.bot.trigger_app_alert(
                 user=user,
                 amount=amount,
-                do_tts=do_tts
+                do_tts=do_tts,
+                transaction_id=tx_id
             )
+            if tx_id:
+                asyncio.create_task(self.send_event({
+                    "type": "ack_alert",
+                    "transaction_id": tx_id
+                }))
         elif etype == "sync_action":
             action = event.get("action")
             logger.info(f"Sync action received: {action}")

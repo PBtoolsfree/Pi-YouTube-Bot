@@ -2375,14 +2375,14 @@ class BotService:
 
         return {"status": "success", "processed": True}
 
-    async def trigger_app_alert(self, user, amount, do_tts=True, source="App Webhook"):
+    async def trigger_app_alert(self, user, amount, do_tts=True, source="App Webhook", transaction_id=None):
         """
         Specialized flow exclusively for generic app notifications (Paytm, PhonePe, GPay, etc).
         Triggers a distinct overlay categorization ("APP_NOTIFICATION")
         """
         message = "Tip via App"
         log_msg = f"APP NOTIFICATION: {user} tipped ₹{amount}"
-        tx_id = f"app_alert_{int(time.time())}"
+        tx_id = transaction_id or f"app_alert_{int(time.time())}"
         
         is_cloud = (os.environ.get("RUN_MODE") == "cloud")
         is_client = getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running
