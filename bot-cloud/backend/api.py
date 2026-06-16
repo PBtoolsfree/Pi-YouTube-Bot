@@ -1569,39 +1569,52 @@ async def payment_webhook(provider: str, payload: dict):
         try:
             amount = 0.0
 
-            # 1. Try to find amount with currency symbol before the number
-            currency_pattern = r'(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)'
-            amount_match = re.search(currency_pattern, combined_text, flags=re.IGNORECASE)
+            # 1 & 2. Find all amounts with currency symbols
+            all_matches = []
             
-            if not amount_match:
-                # 2. Try to find amount with currency symbol after the number (e.g. "100 INR")
-                currency_pattern_after = r'([\d,]+(?:\.\d+)?)\s*(?:₹|Rs\.?|INR)'
-                amount_match = re.search(currency_pattern_after, combined_text, flags=re.IGNORECASE)
-
-            if not amount_match:
-                # 3. Look for amounts near keywords if currency symbol is completely missing or mangled
-                keyword_pattern = r'(?:received|paid|sent|for|amount|of)\s*(?:₹|Rs\.?|INR|[^a-zA-Z0-9\s])?\s*([\d,]+(?:\.\d+)?)'
-                amount_match = re.search(keyword_pattern, combined_text, flags=re.IGNORECASE)
+            for m in re.finditer(r'(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)', combined_text, flags=re.IGNORECASE):
+                try: all_matches.append((m.start(), float(m.group(1).replace(',', '').strip())))
+                except: pass
                 
-            if amount_match:
-                try:
-                    raw_amount_str = amount_match.group(1).replace(',', '').strip()
-                    amount = float(raw_amount_str)
-                except Exception as e:
-                    logger.warning("Webhook/%s: failed to cast amount: %s", provider, e)
-            else:
-                # 4. Last resort: extract all numbers and pick the best candidate
+            for m in re.finditer(r'([\d,]+(?:\.\d+)?)\s*(?:₹|Rs\.?|INR)', combined_text, flags=re.IGNORECASE):
+                try: all_matches.append((m.start(), float(m.group(1).replace(',', '').strip())))
+                except: pass
+                
+            if all_matches:
+                all_matches.sort(key=lambda x: x[0])
+                for pos, val in all_matches:
+                    context_before = combined_lower[max(0, pos - 35):pos]
+                    # Skip balances or cashback
+                    if any(w in context_before for w in ['bal', 'balance', 'avl', 'available', 'cashback', 'reward', 'won', 'fee']):
+                        continue
+                    amount = val
+                    break
+                
+                # If all matches were skipped due to context, just pick the first one as a fallback
+                if amount <= 0 and all_matches:
+                    amount = all_matches[0][1]
+
+            if amount <= 0:
+                # 3. Look for amounts near keywords if currency symbol is missing
+                keyword_pattern = r'(?:received|paid|sent|for|amount|of)\s*(?:₹|Rs\.?|INR|[^a-zA-Z0-9\s])?\s*([\d,]+(?:\.\d+)?)'
+                for m in re.finditer(keyword_pattern, combined_text, flags=re.IGNORECASE):
+                    try:
+                        amount = float(m.group(1).replace(',', '').strip())
+                        break
+                    except: pass
+                    
+            if amount <= 0:
+                # 4. Last resort: extract all numbers
                 cleaned_text = re.sub(r'(?:₹|Rs\.?|INR|\bRs\b)', '', combined_text, flags=re.IGNORECASE).strip()
                 numbers = list(re.finditer(r'([\d,]+(?:\.\d+)?)', cleaned_text))
-                
-                amount = 0.0
                 for m in numbers:
                     try:
                         val = float(m.group(1).replace(',', '').strip())
-                        # Skip small integers at the very beginning of the string (likely Android notification counts like "1 new message")
+                        # Skip small integers at the very beginning (likely Android notification counts like "1 new message")
                         if m.start() < 15 and val <= 10 and '.' not in m.group(1):
-                            continue
-                        # Pick the first reasonable number we find
+                            # Only skip if there are other numbers to pick from
+                            if len(numbers) > 1:
+                                continue
                         amount = val
                         break
                     except Exception:
