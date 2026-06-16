@@ -174,8 +174,6 @@ class ViewerService:
         self._dirty = False
         self._last_save = time.time()
         logger.info("ViewerService database reloaded.")
-        if self._should_bypass_db():
-            self._forward_to_cloud("import_viewers", viewers=self.viewers)
 
     async def _auto_save_loop(self):
         """Periodically checks if data needs saving."""

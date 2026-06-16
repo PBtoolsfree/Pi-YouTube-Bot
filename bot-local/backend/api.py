@@ -2518,14 +2518,12 @@ _BACKUP_FILES = [
     "service_account.json",
     ".env",
     ".env.bak",
+    "viewers.db",
     "viewers.json",
     "viewers.json.bak",
-    "viewers.db",
     "subscriber_count.json",
 ]
-_BACKUP_DIRS = [
-    "data",
-]
+_BACKUP_DIRS = []
 
 def _get_backups_dir() -> str:
     d = os.path.join(_PROJECT_ROOT_BACKUP, "backups")

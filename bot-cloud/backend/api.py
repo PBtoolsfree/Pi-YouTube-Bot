@@ -2652,15 +2652,11 @@ _PROJECT_ROOT_BACKUP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # Files and directories to include in a backup zip
 _BACKUP_FILES = [
     "config.json",
-    "client_secret.json",
-    "sheets_client_secret.json",
-    "service_account.json",
     ".env",
     ".env.bak",
+    "viewers.db",
     "viewers.json",
     "viewers.json.bak",
-    "viewers.db",
-    "subscriber_count.json",
 ]
 _BACKUP_DIRS = [
     "data",
