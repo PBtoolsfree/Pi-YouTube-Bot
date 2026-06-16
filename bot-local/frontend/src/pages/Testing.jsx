@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Beaker, MessageSquare, Mic, Send, Trash2, CheckCircle, XCircle, Activity, ShieldCheck, Zap } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Input, Button, Label } from '@/components/ui'
