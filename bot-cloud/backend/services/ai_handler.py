@@ -33,24 +33,25 @@ class AIHandler:
                 self.history[author] = past
                 logger.info(f"Restored {len(past)} msgs of history for {author}")
 
-    async def process_ai(self, author, prompt, config, viewer_service, audio_service, log_ui_cb, send_chat_cb, trigger_action_cb=None, live_context=None):
+    async def process_ai(self, author, prompt, config, viewer_service, audio_service, log_ui_cb, send_chat_cb, trigger_action_cb=None, force_ai=False, live_context=None):
         try:
             cooldowns = config.get("cooldowns", {})
             now = time.time()
             
-            # Global Cooldown
-            if now - self.last_ai_time < cooldowns.get("global", 15):
-                logger.info("Global Cooldown Active - Skipping AI")
-                return None
+            if not force_ai:
+                # Global Cooldown
+                if now - self.last_ai_time < cooldowns.get("global", 15):
+                    logger.info("Global Cooldown Active - Skipping AI")
+                    return None
 
-            # User Cooldown
-            if now - self.user_last_ai.get(author, 0) < cooldowns.get("user", 60):
-                logger.info(f"User Cooldown Active for {author} - Skipping AI")
-                if now - self.last_warning_time.get(author, 0) > 30:
-                    warn_msg = cooldowns.get("warning_message", "Slow down!")
-                    await send_chat_cb(f"@{author} {warn_msg}")
-                    self.last_warning_time[author] = now
-                return None
+                # User Cooldown
+                if now - self.user_last_ai.get(author, 0) < cooldowns.get("user", 60):
+                    logger.info(f"User Cooldown Active for {author} - Skipping AI")
+                    if now - self.last_warning_time.get(author, 0) > 30:
+                        warn_msg = cooldowns.get("warning_message", "Slow down!")
+                        await send_chat_cb(f"@{author} {warn_msg}")
+                        self.last_warning_time[author] = now
+                    return None
 
             if now - getattr(self, '_last_cleanup', 0) > 3600:
                 self._cleanup_memory(now)

@@ -1436,10 +1436,11 @@ class BotService:
                     self.viewers._save_viewers()
                 return 1
 
-        await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
-        
-        if self.audio and not message.strip().startswith(("!", "/")):
-            await self.audio.speak(f"{author} says: {message}", "secret")
+        if not is_forwarded:
+            await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
+            
+            if self.audio and not message.strip().startswith(("!", "/")):
+                await self.audio.speak(f"{author} says: {message}", "secret")
 
         if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
             if not is_forwarded:
@@ -1561,6 +1562,7 @@ class BotService:
             response = await self.ai_handler.process_ai(
                 author, prompt, config, self.viewers, self.audio, self._log_ui, self._send_chat,
                 trigger_action_cb=self._trigger_sb_action,
+                force_ai=force_ai,
                 **context_kwargs
             )
             if response:
