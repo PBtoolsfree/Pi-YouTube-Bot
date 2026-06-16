@@ -310,6 +310,10 @@ async def broadcast_log(data: dict):
     # to WebSocket clients for real-time overlays but don't belong in the log table.
     if data.get("type") == "log":
         log_history.append(data)
+
+    if os.environ.get("RUN_MODE") == "cloud" and data.get("type") in ["play_tts", "log", "tts_event"]:
+        if bot and getattr(bot, "pi_clients", None):
+            asyncio.create_task(bot.pi_clients.broadcast(data))
     
     to_remove = []
     for ws in active_websockets:

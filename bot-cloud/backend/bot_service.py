@@ -1220,6 +1220,14 @@ class BotService:
 
     async def _trigger_sb_action(self, action_name):
         """Callback for AI to trigger Streamer.bot actions"""
+        if os.environ.get("RUN_MODE") == "cloud":
+            if getattr(self, "pi_clients", None):
+                asyncio.create_task(self.pi_clients.broadcast({
+                    "type": "trigger_action",
+                    "action_name": action_name
+                }))
+            return
+
         if not self.is_sb_connected:
             logger.warning("Cannot trigger action: SB Disconnected")
             return

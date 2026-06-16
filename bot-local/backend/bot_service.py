@@ -1902,15 +1902,18 @@ class BotService:
 
         is_connected = self.is_sb_connected
 
-        # Method A: Main WS Connection — try DoAction
+        # Method A: Main WS Connection
         if is_connected:
             try:
                 if self.sb_ws is not None:
+                    # Send standard SendMessage
+                    await self.sb_ws.send(payload)
+                    # Also trigger DoAction fallback just in case the user relies on it for visuals
                     await self.sb_ws.send(action_payload)
-                logger.info(f"[CHAT] Sent via SB DoAction: {message[:80]}")
+                logger.info(f"[CHAT] Sent via SB: {message[:80]}")
                 return
             except Exception as e:
-                logger.warning(f"[CHAT] SB DoAction failed: {e}")
+                logger.warning(f"[CHAT] SB Send failed: {e}")
                 is_connected = False
 
         # Method B: Ephemeral WS connection

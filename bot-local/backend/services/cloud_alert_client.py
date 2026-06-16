@@ -154,6 +154,19 @@ class CloudAlertClientService:
             if text and self.bot.audio:
                 asyncio.create_task(self.bot.audio.speak(text, channel=channel, voice=voice))
 
+        elif etype == "trigger_action":
+            action_name = event.get("action_name")
+            if action_name and hasattr(self.bot, "_trigger_sb_action"):
+                asyncio.create_task(self.bot._trigger_sb_action(action_name))
+
+        elif etype == "log":
+            category = event.get("category")
+            msg = event.get("message")
+            author = event.get("author")
+            meta = event.get("meta")
+            if category and msg and hasattr(self.bot, "_log_ui"):
+                asyncio.create_task(self.bot._log_ui(category, msg, author=author, meta=meta))
+
         elif etype == "subscriber_count_sync":
             count = event.get("count", 0)
             self.bot.set_subscriber_count(count, save=True)
