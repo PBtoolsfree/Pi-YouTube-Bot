@@ -2461,7 +2461,8 @@ class BotService:
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
-            if getattr(self, "pi_clients", None):
+            ws_sent = False
+            if getattr(self, "pi_clients", None) and len(self.pi_clients.active_connections) > 0:
                 logger.info("Forwarding alert to Cloud Pi Clients...")
                 asyncio.create_task(self.pi_clients.broadcast({
                     "type": "donation_alert",
@@ -2470,15 +2471,17 @@ class BotService:
                     "message": message,
                     "transaction_id": transaction_id
                 }))
+                ws_sent = True
             
-            # Send HTTP Webhook to local Pi
-            asyncio.create_task(self._send_local_pi_webhook({
-                "original_provider": "app" if skip_verification else "email",
-                "sender": user,
-                "amount": amount,
-                "message": message,
-                "transaction_id": transaction_id
-            }))
+            # Send HTTP Webhook to local Pi ONLY if no active WebSocket clients exist
+            if not ws_sent:
+                asyncio.create_task(self._send_local_pi_webhook({
+                    "original_provider": "app" if skip_verification else "email",
+                    "sender": user,
+                    "amount": amount,
+                    "message": message,
+                    "transaction_id": transaction_id
+                }))
             
             # Award loyalty points on the cloud!
             try:

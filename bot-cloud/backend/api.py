@@ -1650,25 +1650,6 @@ async def payment_webhook(provider: str, payload: dict):
 
             do_tts = app_cfg.get("tts_enabled", True)
 
-            # ── Deduplication / Debounce ─────────────────────────────────────────
-            import time
-            global _recent_webhook_alerts
-            if '_recent_webhook_alerts' not in globals():
-                _recent_webhook_alerts = {}
-            
-            now = time.time()
-            # Clean old entries (older than 30 seconds)
-            _recent_webhook_alerts = {k: v for k, v in _recent_webhook_alerts.items() if now - v < 30}
-            
-            dedup_key = f"{sender}:{amount}"
-            if dedup_key in _recent_webhook_alerts:
-                print(f">>> [Webhook/{provider}] Ignoring duplicate alert for {sender} \u20b9{amount} (debounce)")
-                webhook_logger.log(provider, "Ignored", f"Duplicate alert for {sender} \u20b9{amount} (debounce)", payload)
-                return {"status": "ignored", "reason": "Duplicate alert (debounced)"}
-            
-            _recent_webhook_alerts[dedup_key] = now
-            # ───────────────────────────────────────────────────────────────────
-
             print(f">>> [Webhook/{provider}] Alert: {sender} paid \u20b9{amount}")
             webhook_logger.log(provider, "Success", f"{sender} paid \u20b9{amount}", payload)
 
