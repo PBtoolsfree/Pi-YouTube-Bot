@@ -206,6 +206,11 @@ class GambleService:
             viewer_service.add_points(user, winnings)
             final_balance = current_points - amount + winnings
             self._log_gamble(user, "slots", amount, winnings, True)
+            
+            v = viewer_service.get_viewer(user)
+            total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+            if winnings >= amount * 3 and total_debt > 0:
+                message += " 💰 Reminder: You have an active loan. Use !payloan to clear your debt!"
         else:
             final_balance = current_points - amount
             self._log_gamble(user, "slots", amount, 0, False)

@@ -219,6 +219,7 @@ export default function LoyaltyManagerPage() {
                 <TabButton id="overview" label="Overview" icon={<Activity />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="leaderboard" label="Leaderboard" icon={<Award />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="gambling" label="Games & Economy" icon={<Dices />} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="loans" label="Banking & Loans" icon={<Crown />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="manage" label="Manage Viewers" icon={<Users />} active={activeTab} onClick={setActiveTab} />
 
                 <TabButton id="settings" label="Settings" icon={<Settings />} active={activeTab} onClick={setActiveTab} />
@@ -599,6 +600,11 @@ export default function LoyaltyManagerPage() {
                         </Card>
                     </div>
                 </div>
+            )}
+
+            {/* ═══════════════ LOANS ═══════════════ */}
+            {activeTab === 'loans' && (
+                <LoansTab config={loyaltyConfig} setConfig={setLoyaltyConfig} viewers={viewerList} saveConfig={saveConfig} />
             )}
 
             {/* ═══════════════ MANAGE VIEWERS ═══════════════ */}
@@ -1049,6 +1055,113 @@ function StatBox({ title, value, icon, subtext }) {
                 </div>
             </CardContent>
             <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-gradient-to-br from-zinc-800/20 to-transparent rounded-full blur-xl pointer-events-none" />
-        </Card>
+    )
+}
+
+function LoansTab({ config, setConfig, viewers, saveConfig }) {
+    const plans = config?.loan_plans || []
+
+    const addPlan = () => {
+        const updated = [...plans, { id: plans.length + 1, amount: 10000, duration_days: 7, daily_interest_pct: 1, late_fine: 500 }]
+        setConfig({ ...config, loan_plans: updated })
+    }
+
+    const removePlan = (idx) => {
+        const updated = plans.filter((_, i) => i !== idx)
+        setConfig({ ...config, loan_plans: updated })
+    }
+
+    const updatePlan = (idx, field, val) => {
+        const updated = [...plans]
+        updated[idx] = { ...updated[idx], [field]: val }
+        setConfig({ ...config, loan_plans: updated })
+    }
+
+    const borrowers = viewers.filter(v => (v.loan_principal || 0) > 0 || (v.loan_interest || 0) > 0 || (v.loan_fines || 0) > 0)
+
+    return (
+        <div className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                            <Crown className="h-4 w-4 text-amber-500" /> Loan Plans
+                        </CardTitle>
+                        <Button onClick={addPlan} variant="outline" size="sm" className="h-7 text-xs bg-zinc-950 border-zinc-700 text-zinc-300 hover:text-white">
+                            <Plus className="h-3 w-3 mr-1" /> Add Plan
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                        {plans.map((p, idx) => (
+                            <div key={idx} className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 space-y-3 relative mt-2">
+                                <button onClick={() => removePlan(idx)} className="absolute top-2 right-2 text-zinc-500 hover:text-rose-400">
+                                    <X className="h-4 w-4" />
+                                </button>
+                                <div className="grid grid-cols-2 gap-3 text-sm pr-6">
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Plan ID / Name</label>
+                                        <Input value={p.id || ''} onChange={e => updatePlan(idx, 'id', e.target.value)} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Principal Amount</label>
+                                        <Input type="number" value={p.amount || 0} onChange={e => updatePlan(idx, 'amount', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Duration (Days)</label>
+                                        <Input type="number" value={p.duration_days || 0} onChange={e => updatePlan(idx, 'duration_days', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Daily Interest (%)</label>
+                                        <Input type="number" value={p.daily_interest_pct || 0} step="0.1" onChange={e => updatePlan(idx, 'daily_interest_pct', parseFloat(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Late Fine (Per Day)</label>
+                                        <Input type="number" value={p.late_fine || 0} onChange={e => updatePlan(idx, 'late_fine', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {plans.length === 0 && <div className="text-center text-sm text-zinc-500 py-4">No loan plans configured.</div>}
+                        
+                        <Button onClick={saveConfig} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg mt-4">
+                            <Save className="h-4 w-4 mr-2" /> Save Loan Plans
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-zinc-900 border-zinc-800 shadow-sm h-fit">
+                    <CardHeader className="pb-3 border-b border-zinc-800">
+                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                            <Users className="h-4 w-4 text-blue-500" /> Active Borrowers
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-zinc-950/50 text-zinc-500 font-medium sticky top-0">
+                                    <tr>
+                                        <th className="px-4 py-3">User</th>
+                                        <th className="px-4 py-3 text-right">Principal</th>
+                                        <th className="px-4 py-3 text-right">Fines+Int</th>
+                                        <th className="px-4 py-3 text-right">Total Debt</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-800">
+                                    {borrowers.map(v => (
+                                        <tr key={v.name} className="hover:bg-zinc-800/50">
+                                            <td className="px-4 py-3 font-medium text-zinc-200">{v.name}</td>
+                                            <td className="px-4 py-3 text-right text-zinc-400">{(v.loan_principal || 0).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right text-rose-400">+{( (v.loan_interest || 0) + (v.loan_fines || 0) ).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-rose-500">{((v.loan_principal || 0) + (v.loan_interest || 0) + (v.loan_fines || 0)).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                    {borrowers.length === 0 && <tr><td colSpan="4" className="text-center text-zinc-500 py-8 italic">No active loans.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
     )
 }

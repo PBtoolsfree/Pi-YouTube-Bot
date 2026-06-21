@@ -1075,6 +1075,13 @@ async def toggle_tts():
     ConfigManager.save_config(cfg)
     return {"status": "success", "tts_enabled": audio_cfg["enabled"]}
 
+@app.post("/api/bot/toggle-offline")
+async def toggle_offline():
+    cfg = ConfigManager.get_config(force_reload=True)
+    cfg["stream_offline"] = not cfg.get("stream_offline", False)
+    ConfigManager.save_config(cfg)
+    return {"status": "success", "stream_offline": cfg["stream_offline"]}
+
 @app.post("/api/bot/restart")
 async def restart_bot():
     try:

@@ -65,12 +65,19 @@ fi
 
 # ── Run update ─────────────────────────────────────────────────────────────────
 log "Update available: ${LOCAL:0:8} → ${REMOTE:0:8}"
-log "Starting update via scripts/update.sh..."
 
-if bash "$PROJECT_DIR/scripts/update.sh" >> "$LOG_FILE" 2>&1; then
+if systemctl is-active --quiet pibot-cloud.service 2>/dev/null; then
+    log "Detected Cloud Environment. Starting update via scripts/update_cloud.sh..."
+    UPDATE_SCRIPT="$PROJECT_DIR/scripts/update_cloud.sh"
+else
+    log "Detected Local Environment. Starting update via scripts/update_local.sh..."
+    UPDATE_SCRIPT="$PROJECT_DIR/scripts/update_local.sh"
+fi
+
+if bash "$UPDATE_SCRIPT" >> "$LOG_FILE" 2>&1; then
     log "Auto-update completed successfully."
 else
-    log "ERROR: Auto-update FAILED. Rollback was attempted by update.sh."
+    log "ERROR: Auto-update FAILED."
     exit 1
 fi
 

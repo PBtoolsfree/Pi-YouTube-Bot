@@ -449,20 +449,21 @@ tail -f ~/pibot/logs/pibot.log  # File logs
 
 ## 17. How to Update
 
+### For Local Bot (Raspberry Pi / PC)
 ```bash
-# Standard update (with rollback on failure)
-bash ~/pibot/scripts/update.sh
-
-# Force reinstall even if already up to date
-bash ~/pibot/scripts/update.sh --force
+bash ~/pibot/scripts/update_local.sh
 ```
 
-The update script:
-- Saves current commit for rollback
-- Stashes your config changes
-- Pulls latest code
-- Rebuilds frontend (only if package.json changed)
-- Rolls back automatically if service fails to start
+### For Cloud Bot (Oracle Cloud / VPS)
+```bash
+bash ~/pibot/scripts/update_cloud.sh
+```
+
+The update scripts will:
+- Pull latest code from GitHub
+- Install new Python dependencies if any
+- Rebuild the specific React frontend for the node
+- Restart the systemd service automatically
 
 ---
 

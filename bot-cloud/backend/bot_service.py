@@ -57,7 +57,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
-        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards"
+        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -297,6 +297,57 @@ class BotService:
                 
         return self._spawn_task(_wrapper())
 
+    async def _banking_loop(self):
+        """Processes daily interest and fines for active loans."""
+        while self.is_running:
+            try:
+                config = self.load_config()
+                if config.get("stream_offline", False):
+                    await asyncio.sleep(3600)
+                    continue
+
+                today = time.strftime("%Y-%m-%d")
+                last_processed = config.get("loyalty", {}).get("last_banking_date", "")
+
+                if today != last_processed:
+                    logger.info("Processing daily banking interest and fines...")
+                    
+                    loan_plans = {str(p.get("id", idx+1)): p for idx, p in enumerate(config.get("loyalty", {}).get("loan_plans", []))}
+                    
+                    for username, v in list(self.viewers.viewers.items()):
+                        principal = v.get("loan_principal", 0)
+                        if principal <= 0 and v.get("loan_interest", 0) <= 0 and v.get("loan_fines", 0) <= 0:
+                            continue
+                            
+                        plan_id = str(v.get("loan_plan_id", ""))
+                        plan = loan_plans.get(plan_id, {})
+                        
+                        daily_rate = plan.get("daily_interest_pct", 0) / 100.0
+                        late_fine = plan.get("late_fine", 0)
+                        
+                        if principal > 0 and daily_rate > 0:
+                            interest_amt = int(principal * daily_rate)
+                            v["loan_interest"] += interest_amt
+                            
+                        if v.get("loan_due_date", 0) > 0 and time.time() > v.get("loan_due_date", 0):
+                            v["loan_fines"] += late_fine
+                            
+                        self.viewers.mark_dirty()
+                        
+                    # Update config
+                    if "loyalty" not in config:
+                        config["loyalty"] = {}
+                    config["loyalty"]["last_banking_date"] = today
+                    from backend.config_manager import ConfigManager
+                    ConfigManager.save_config(config)
+                    logger.info("Banking daily processing complete.")
+                    
+            except Exception as e:
+                logger.error(f"Error in banking loop: {e}")
+                
+            await asyncio.sleep(3600) # Check every hour
+
+
     async def start(self, broadcast_func):
         self.broadcast_func = broadcast_func
         self.is_running = True
@@ -321,6 +372,7 @@ class BotService:
 
         if os.environ.get("RUN_MODE") == "cloud":
             logger.info("Running in Cloud Mode. Minimal services started. Skipping local loops.")
+            self._spawn_managed_loop("banking", self._banking_loop)
             return
 
         # Always start SB loop so it can dynamically connect when enabled via UI
@@ -1360,13 +1412,19 @@ class BotService:
             return None
         
         # 1. Viewer Tracking & Loyalty
-        viewer_data = self.viewers.update_viewer(
-            author, 
-            trigger_welcome_cb=self._trigger_welcome,
-            trigger_rank_up_cb=self._trigger_rank_up,
-            check_loyalty_cb=self._check_loyalty,
-            channel_id=channel_id
-        )
+        stream_offline = config.get("stream_offline", False)
+        if stream_offline:
+            viewer_data = self.viewers.get_viewer(author)
+            if not viewer_data or "points" not in viewer_data:
+                viewer_data = {"count": 1, "points": 0, "rank": "Noob"}
+        else:
+            viewer_data = self.viewers.update_viewer(
+                author, 
+                trigger_welcome_cb=self._trigger_welcome,
+                trigger_rank_up_cb=self._trigger_rank_up,
+                check_loyalty_cb=self._check_loyalty,
+                channel_id=channel_id
+            )
         rank_info = self.viewers.get_rank(viewer_data.get("points", 0))
         
         
@@ -1687,8 +1745,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.gamble(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.gamble(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
                 if result.get("win"):
                      await self._fire_sb_alert("GAMBLE WIN", f"{author} won {amount} points!", author, "Gamble")
@@ -1701,8 +1759,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.slots(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.slots(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number.")
@@ -1713,8 +1771,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.bowl(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.bowl(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number.")
@@ -1727,8 +1785,8 @@ class BotService:
                 except ValueError:
                     await self._send_chat(f"@{author} Please enter a valid number.")
                     return
-            v = self.viewers.get_viewer(author)
-            result = await self.gambling.bat(author, amount, v.get("points", 0), self.viewers)
+            total_points = self.viewers.get_total_points(author)
+            result = await self.gambling.bat(author, amount, total_points, self.viewers)
             await self._send_chat(result["message"])
                 
 
@@ -1738,8 +1796,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = self.boss_fight.attack_boss(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = self.boss_fight.attack_boss(author, amount, total_points, self.viewers)
                 
                 if not result["success"]:
                     await self._send_chat(f"@{author} {result['message']}")
@@ -1784,6 +1842,79 @@ class BotService:
 
         elif cmd == "!memes" or cmd == "!rewards":
             await self._handle_memes_cmd(author)
+
+        elif cmd == "!loan":
+            if os.environ.get("RUN_MODE") != "cloud" and not getattr(self, "cloud_alert_client", None):
+                await self._send_chat(f"@{author} 🏦 The Cloud Banking System is offline.")
+                return
+            
+            cfg = self.load_config().get("loyalty", {})
+            loan_plans = cfg.get("loan_plans", [])
+            if not loan_plans:
+                await self._send_chat(f"@{author} 🏦 No loan plans are currently available.")
+                return
+                
+            if not args:
+                v = self.viewers.get_viewer(author)
+                total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+                if args and args[0] == "info":
+                     await self._send_chat(f"@{author} 🏦 Debt Info: Principal: {v.get('loan_principal', 0)}, Interest: {v.get('loan_interest', 0)}, Fines: {v.get('loan_fines', 0)}. Total Debt: {int(total_debt)}")
+                     return
+                
+                plans_msg = ", ".join([f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%)" for idx, p in enumerate(loan_plans)])
+                await self._send_chat(f"@{author} 🏦 Available Loan Plans: {plans_msg}. Use !loan take <id> to borrow, or !loan info to check your debt.")
+                return
+                
+            action = args[0].lower()
+            if action == "info":
+                v = self.viewers.get_viewer(author)
+                total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+                await self._send_chat(f"@{author} 🏦 Debt Info: Principal: {int(v.get('loan_principal', 0))}, Interest: {int(v.get('loan_interest', 0))}, Fines: {int(v.get('loan_fines', 0))}. Total Debt: {int(total_debt)}")
+                return
+            elif action == "take" and len(args) > 1:
+                plan_id = args[1]
+                target_plan = None
+                for idx, p in enumerate(loan_plans):
+                    if str(p.get("id", idx+1)) == plan_id:
+                        target_plan = p
+                        break
+                if not target_plan:
+                    await self._send_chat(f"@{author} 🏦 Invalid loan plan ID.")
+                    return
+                
+                # Check limits/anti-stacking
+                res = self.viewers.take_loan(author, target_plan.get("amount", 0), target_plan.get("duration_days", 7), target_plan.get("id", plan_id))
+                await self._send_chat(f"@{author} {res['message']}")
+            else:
+                await self._send_chat(f"@{author} 🏦 Usage: !loan, !loan info, or !loan take <id>")
+
+        elif cmd == "!payloan":
+            if os.environ.get("RUN_MODE") != "cloud" and not getattr(self, "cloud_alert_client", None):
+                await self._send_chat(f"@{author} 🏦 The Cloud Banking System is offline.")
+                return
+                
+            if not args:
+                await self._send_chat(f"@{author} 🏦 Usage: !payloan <amount> or !payloan all")
+                return
+                
+            v = self.viewers.get_viewer(author)
+            total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+            
+            if total_debt <= 0:
+                await self._send_chat(f"@{author} 🏦 You do not have any active loan debt.")
+                return
+                
+            if args[0].lower() == "all":
+                amount = int(total_debt)
+            else:
+                try:
+                    amount = int(args[0])
+                except ValueError:
+                    await self._send_chat(f"@{author} 🏦 Please enter a valid number or 'all'.")
+                    return
+                    
+            res = self.viewers.pay_loan(author, amount)
+            await self._send_chat(f"@{author} {res['message']}")
 
         else:
             # Custom Commands Fallback

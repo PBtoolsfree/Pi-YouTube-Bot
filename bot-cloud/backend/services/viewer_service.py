@@ -219,7 +219,8 @@ class ViewerService:
                 self.viewers[author] = {
                     "count": 0, "points": 0, "warnings": 0,
                     "last_seen": time.time(), "last_date": time.strftime("%Y-%m-%d"),
-                    "consecutive_days": 1, "rank": "Noob"
+                    "consecutive_days": 1, "rank": "Noob",
+                    "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
                 }
                 if channel_id:
                     self.viewers[author]["channel_id"] = channel_id
@@ -245,7 +246,8 @@ class ViewerService:
                     self.viewers[author] = {
                         "count": 0, "points": 0, "warnings": 0,
                         "last_seen": now, "last_date": today,
-                        "consecutive_days": 1, "rank": "Noob"
+                        "consecutive_days": 1, "rank": "Noob",
+                        "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
                     }
                     
                 # Merge points, count, and streak
@@ -270,7 +272,8 @@ class ViewerService:
                 "last_seen": now, 
                 "last_date": today,
                 "consecutive_days": 1,
-                "rank": "Noob"
+                "rank": "Noob",
+                "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
             }
             if channel_id:
                 self.viewers[author]["channel_id"] = channel_id
@@ -389,18 +392,115 @@ class ViewerService:
     def get_viewer(self, author):
         return self.viewers.get(author, {"count": 1})
 
+    def get_total_points(self, author):
+        """Returns spendable balance = real_points + loan_principal."""
+        if author not in self.viewers: return 0
+        v = self.viewers[author]
+        return v.get("points", 0) + v.get("loan_principal", 0)
+
     def deduct_points(self, author, amount):
         if self._should_bypass_db():
             self._forward_to_cloud("deduct_points", author=author, amount=amount)
             return True
         if author not in self.viewers: return False
-        if self.viewers[author]["points"] >= amount:
-            self.viewers[author]["points"] -= amount
+        
+        v = self.viewers[author]
+        loan_principal = v.get("loan_principal", 0)
+        real_points = v.get("points", 0)
+        
+        if loan_principal + real_points >= amount:
+            if loan_principal >= amount:
+                v["loan_principal"] -= amount
+            else:
+                remaining_deduction = amount - loan_principal
+                v["loan_principal"] = 0
+                v["points"] -= remaining_deduction
+                
             self.mark_dirty()
-            self._save_single_viewer(author, self.viewers[author])
+            self._save_single_viewer(author, v)
             self._notify_viewer_update(author, "deduct_points")
             return True
         return False
+
+    def take_loan(self, author, amount, duration_days, plan_id):
+        if self._should_bypass_db():
+            self._forward_to_cloud("take_loan", author=author, amount=amount, duration_days=duration_days, plan_id=plan_id)
+            return {"success": True, "message": "Forwarded to cloud."}
+            
+        if author not in self.viewers: return {"success": False, "message": "User not found."}
+        v = self.viewers[author]
+        
+        if v.get("loan_principal", 0) > 0 or v.get("loan_interest", 0) > 0 or v.get("loan_fines", 0) > 0:
+            return {"success": False, "message": "You already have an active loan. Please pay it back first."}
+            
+        v["loan_principal"] = amount
+        v["loan_interest"] = 0
+        v["loan_fines"] = 0
+        v["loan_due_date"] = time.time() + (duration_days * 86400)
+        v["loan_plan_id"] = plan_id
+        
+        self.mark_dirty()
+        self._save_single_viewer(author, v)
+        self._notify_viewer_update(author, "take_loan")
+        return {"success": True, "message": f"Loan of {amount} points approved!"}
+
+    def pay_loan(self, author, amount):
+        if self._should_bypass_db():
+            self._forward_to_cloud("pay_loan", author=author, amount=amount)
+            return {"success": True, "message": "Forwarded to cloud."}
+            
+        if author not in self.viewers: return {"success": False, "message": "User not found."}
+        v = self.viewers[author]
+        
+        if amount <= 0:
+            return {"success": False, "message": "Amount must be positive."}
+            
+        if v.get("points", 0) < amount:
+            return {"success": False, "message": f"Not enough real points to pay! You only have {v.get('points', 0)}."}
+            
+        total_debt = v.get("loan_fines", 0) + v.get("loan_interest", 0) + v.get("loan_principal", 0)
+        if total_debt <= 0:
+            return {"success": False, "message": "You do not have any active loan debt."}
+            
+        pay_amount = min(amount, total_debt)
+        
+        # Deduct from real points
+        v["points"] -= pay_amount
+        actual_paid = pay_amount
+        
+        # 1. Pay fines first
+        if pay_amount > 0 and v.get("loan_fines", 0) > 0:
+            deduct = min(pay_amount, v["loan_fines"])
+            v["loan_fines"] -= deduct
+            pay_amount -= deduct
+            
+        # 2. Pay interest
+        if pay_amount > 0 and v.get("loan_interest", 0) > 0:
+            deduct = min(pay_amount, v["loan_interest"])
+            v["loan_interest"] -= deduct
+            pay_amount -= deduct
+            
+        # 3. Pay principal
+        if pay_amount > 0 and v.get("loan_principal", 0) > 0:
+            deduct = min(pay_amount, v["loan_principal"])
+            v["loan_principal"] -= deduct
+            pay_amount -= deduct
+            
+        # If debt is cleared, reset plan details
+        if v.get("loan_fines", 0) + v.get("loan_interest", 0) + v.get("loan_principal", 0) == 0:
+            v["loan_due_date"] = 0
+            v["loan_plan_id"] = None
+            
+        # Rank update logic since points decreased
+        old_rank = v.get("rank", "Noob")
+        new_rank = self.get_rank(v["points"])
+        if old_rank != new_rank["name"]:
+            v["rank"] = new_rank["name"]
+            
+        self.mark_dirty()
+        self._save_single_viewer(author, v)
+        self._notify_viewer_update(author, "pay_loan")
+        return {"success": True, "message": f"Successfully paid {int(actual_paid)} points towards your loan.", "actual_paid": int(actual_paid)}
 
     def set_points(self, author, amount):
         """Set a viewer's points to an exact value."""
