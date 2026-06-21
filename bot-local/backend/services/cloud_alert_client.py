@@ -137,6 +137,23 @@ class CloudAlertClientService:
             if hasattr(self.bot, "_log_ui"):
                 await self.bot._log_ui("DONATION", "History sync update")
 
+        elif etype == "sync_config":
+            key = event.get("key")
+            value = event.get("value")
+            if key == "stream_offline":
+                cfg = self.bot.load_config()
+                cfg["stream_offline"] = value
+                from backend.config_manager import ConfigManager
+                ConfigManager.save_config(cfg)
+                logger.info(f"Local config synced from Cloud: stream_offline={value}")
+                
+                # Broadcast to Local UI
+                try:
+                    from backend.api import broadcast_log
+                    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+                except ImportError:
+                    pass
+                    
         elif etype == "viewer_point_update":
             username = event.get("username")
             data = event.get("data")

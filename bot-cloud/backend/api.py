@@ -1085,6 +1085,18 @@ async def toggle_offline():
     cfg = ConfigManager.get_config(force_reload=True)
     cfg["stream_offline"] = not cfg.get("stream_offline", False)
     ConfigManager.save_config(cfg)
+    
+    # Broadcast to Cloud UI
+    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+    
+    # Broadcast to Local Pi
+    if bot and getattr(bot, "pi_clients", None):
+        asyncio.create_task(bot.pi_clients.broadcast({
+            "type": "sync_config",
+            "key": "stream_offline",
+            "value": cfg["stream_offline"]
+        }))
+        
     return {"status": "success", "stream_offline": cfg["stream_offline"]}
 
 @app.post("/api/bot/restart")
