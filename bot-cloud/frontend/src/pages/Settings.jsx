@@ -14,7 +14,7 @@ export default function SettingsPage({ config, onSave }) {
 
     // Internal save handler
     const handleSave = () => onSave(localConfig)
-    const [activeSection, setActiveSection] = useState('youtube') // Start with YouTube as it's the priority
+    const [activeSection, setActiveSection] = useState('stream') // Start with stream
 
     // Sync localConfig when config prop updates
     React.useEffect(() => {
@@ -47,10 +47,6 @@ export default function SettingsPage({ config, onSave }) {
     }
 
     const sections = [
-        { id: 'youtube', label: 'YouTube & Auth', icon: <Youtube className="h-4 w-4" /> },
-        { id: 'ai', label: 'AI & Personality', icon: <MessageSquare className="h-4 w-4" /> },
-        { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
-        { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
     ]
 
