@@ -1648,6 +1648,16 @@ class BotService:
         cmd = parts[0].lower()
         args = parts[1:] if len(parts) > 1 else []
 
+        config = self.load_config()
+        if config.get("stream_offline", False):
+            offline_blocked_cmds = [
+                "!claim", "!give", "!rob", "!rps", "!heist", "!spin", 
+                "!slots", "!roll", "!gamble", "!bet", "!loan", "!pay"
+            ]
+            if cmd in offline_blocked_cmds:
+                await self._send_chat(f"@{author} ⛔ The stream is currently offline. All point activities and mini-games are disabled.")
+                return
+
         if cmd == "!claim":
             if getattr(self, "_loot_box_active", False):
                 self._loot_box_active = False

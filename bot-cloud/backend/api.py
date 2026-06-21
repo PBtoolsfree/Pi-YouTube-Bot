@@ -577,6 +577,10 @@ async def add_points(payload: Dict[str, Any]):
 
 @app.post("/api/loyalty/redeem")
 async def redeem_reward(payload: Dict[str, Any]):
+    from backend.config_manager import ConfigManager
+    if ConfigManager.get_config().get("stream_offline", False):
+        return {"status": "error", "message": "Stream is offline. Points activities are disabled."}
+        
     user = payload.get("user")
     cost = payload.get("cost", 0)
     reward = payload.get("reward", "Unknown Reward")
