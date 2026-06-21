@@ -2246,6 +2246,16 @@ class BotService:
             if sb_data:
                 await self._handle_sb_event(sb_data)
 
+        elif etype == "sync_config":
+            key = event.get("key")
+            value = event.get("value")
+            if key == "stream_offline":
+                cfg = self.load_config()
+                cfg["stream_offline"] = value
+                from backend.config_manager import ConfigManager
+                ConfigManager.save_config(cfg)
+                logger.info(f"Cloud config synced from Local: stream_offline={value}")
+
         elif etype == "viewer_api_action":
             action = event.get("action")
             params = event.get("params", {})
@@ -2475,11 +2485,20 @@ class BotService:
         from datetime import datetime
         d1, d2 = datetime.strptime(last_date, "%Y-%m-%d"), datetime.strptime(today, "%Y-%m-%d")
         delta_days = (d2 - d1).days
+        
+        # Stream Offline Streak Freeze Logic
+        is_consecutive = (delta_days == 1)
+        if delta_days > 1:
+            active_dates = getattr(self.viewers, "active_stream_dates", [])
+            if today in active_dates:
+                idx = active_dates.index(today)
+                if idx > 0 and active_dates[idx - 1] == last_date:
+                    is_consecutive = True
 
         eng_text = None
         hindi_voice = None
 
-        if delta_days == 1:
+        if is_consecutive:
             # Streak Continues
             streak = v.get("consecutive_days", 1) + 1
             v["consecutive_days"] = streak

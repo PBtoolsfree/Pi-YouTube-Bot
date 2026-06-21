@@ -22,6 +22,7 @@ class ViewerService:
         # Performance: Delayed Save
         self._dirty = False
         self._last_save = time.time()
+        self.active_stream_dates = []
         
         # WebSocket broadcast callback (set by bot_service after startup)
         self._broadcast_func = None
@@ -102,6 +103,13 @@ class ViewerService:
                 cursor.execute('SELECT username, data FROM viewers')
                 for row in cursor.fetchall():
                     viewers[row[0]] = json.loads(row[1])
+                    
+                cursor.execute('CREATE TABLE IF NOT EXISTS _metadata (key TEXT PRIMARY KEY, value TEXT)')
+                cursor.execute('SELECT value FROM _metadata WHERE key = ?', ("active_stream_dates",))
+                row = cursor.fetchone()
+                if row:
+                    self.active_stream_dates = json.loads(row[0])
+                    
                 conn.close()
             except Exception as e:
                 logger.error(f"Error loading viewers from DB: {e}")
@@ -123,6 +131,11 @@ class ViewerService:
             for user, user_data in self.viewers.items():
                 cursor.execute('INSERT OR REPLACE INTO viewers (username, data) VALUES (?, ?)', 
                                (user, json.dumps(user_data)))
+                               
+            cursor.execute('CREATE TABLE IF NOT EXISTS _metadata (key TEXT PRIMARY KEY, value TEXT)')
+            cursor.execute('INSERT OR REPLACE INTO _metadata (key, value) VALUES (?, ?)', 
+                           ("active_stream_dates", json.dumps(getattr(self, "active_stream_dates", []))))
+                           
             conn.commit()
             conn.close()
             self._dirty = False
@@ -143,6 +156,11 @@ class ViewerService:
             for user, user_data in self.viewers.items():
                 cursor.execute('INSERT OR REPLACE INTO viewers (username, data) VALUES (?, ?)', 
                                (user, json.dumps(user_data)))
+                               
+            cursor.execute('CREATE TABLE IF NOT EXISTS _metadata (key TEXT PRIMARY KEY, value TEXT)')
+            cursor.execute('INSERT OR REPLACE INTO _metadata (key, value) VALUES (?, ?)', 
+                           ("active_stream_dates", json.dumps(getattr(self, "active_stream_dates", []))))
+                           
             conn.commit()
             conn.close()
             self._dirty = False
@@ -227,6 +245,15 @@ class ViewerService:
             return self.viewers[author]
         now = time.time()
         today = time.strftime("%Y-%m-%d", time.localtime(now))
+        
+        if not hasattr(self, "active_stream_dates"):
+            self.active_stream_dates = []
+            
+        if today not in self.active_stream_dates:
+            self.active_stream_dates.append(today)
+            if len(self.active_stream_dates) > 30:
+                self.active_stream_dates = self.active_stream_dates[-30:]
+            self.mark_dirty()
         
         # --- AUTO MERGE BY CHANNEL ID ---
         # If the user changed their name (or we have a legacy name vs display name mismatch),
