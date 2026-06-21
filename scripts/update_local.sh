@@ -15,11 +15,13 @@ echo "1. Pulling latest code from GitHub..."
 git pull origin master || git pull || true
 
 echo "2. Installing Python dependencies..."
+cd bot-local
 if [ -d ".venv" ]; then
     .venv/bin/pip install -r requirements.txt --quiet
 else
     pip install -r requirements.txt --break-system-packages --quiet || pip install -r requirements.txt --quiet
 fi
+cd ..
 
 echo "3. Building Local Frontend..."
 if [ -d "bot-local/frontend" ]; then
