@@ -49,19 +49,21 @@
 
 ## Quick Update (One-liner)
 
+### For Local Pi
 SSH into your Pi and run:
 
 ```bash
-cd ~/pibot && bash ./update_local_pi.sh
+bash ~/pibot/scripts/update_local.sh
 ```
 
-Or use the more robust internal update script (with backup + rollback):
+### For Cloud VPS
+SSH into your Cloud VPS and run:
 
 ```bash
-cd ~/pibot/bot-local && bash scripts/update.sh
+bash ~/pibot/scripts/update_cloud.sh
 ```
 
-That's it. The script handles everything automatically, including rollback if the service fails to start.
+That's it. The script handles everything automatically, including rebuilding the dashboard.
 
 ---
 
@@ -147,17 +149,12 @@ curl -s http://localhost:8000/api/health | python3 -m json.tool
 
 ## Force Reinstall
 
-Forces a complete dependency reinstall and frontend rebuild, even if code hasn't changed:
+If you need to force a rebuild of the frontend or reinstall dependencies, simply run the update script again:
 
 ```bash
-cd ~/pibot/bot-local
-bash scripts/update.sh --force
+bash ~/pibot/scripts/update_local.sh
 ```
-
-The `--force` flag triggers:
-- Full `pip install -r requirements.txt`
-- Complete `npm install` + `npm run build`
-- Service restart with rollback check
+(or `update_cloud.sh` for the cloud server).
 
 ---
 
@@ -180,7 +177,7 @@ crontab -e
 Add this line:
 
 ```
-0 3 * * * /bin/bash $HOME/pibot/bot-local/scripts/auto-update.sh >> $HOME/pibot/bot-local/logs/auto-update.log 2>&1
+0 3 * * * /bin/bash $HOME/pibot/scripts/auto-update.sh >> $HOME/pibot/logs/auto-update.log 2>&1
 ```
 
 ### What auto-update does
@@ -191,7 +188,7 @@ Add this line:
 | 2 | Fetches from GitHub |
 | 3 | Compares local vs remote commit hashes |
 | 4 | **Skips entirely** if already up to date |
-| 5 | Delegates to `scripts/update.sh` (with auto-rollback) |
+| 5 | Delegates to `scripts/update_local.sh` or `scripts/update_cloud.sh` |
 | 6 | Logs everything to `logs/auto-update.log` |
 
 ### Disable auto-update
@@ -216,32 +213,14 @@ docker compose up -d --build
 
 ---
 
-## What the Update Script Does
+## What the Update Scripts Do
 
-Here's the exact flow when you run `bash scripts/update.sh`:
+Here's the exact flow when you run `bash scripts/update_local.sh` or `update_cloud.sh`:
 
-```
-┌─────────────────────────────────────────────┐
-│  Step 1/5: Create local data backup         │
-│  (config, .env, viewers.db, data/)          │
-├─────────────────────────────────────────────┤
-│  Step 2/5: git pull origin <branch>         │
-│  (fetches latest code from GitHub)          │
-├─────────────────────────────────────────────┤
-│  Step 3/5: pip install -r requirements.txt  │
-│  (updates Python packages in .venv)         │
-├─────────────────────────────────────────────┤
-│  Step 4/5: npm install + npm run build      │
-│  (only with --force or --frontend flag)     │
-├─────────────────────────────────────────────┤
-│  Step 5/5: systemctl restart pibot          │
-│  (restarts the systemd service)             │
-├─────────────────────────────────────────────┤
-│  ⚠ ROLLBACK CHECK (after 3 seconds)        │
-│  If service failed → git reset --hard       │
-│  to previous commit and restart again       │
-└─────────────────────────────────────────────┘
-```
+1. **Pulling latest code from GitHub...** (`git pull origin master`)
+2. **Installing Python dependencies...** (`pip install -r requirements.txt`)
+3. **Building Frontend...** (`npm install` and `npm run build` in the specific frontend directory)
+4. **Restarting Service...** (`systemctl restart pibot.service` or `pibot-cloud.service`)
 
 ---
 
@@ -344,7 +323,7 @@ scp pradip@172.168.30.135:~/pibot-backup-*.tar.gz D:\bot\backups\
 
 ```bash
 cd ~/pibot
-bash ./update_cloud.sh
+bash ~/pibot/scripts/update_cloud.sh
 ```
 
 ### Manual update
@@ -406,7 +385,7 @@ This means the systemd service file is pointing to the **old path** (before the 
 ```bash
 cd ~/pibot
 git pull origin master
-bash ./update_local_pi.sh
+bash ~/pibot/scripts/update_local.sh
 ```
 
 The update script automatically detects old service paths and rewrites them to point to `bot-local/`.
@@ -524,15 +503,15 @@ This is **expected behavior** in the split architecture. AI processing runs on t
 ```
 ┌──────────────────────────────────────────────────────┐
 │  LOCAL PI UPDATE (SSH into Pi)                       │
-│  cd ~/pibot && bash ./update_local_pi.sh             │
+│  bash ~/pibot/scripts/update_local.sh                │
 │                                                      │
 │  CLOUD VPS UPDATE (SSH into Cloud)                   │
-│  cd ~/pibot && bash ./update_cloud.sh                │
+│  bash ~/pibot/scripts/update_cloud.sh                │
 │                                                      │
 │  FORCE UPDATE (Nuclear)                              │
 │  cd ~/pibot                                          │
 │  git fetch origin && git reset --hard origin/master  │
-│  bash ./update_local_pi.sh    # (or update_cloud.sh) │
+│  bash ~/pibot/scripts/update_local.sh                │
 │                                                      │
 │  CHECK STATUS                                        │
 │  sudo systemctl status pibot.service                 │
