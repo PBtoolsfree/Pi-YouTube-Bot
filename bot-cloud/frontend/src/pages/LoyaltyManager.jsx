@@ -1055,6 +1055,7 @@ function StatBox({ title, value, icon, subtext }) {
                 </div>
             </CardContent>
             <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-gradient-to-br from-zinc-800/20 to-transparent rounded-full blur-xl pointer-events-none" />
+        </Card>
     )
 }
 
