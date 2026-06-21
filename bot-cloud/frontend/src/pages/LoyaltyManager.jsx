@@ -447,61 +447,117 @@ export default function LoyaltyManagerPage() {
 
                     <div className="grid md:grid-cols-3 gap-6">
                         {/* Guide / How to Play */}
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-1">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
+                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-1 overflow-hidden relative">
+                            <div className="absolute inset-0 bg-gradient-to-b from-zinc-800/20 to-transparent pointer-events-none" />
+                            <CardHeader className="pb-3 border-b border-zinc-800 relative z-10">
                                 <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                                    <AlertCircle className="h-4 w-4 text-zinc-400" /> How to Play
+                                    <AlertCircle className="h-4 w-4 text-emerald-400" /> How to Play
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="p-4 space-y-4 text-sm text-zinc-400 leading-relaxed">
-                                <p>Viewers can type these commands in chat to play and earn points:</p>
+                            <CardContent className="p-4 space-y-3 text-sm text-zinc-400 leading-relaxed relative z-10">
+                                <p className="text-xs mb-4 text-zinc-300">Viewers can type these commands in chat to play and earn points:</p>
                                 
-                                <div className="space-y-2">
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                                        <div className="font-bold text-violet-400 mb-1 font-mono">!gamble &lt;amount&gt;</div>
-                                        <p className="text-xs">A 50/50 chance game. Double your bet if you win, lose your bet if you fail.</p>
+                                <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+                                    {/* Gamble */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(139,92,246,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-violet-400 text-xs font-mono tracking-tight bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">!gamble &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">A 50/50 chance game. Double your bet if you win, lose your bet if you fail.</p>
+                                        </div>
                                     </div>
 
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                                        <div className="font-bold text-amber-400 mb-1 font-mono">!slots &lt;amount&gt;</div>
-                                        <p className="text-xs">Spin the slot machine. Matches multiply your bet:</p>
-                                        <ul className="list-disc ml-5 mt-1 text-[10px] space-y-0.5">
-                                            <li>Triple 7s (7️⃣7️⃣7️⃣) = 10x Jackpot</li>
-                                            <li>Triple Diamonds (💎💎💎) = 5x</li>
-                                            <li>Other Triples = 3x</li>
-                                            <li>Any Pair = 1.5x</li>
-                                        </ul>
-                                    </div>
-                                    
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 border-l-4 border-l-blue-500">
-                                        <div className="font-bold text-blue-400 mb-1 font-mono">!bowl &lt;amount&gt;</div>
-                                        <p className="text-xs">Throw an open challenge! The first person to type <code className="text-amber-400 bg-zinc-900 px-1 rounded">!bat</code> faces your delivery for the set amount.</p>
-                                    </div>
-                                    
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 border-l-4 border-l-amber-500">
-                                        <div className="font-bold text-amber-400 mb-1 font-mono">!bat &lt;amount&gt;</div>
-                                        <p className="text-xs">Play a solo cricket match or accept a !bowl challenge. Solo rewards:</p>
-                                        <ul className="list-disc ml-5 mt-1 text-[10px] space-y-0.5">
-                                            <li>Out (40% chance) = Lose points</li>
-                                            <li>1 or 2 runs = Get 1x or 1.5x points</li>
-                                            <li>4 runs (Boundary) = 2x points</li>
-                                            <li>6 runs (Sixer) = 3x points</li>
-                                        </ul>
+                                    {/* Slots */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(245,158,11,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-amber-400 text-xs font-mono tracking-tight bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">!slots &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Spin the slot machine. Matches multiply your bet:</p>
+                                            <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
+                                                <li>Triple 7s (7️⃣7️⃣7️⃣) = 10x Jackpot</li>
+                                                <li>Triple Diamonds (💎💎💎) = 5x</li>
+                                                <li>Other Triples = 3x, Any Pair = 1.5x</li>
+                                            </ul>
+                                        </div>
                                     </div>
 
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                                        <div className="font-bold text-emerald-400 mb-1 font-mono">!give &lt;user&gt; &lt;amount&gt;</div>
-                                        <p className="text-xs">Transfer some of your available points to another viewer.</p>
+                                    {/* Loan */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(16,185,129,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-emerald-400 text-xs font-mono tracking-tight bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">!loan &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Borrow points instantly from the Pi Bank.</p>
+                                            <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
+                                                <li>Subject to interest & duration.</li>
+                                                <li>Repay automatically when earning points.</li>
+                                            </ul>
+                                        </div>
                                     </div>
                                     
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                                        <div className="font-bold text-red-500 mb-1 font-mono">!rob &lt;user&gt;</div>
-                                        <p className="text-xs">Attempt to sneakily steal 10% points from a user. <br/><span className="text-zinc-500">40% Win Chance. 60% Failure gives them a fine instead!</span></p>
+                                    {/* Bowl */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(59,130,246,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-blue-400 text-xs font-mono tracking-tight bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">!bowl &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">Throw an open challenge! The first person to type <code className="text-blue-300 bg-blue-900/30 px-1 rounded">!bat</code> faces your delivery.</p>
+                                        </div>
                                     </div>
                                     
-                                    <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 border-l-4 border-l-red-500">
-                                        <div className="font-bold text-red-400 mb-1 font-mono">!attack &lt;amount&gt;</div>
-                                        <p className="text-xs">Fight the live Boss using your points! <br/><span className="text-zinc-500">Top 3 damage dealers share a massive reward pool, and everyone who participates gets a 50pt participation bonus.</span></p>
+                                    {/* Bat */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(14,165,233,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-sky-400 text-xs font-mono tracking-tight bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">!bat &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Play a solo cricket match or accept a challenge:</p>
+                                            <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
+                                                <li>Out (40%) = Lose points</li>
+                                                <li>1-2 runs = 1x-1.5x points</li>
+                                                <li>4 runs = 2x, 6 runs = 3x points</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    {/* Give */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(236,72,153,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-pink-400 text-xs font-mono tracking-tight bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20">!give &lt;user&gt; &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">Transfer some of your available points to another viewer.</p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Rob */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(244,63,94,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-rose-500 text-xs font-mono tracking-tight bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">!rob &lt;user&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">Attempt to sneakily steal 10% points from a user. <span className="text-rose-400/80">40% Win Chance.</span></p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Attack */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(239,68,68,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="font-bold text-red-400 text-xs font-mono tracking-tight bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">!attack &lt;amount&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400">Fight the live Boss using your points! Top 3 dealers share a massive pool.</p>
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>

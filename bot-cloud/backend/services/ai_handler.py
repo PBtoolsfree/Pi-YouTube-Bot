@@ -137,7 +137,8 @@ class AIHandler:
 - Boss ki HP 0 hone pe Top 3 attackers ko reward pool milta hai. Baaki sab ko 50 pts participation reward.
 - Ye streamer-triggered event hai, randomly nahi aata.
 
-### 🤝 Economy Commands:
+### 🏦 Bank & Economy Commands:
+- `!loan <amount>` — Bank se points udhaar lo (e.g., `!loan 5000`). Points automatically kat jayenge jab tum earn karoge, with interest and potential fines if late.
 - `!give <user> <amount>` — Apne points dusre ko do.
 - `!top` / `!leaderboard` — Top 5 viewers by points.
 - `!shop` / `!redeem <name>` — Points se rewards kharido (memes, OBS effects, etc.)
