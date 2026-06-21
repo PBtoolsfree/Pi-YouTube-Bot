@@ -370,7 +370,13 @@ export default function SettingsPage({ config, onSave }) {
                                     </div>
                                     <Switch
                                         checked={localConfig.stream_offline || false}
-                                        onCheckedChange={(c) => updateNested('stream_offline', c)}
+                                        onCheckedChange={async () => {
+                                            try {
+                                                await axios.post(`${API_URL}/bot/toggle-offline`);
+                                            } catch (e) {
+                                                console.error(e);
+                                            }
+                                        }}
                                     />
                                 </div>
                             </CardContent>
