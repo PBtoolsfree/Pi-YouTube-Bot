@@ -138,7 +138,10 @@ class AIHandler:
 - Ye streamer-triggered event hai, randomly nahi aata.
 
 ### 🏦 Bank & Economy Commands:
-- `!loan <amount>` — Bank se points udhaar lo (e.g., `!loan 5000`). Points automatically kat jayenge jab tum earn karoge, with interest and potential fines if late.
+- `!loan` — Check available loan plans from the Pi Bank.
+- `!loan take <id>` — Take a specific loan (e.g., `!loan take 1`).
+- `!loan info` — Check your active debt, interest, and fines.
+- `!payloan <amount>` or `!payloan all` — Manually repay your loan debt. Note: Points are also automatically deducted towards debt when earned.
 - `!give <user> <amount>` — Apne points dusre ko do.
 - `!top` / `!leaderboard` — Top 5 viewers by points.
 - `!shop` / `!redeem <name>` — Points se rewards kharido (memes, OBS effects, etc.)

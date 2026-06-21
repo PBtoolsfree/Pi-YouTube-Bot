@@ -489,13 +489,16 @@ export default function LoyaltyManagerPage() {
                                     <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(16,185,129,0.2)]">
                                         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                         <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
-                                            <div className="flex items-center justify-between mb-1.5">
-                                                <div className="font-bold text-emerald-400 text-xs font-mono tracking-tight bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">!loan &lt;amount&gt;</div>
+                                            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                                                <div className="font-bold text-emerald-400 text-[10px] font-mono tracking-tight bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">!loan</div>
+                                                <div className="font-bold text-emerald-400 text-[10px] font-mono tracking-tight bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">!loan info</div>
+                                                <div className="font-bold text-emerald-400 text-[10px] font-mono tracking-tight bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">!loan take &lt;id&gt;</div>
+                                                <div className="font-bold text-emerald-400 text-[10px] font-mono tracking-tight bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">!payloan &lt;amt|all&gt;</div>
                                             </div>
                                             <p className="text-[11px] text-zinc-400 mb-1">Borrow points instantly from the Pi Bank.</p>
                                             <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
-                                                <li>Subject to interest & duration.</li>
-                                                <li>Repay automatically when earning points.</li>
+                                                <li>Check available plans or your debt with info.</li>
+                                                <li>Repay manually or auto-pay when earning points.</li>
                                             </ul>
                                         </div>
                                     </div>
