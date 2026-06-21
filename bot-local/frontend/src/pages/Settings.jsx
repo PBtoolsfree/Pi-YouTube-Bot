@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, FileSpreadsheet, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud } from 'lucide-react'
+import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, FileSpreadsheet, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud, Power } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, Input, Button, Switch, Textarea } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
 
@@ -51,6 +51,7 @@ export default function SettingsPage({ config, onSave }) {
         { id: 'ai', label: 'AI & Personality', icon: <MessageSquare className="h-4 w-4" /> },
         { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
         { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
+        { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
     ]
 
     // ─── BACKUP STATE ───────────────────────────────────────────
@@ -356,6 +357,30 @@ export default function SettingsPage({ config, onSave }) {
 
             {/* --- SECTIONS --- */}
             <div className="grid gap-6">
+
+                {activeSection === 'stream' && (
+                    <div className="grid gap-6 md:grid-cols-2">
+                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                            <CardHeader className="pb-3 border-b border-zinc-800">
+                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
+                                    <Power className="h-4 w-4 text-rose-500" /> Stream Control
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <label className="text-sm font-medium text-zinc-300">Stream Offline Mode</label>
+                                        <p className="text-[10px] text-zinc-500">When enabled, loyalty points will not be distributed and certain automated actions will pause.</p>
+                                    </div>
+                                    <Switch
+                                        checked={localConfig.stream_offline || false}
+                                        onCheckedChange={(c) => updateNested('stream_offline', c)}
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
 
                 {activeSection === 'youtube' && (
                     <div className="grid gap-6 md:grid-cols-2">

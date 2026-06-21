@@ -588,7 +588,6 @@ function QuickControls() {
     const [restarting, setRestarting] = React.useState(false)
     const [aiEnabled, setAiEnabled] = React.useState(true)
     const [ttsEnabled, setTtsEnabled] = React.useState(true)
-    const [streamOffline, setStreamOffline] = React.useState(false)
 
     React.useEffect(() => {
         const load = async () => {
@@ -596,18 +595,10 @@ function QuickControls() {
                 const res = await axios.get('/api/config')
                 setAiEnabled(res.data?.ai_topology?.enabled !== false)
                 setTtsEnabled(res.data?.audio?.enabled !== false)
-                setStreamOffline(!!res.data?.stream_offline)
             } catch (e) { }
         }
         load()
     }, [])
-
-    const toggleStreamOffline = async () => {
-        try {
-            const res = await axios.post('/api/bot/toggle-offline')
-            setStreamOffline(res.data.stream_offline)
-        } catch (e) { }
-    }
 
     const toggleAI = async () => {
         try {
@@ -653,13 +644,6 @@ function QuickControls() {
                     : 'text-zinc-500 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700'}`}>
                 <span className="flex items-center gap-1.5"><Volume2 className="h-3 w-3" />TTS Audio</span>
                 <span className={`text-[10px] font-bold ${ttsEnabled ? 'text-emerald-400' : 'text-zinc-600'}`}>{ttsEnabled ? 'ON' : 'OFF'}</span>
-            </button>
-            <button onClick={toggleStreamOffline}
-                className={`flex items-center justify-between text-xs font-bold px-3 py-2 rounded border transition-all ${streamOffline
-                    ? 'text-rose-300 bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20'
-                    : 'text-zinc-500 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700'}`}>
-                <span className="flex items-center gap-1.5"><Power className="h-3 w-3" />Stream Offline</span>
-                <span className={`text-[10px] font-bold ${streamOffline ? 'text-rose-400' : 'text-zinc-600'}`}>{streamOffline ? 'ON' : 'OFF'}</span>
             </button>
             <button onClick={restartBot} disabled={restarting}
                 className="flex items-center justify-center gap-1.5 text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-2 rounded border border-zinc-700 transition-colors disabled:opacity-50">
