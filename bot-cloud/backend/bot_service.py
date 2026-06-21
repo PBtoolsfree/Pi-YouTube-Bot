@@ -2255,6 +2255,8 @@ class BotService:
                 from backend.config_manager import ConfigManager
                 ConfigManager.save_config(cfg)
                 logger.info(f"Cloud config synced from Local: stream_offline={value}")
+                from backend.api import broadcast_log
+                asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
 
         elif etype == "viewer_api_action":
             action = event.get("action")

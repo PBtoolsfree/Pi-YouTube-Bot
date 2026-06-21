@@ -157,6 +157,10 @@ function App() {
     }
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      if (data.type === 'config_update') {
+        setConfig(data.config)
+        return
+      }
       if (data.type !== 'log') return
       setLogs(prev => [data, ...prev].slice(0, 200))
     }
