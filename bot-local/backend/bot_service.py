@@ -1249,7 +1249,8 @@ class BotService:
             self._content_dedup_dict = {k: v for k, v in self._content_dedup_dict.items() if v > cutoff}
             
         last_seen = self._content_dedup_dict.get(content_hash, 0)
-        if now - last_seen < 15 and not force_ai:
+        # Reduce window to 1.5s to catch dual-pipeline duplicates but allow fast human spam
+        if now - last_seen < 1.5 and not force_ai:
             logger.info(f"Duplicate Message Ignored (content): {content_hash}")
             return None
             
