@@ -449,9 +449,14 @@ class ViewerService:
             return True
         return False
 
-    def take_loan(self, author, amount, duration_days, plan_id):
+    def take_loan(self, author, plan):
+        amount = plan.get("amount", 0)
+        duration_days = plan.get("duration_days", 7)
+        plan_id = plan.get("id")
+        plan_type = plan.get("type", "daily")
+
         if self._should_bypass_db():
-            self._forward_to_cloud("take_loan", author=author, amount=amount, duration_days=duration_days, plan_id=plan_id)
+            self._forward_to_cloud("take_loan", author=author, plan=plan)
             return {"success": True, "message": "Forwarded to cloud."}
             
         if author not in self.viewers: return {"success": False, "message": "User not found."}
@@ -461,7 +466,12 @@ class ViewerService:
             return {"success": False, "message": "You already have an active loan. Please pay it back first."}
             
         v["loan_principal"] = amount
-        v["loan_interest"] = 0
+        
+        if plan_type == "lumpsum":
+            v["loan_interest"] = int(amount * (plan.get("total_interest_pct", 0) / 100.0))
+        else:
+            v["loan_interest"] = 0
+            
         v["loan_fines"] = 0
         v["loan_due_date"] = time.time() + (duration_days * 86400)
         v["loan_plan_id"] = plan_id

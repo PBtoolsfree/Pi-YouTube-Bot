@@ -1120,21 +1120,36 @@ function StatBox({ title, value, icon, subtext }) {
 
 function LoansTab({ config, setConfig, viewers, saveConfig }) {
     const plans = config?.loan_plans || []
+    const [expandedIdx, setExpandedIdx] = React.useState(null)
 
     const addPlan = () => {
-        const updated = [...plans, { id: plans.length + 1, amount: 10000, duration_days: 7, daily_interest_pct: 1, late_fine: 500 }]
+        const updated = [...plans, { 
+            id: plans.length + 1, 
+            type: 'daily',
+            amount: 10000, 
+            duration_days: 7, 
+            daily_interest_pct: 1, 
+            total_interest_pct: 10,
+            late_fine: 500 
+        }]
         setConfig({ ...config, loan_plans: updated })
+        setExpandedIdx(updated.length - 1)
     }
 
     const removePlan = (idx) => {
         const updated = plans.filter((_, i) => i !== idx)
         setConfig({ ...config, loan_plans: updated })
+        if (expandedIdx === idx) setExpandedIdx(null)
     }
 
     const updatePlan = (idx, field, val) => {
         const updated = [...plans]
         updated[idx] = { ...updated[idx], [field]: val }
         setConfig({ ...config, loan_plans: updated })
+    }
+
+    const toggleExpand = (idx) => {
+        setExpandedIdx(expandedIdx === idx ? null : idx)
     }
 
     const borrowers = viewers.filter(v => (v.loan_principal || 0) > 0 || (v.loan_interest || 0) > 0 || (v.loan_fines || 0) > 0)
@@ -1152,35 +1167,102 @@ function LoansTab({ config, setConfig, viewers, saveConfig }) {
                         </Button>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
-                        {plans.map((p, idx) => (
-                            <div key={idx} className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 space-y-3 relative mt-2">
-                                <button onClick={() => removePlan(idx)} className="absolute top-2 right-2 text-zinc-500 hover:text-rose-400">
-                                    <X className="h-4 w-4" />
-                                </button>
-                                <div className="grid grid-cols-2 gap-3 text-sm pr-6">
-                                    <div>
-                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Plan ID / Name</label>
-                                        <Input value={p.id || ''} onChange={e => updatePlan(idx, 'id', e.target.value)} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                        <div className="space-y-2">
+                            {plans.map((p, idx) => (
+                                expandedIdx === idx ? (
+                                    <div key={idx} className="bg-zinc-950 p-4 rounded-lg border border-zinc-700 space-y-3 relative mt-2">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="text-sm font-bold text-zinc-100 cursor-pointer flex-1" onClick={() => toggleExpand(idx)}>
+                                                Plan: {p.id} <ChevronUp className="h-4 w-4 inline text-zinc-500 ml-1"/>
+                                            </h4>
+                                            <button onClick={(e) => { e.stopPropagation(); removePlan(idx); }} className="text-zinc-500 hover:text-rose-400">
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Plan ID / Name</label>
+                                                <Input value={p.id || ''} onChange={e => updatePlan(idx, 'id', e.target.value)} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Plan Type</label>
+                                                <select 
+                                                    value={p.type || 'daily'} 
+                                                    onChange={e => updatePlan(idx, 'type', e.target.value)}
+                                                    className="flex h-8 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs shadow-sm text-zinc-100 outline-none"
+                                                >
+                                                    <option value="daily">Daily Repayment</option>
+                                                    <option value="lumpsum">Lumpsum (One-Time)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Principal Amount</label>
+                                                <Input type="number" value={p.amount || 0} onChange={e => updatePlan(idx, 'amount', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Duration (Days)</label>
+                                                <Input type="number" value={p.duration_days || 0} onChange={e => updatePlan(idx, 'duration_days', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                            </div>
+                                            
+                                            {(!p.type || p.type === 'daily') ? (
+                                                <div>
+                                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Daily Interest (%)</label>
+                                                    <Input type="number" value={p.daily_interest_pct || 0} step="0.1" onChange={e => updatePlan(idx, 'daily_interest_pct', parseFloat(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Total Interest (%)</label>
+                                                    <Input type="number" value={p.total_interest_pct || 0} step="0.1" onChange={e => updatePlan(idx, 'total_interest_pct', parseFloat(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Late Fine (Per Day)</label>
+                                                <Input type="number" value={p.late_fine || 0} onChange={e => updatePlan(idx, 'late_fine', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Calculations */}
+                                        <div className="bg-zinc-900 p-2 rounded border border-zinc-800 text-xs text-zinc-400 mt-2">
+                                            {p.type === 'lumpsum' ? (
+                                                <div className="flex justify-between items-center">
+                                                    <span>Total Repayment:</span>
+                                                    <span className="font-bold text-zinc-100">
+                                                        {Math.round((p.amount || 0) + ((p.amount || 0) * ((p.total_interest_pct || 0) / 100)))} pts
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span>Total Estimated Repayment:</span>
+                                                        <span className="font-bold text-zinc-100">
+                                                            {Math.round((p.amount || 0) + ((p.amount || 0) * ((p.daily_interest_pct || 0) / 100) * (p.duration_days || 0)))} pts
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-emerald-500">Per Day Payment:</span>
+                                                        <span className="font-bold text-emerald-400">
+                                                            {p.duration_days > 0 
+                                                                ? Math.round(((p.amount || 0) + ((p.amount || 0) * ((p.daily_interest_pct || 0) / 100) * (p.duration_days || 0))) / p.duration_days) 
+                                                                : 0} pts/day
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Principal Amount</label>
-                                        <Input type="number" value={p.amount || 0} onChange={e => updatePlan(idx, 'amount', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
+                                ) : (
+                                    <div key={idx} className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex justify-between items-center cursor-pointer hover:border-zinc-700" onClick={() => toggleExpand(idx)}>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-semibold text-zinc-200">Plan: {p.id}</span>
+                                            <span className="text-[10px] text-zinc-500 uppercase">{p.type === 'lumpsum' ? 'Lumpsum' : 'Daily'} • {p.amount} pts</span>
+                                        </div>
+                                        <ChevronDown className="h-4 w-4 text-zinc-500" />
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Duration (Days)</label>
-                                        <Input type="number" value={p.duration_days || 0} onChange={e => updatePlan(idx, 'duration_days', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Daily Interest (%)</label>
-                                        <Input type="number" value={p.daily_interest_pct || 0} step="0.1" onChange={e => updatePlan(idx, 'daily_interest_pct', parseFloat(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Late Fine (Per Day)</label>
-                                        <Input type="number" value={p.late_fine || 0} onChange={e => updatePlan(idx, 'late_fine', parseInt(e.target.value))} className="h-8 bg-zinc-900 border-zinc-700 text-xs" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                                )
+                            ))}
+                        </div>
                         {plans.length === 0 && <div className="text-center text-sm text-zinc-500 py-4">No loan plans configured.</div>}
                         
                         <Button onClick={saveConfig} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg mt-4">

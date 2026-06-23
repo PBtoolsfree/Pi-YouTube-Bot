@@ -321,11 +321,12 @@ class BotService:
                             
                         plan_id = str(v.get("loan_plan_id", ""))
                         plan = loan_plans.get(plan_id, {})
+                        plan_type = plan.get("type", "daily")
                         
                         daily_rate = plan.get("daily_interest_pct", 0) / 100.0
                         late_fine = plan.get("late_fine", 0)
                         
-                        if principal > 0 and daily_rate > 0:
+                        if principal > 0 and daily_rate > 0 and plan_type == "daily":
                             interest_amt = int(principal * daily_rate)
                             v["loan_interest"] += interest_amt
                             
@@ -1574,17 +1575,21 @@ class BotService:
         cmd_prefix = cmd_cfg.get("prefix", "!")
         
         is_command_run = False
-        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()) and not is_forwarded:
+        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
             remaining = message[len(cmd_prefix):].strip()
             parts = remaining.split(" ")
             cmd_name = parts[0].lower().strip()
             
+            # Cloud only commands that should be processed even if forwarded from local Pi
+            cloud_only_commands = {"loan", "payloan"}
+            
             if is_valid_command(cmd_name, config):
-                normalized_message = "!" + cmd_name
-                if len(parts) > 1:
-                    normalized_message += " " + " ".join(parts[1:])
-                await self._handle_command(author, normalized_message, chat_obj)
-                is_command_run = True
+                if not is_forwarded or cmd_name in cloud_only_commands:
+                    normalized_message = "!" + cmd_name
+                    if len(parts) > 1:
+                        normalized_message += " " + " ".join(parts[1:])
+                    await self._handle_command(author, normalized_message, chat_obj)
+                    is_command_run = True
 
         if is_command_run:
             pass
@@ -1871,8 +1876,16 @@ class BotService:
                      await self._send_chat(f"@{author} 🏦 Debt Info: Principal: {v.get('loan_principal', 0)}, Interest: {v.get('loan_interest', 0)}, Fines: {v.get('loan_fines', 0)}. Total Debt: {int(total_debt)}")
                      return
                 
-                plans_msg = ", ".join([f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%)" for idx, p in enumerate(loan_plans)])
-                await self._send_chat(f"@{author} 🏦 Available Loan Plans: {plans_msg}. Use !loan take <id> to borrow, or !loan info to check your debt.")
+                plans_list = []
+                for idx, p in enumerate(loan_plans):
+                    ptype = p.get('type', 'daily')
+                    if ptype == 'lumpsum':
+                        plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Lumpsum ({p.get('duration_days', 7)}d, {p.get('total_interest_pct', 0)}% tot)")
+                    else:
+                        plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Daily ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%/d)")
+                
+                plans_msg = ", ".join(plans_list)
+                await self._send_chat(f"@{author} 🏦 Loan Plans: {plans_msg}. Use !loan take <id> to borrow, or !loan info to check debt.")
                 return
                 
             action = args[0].lower()
@@ -1893,7 +1906,7 @@ class BotService:
                     return
                 
                 # Check limits/anti-stacking
-                res = self.viewers.take_loan(author, target_plan.get("amount", 0), target_plan.get("duration_days", 7), target_plan.get("id", plan_id))
+                res = self.viewers.take_loan(author, target_plan)
                 await self._send_chat(f"@{author} {res['message']}")
             else:
                 await self._send_chat(f"@{author} 🏦 Usage: !loan, !loan info, or !loan take <id>")
