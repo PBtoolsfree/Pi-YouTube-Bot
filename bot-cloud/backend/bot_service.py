@@ -1426,6 +1426,14 @@ class BotService:
                 check_loyalty_cb=self._check_loyalty,
                 channel_id=channel_id
             )
+            
+            total_debt = viewer_data.get("loan_principal", 0) + viewer_data.get("loan_interest", 0) + viewer_data.get("loan_fines", 0)
+            if total_debt > 0:
+                today = time.strftime("%Y-%m-%d")
+                if viewer_data.get("loan_reminded_date") != today:
+                    viewer_data["loan_reminded_date"] = today
+                    self.viewers.mark_dirty()
+                    asyncio.create_task(self._send_chat(f"🏦 @{author} Reminder: You have an active loan debt of {int(total_debt)} points. Please clear it using !payloan."))
         rank_info = self.viewers.get_rank(viewer_data.get("points", 0))
         
         
@@ -1884,8 +1892,8 @@ class BotService:
                     else:
                         plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Daily ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%/d)")
                 
-                plans_msg = ", ".join(plans_list)
-                await self._send_chat(f"@{author} 🏦 Loan Plans: {plans_msg}. Use !loan take <id> to borrow, or !loan info to check debt.")
+                plans_msg = "\n".join([f"🔸 {p}" for p in plans_list])
+                await self._send_chat(f"@{author} 🏦 Loan Plans:\n{plans_msg}\nUse !loan take <id> to borrow, or !loan info to check debt.")
                 return
                 
             action = args[0].lower()
@@ -1917,7 +1925,7 @@ class BotService:
                 return
                 
             if not args:
-                await self._send_chat(f"@{author} 🏦 Usage: !payloan <amount> or !payloan all")
+                await self._send_chat(f"@{author} 🏦 Usage: !payloan <amount>, !payloan all, or !payloan <plan_id>")
                 return
                 
             v = self.viewers.get_viewer(author)
@@ -1927,13 +1935,31 @@ class BotService:
                 await self._send_chat(f"@{author} 🏦 You do not have any active loan debt.")
                 return
                 
-            if args[0].lower() == "all":
+            active_plan_id = str(v.get("loan_plan_id", ""))
+            arg = args[0].lower()
+            
+            if arg == "all":
                 amount = int(total_debt)
+            elif arg == active_plan_id:
+                cfg = self.load_config().get("loyalty", {})
+                loan_plans = {str(p.get("id", idx+1)): p for idx, p in enumerate(cfg.get("loan_plans", []))}
+                plan = loan_plans.get(active_plan_id, {})
+                ptype = plan.get("type", "daily")
+                
+                if ptype == "lumpsum":
+                    amount = int(total_debt)
+                else:
+                    duration = max(1, plan.get("duration_days", 7))
+                    base_amt = plan.get("amount", 0)
+                    daily_pct = plan.get("daily_interest_pct", 0)
+                    expected_total = base_amt + (base_amt * (daily_pct / 100.0) * duration)
+                    daily_amount = expected_total / duration
+                    amount = min(max(1, int(daily_amount)), int(total_debt))
             else:
                 try:
-                    amount = int(args[0])
+                    amount = int(arg)
                 except ValueError:
-                    await self._send_chat(f"@{author} 🏦 Please enter a valid number or 'all'.")
+                    await self._send_chat(f"@{author} 🏦 Invalid input. Usage: !payloan <amount>, !payloan all, or !payloan <plan_id>")
                     return
                     
             res = self.viewers.pay_loan(author, amount)
