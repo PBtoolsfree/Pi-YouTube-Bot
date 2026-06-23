@@ -1893,6 +1893,7 @@ class BotService:
                         plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Daily ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%/d)")
                 
                 await self._send_chat(f"@{author} 🏦 Loan Plans:")
+                await asyncio.sleep(1.5)
                 for p in plans_list:
                     await self._send_chat(f"🔸 {p}")
                     await asyncio.sleep(1)
