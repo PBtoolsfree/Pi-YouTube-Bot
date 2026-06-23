@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import unicodedata
+import difflib
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ class ModerationService:
         self.sb_ws_getter = sb_ws_getter # Function to get the current WebSocket
         self.config_loader = config_loader
         self.msg_history = {} # {username: [timestamps]}
+        self.text_history = {} # {username: [{"timestamp": float, "text": str}]}
         self.internal_mutes = {} # {username: mute_until_timestamp}
         self.last_warning_time = {} # {username: timestamp}
         self.permit_list = {} # {username: expiration_timestamp}
@@ -33,6 +35,14 @@ class ModerationService:
 
     async def run_filters(self, author, message, mod_cfg):
         filters = mod_cfg.get("filters", {})
+        now = time.time()
+
+        # Update text history
+        if author not in self.text_history:
+            self.text_history[author] = []
+        self.text_history[author].append({"timestamp": now, "text": message})
+        # Keep only last 60 seconds for general advanced filtering
+        self.text_history[author] = [msg for msg in self.text_history[author] if now - msg["timestamp"] < 60]
         
         # 0. Permit Check (Link Protection Override)
         # Check if user has a temporary permit
@@ -62,7 +72,6 @@ class ModerationService:
         # B. Spam Protection
         spam_cfg = filters.get("spam_protection", {})
         if spam_cfg.get("enabled"):
-            now = time.time()
             if author not in self.msg_history:
                 self.msg_history[author] = []
             
@@ -178,6 +187,43 @@ class ModerationService:
                     char_ratio = unique_chars / len(word)
                     if char_ratio < 0.3:
                         return True, "Repetitive character pattern detected!"
+
+        # I. Identical Message Filter
+        ident_cfg = filters.get("identical_message_filter", {})
+        if ident_cfg.get("enabled"):
+            window = ident_cfg.get("window", 30)
+            limit = ident_cfg.get("limit", 3)
+            # Count identical messages within the window
+            identical_count = 0
+            for msg_obj in self.text_history.get(author, []):
+                if now - msg_obj["timestamp"] <= window:
+                    if msg_obj["text"].strip().lower() == message.strip().lower():
+                        identical_count += 1
+            
+            if identical_count > limit:
+                return True, "Stop spamming the same message!"
+
+        # J. Advanced Similar Message Filter
+        adv_cfg = filters.get("advanced_spam_filter", {})
+        if adv_cfg.get("enabled"):
+            short_spam_limit = adv_cfg.get("short_spam_limit", 3)
+            
+            # Check 1: Multiple short gibberish messages
+            if len(message) < 5:
+                short_count = sum(1 for m in self.text_history.get(author, []) 
+                                  if len(m["text"]) < 5 and now - m["timestamp"] <= 15)
+                if short_count > short_spam_limit:
+                    return True, "Stop spamming short messages!"
+                    
+            # Check 2: Fuzzy similarity with previous messages
+            # Only compare if message is substantial (> 4 chars) to avoid false positives on short words like "ok", "yes"
+            if len(message) > 4:
+                recent_msgs = [m["text"] for m in self.text_history.get(author, []) if m["text"] != message]
+                for prev_msg in recent_msgs[-3:]: # Check against last 3 unique messages
+                    if len(prev_msg) > 4:
+                        similarity = difflib.SequenceMatcher(None, message.lower(), prev_msg.lower()).ratio()
+                        if similarity > 0.8:
+                            return True, "Stop spamming similar messages!"
 
         return False, ""
 
