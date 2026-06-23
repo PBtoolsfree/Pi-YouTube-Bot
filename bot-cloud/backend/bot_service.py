@@ -1892,8 +1892,11 @@ class BotService:
                     else:
                         plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Daily ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%/d)")
                 
-                plans_msg = "\n".join([f"🔸 {p}" for p in plans_list])
-                await self._send_chat(f"@{author} 🏦 Loan Plans:\n{plans_msg}\nUse !loan take <id> to borrow, or !loan info to check debt.")
+                await self._send_chat(f"@{author} 🏦 Loan Plans:")
+                for p in plans_list:
+                    await self._send_chat(f"🔸 {p}")
+                    await asyncio.sleep(1)
+                await self._send_chat(f"@{author} Use !loan take <id> to borrow, or !loan info to check debt.")
                 return
                 
             action = args[0].lower()
