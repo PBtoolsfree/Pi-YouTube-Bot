@@ -28,10 +28,13 @@ class ViewerService:
         self._broadcast_func = None
         self._auto_save_started = False
 
-        # Migration: Ensure all viewers have 'points'
+        # Migration: Ensure all viewers have 'points' and 'loan_balance'
         for v in self.viewers.values():
             if "points" not in v:
                 v["points"] = v.get("count", 0) * 10
+                self._dirty = True
+            if "loan_balance" not in v and "loan_principal" in v:
+                v["loan_balance"] = v.get("loan_principal", 0)
                 self._dirty = True
 
     def _should_bypass_db(self):
@@ -238,7 +241,7 @@ class ViewerService:
                     "count": 0, "points": 0, "warnings": 0,
                     "last_seen": time.time(), "last_date": time.strftime("%Y-%m-%d"),
                     "consecutive_days": 1, "rank": "Noob",
-                    "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
+                    "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None, "loan_balance": 0
                 }
                 if channel_id:
                     self.viewers[author]["channel_id"] = channel_id
@@ -274,7 +277,7 @@ class ViewerService:
                         "count": 0, "points": 0, "warnings": 0,
                         "last_seen": now, "last_date": today,
                         "consecutive_days": 1, "rank": "Noob",
-                        "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
+                        "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None, "loan_balance": 0
                     }
                     
                 # Merge points, count, and streak
@@ -300,7 +303,7 @@ class ViewerService:
                 "last_date": today,
                 "consecutive_days": 1,
                 "rank": "Noob",
-                "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None
+                "loan_principal": 0, "loan_interest": 0, "loan_fines": 0, "loan_due_date": 0, "loan_plan_id": None, "loan_balance": 0
             }
             if channel_id:
                 self.viewers[author]["channel_id"] = channel_id
@@ -420,10 +423,10 @@ class ViewerService:
         return self.viewers.get(author, {"count": 1})
 
     def get_total_points(self, author):
-        """Returns spendable balance = real_points + loan_principal."""
+        """Returns spendable balance = real_points + loan_balance."""
         if author not in self.viewers: return 0
         v = self.viewers[author]
-        return v.get("points", 0) + v.get("loan_principal", 0)
+        return v.get("points", 0) + v.get("loan_balance", 0)
 
     def deduct_points(self, author, amount):
         if self._should_bypass_db():
@@ -432,15 +435,15 @@ class ViewerService:
         if author not in self.viewers: return False
         
         v = self.viewers[author]
-        loan_principal = v.get("loan_principal", 0)
+        loan_balance = v.get("loan_balance", 0)
         real_points = v.get("points", 0)
         
-        if loan_principal + real_points >= amount:
-            if loan_principal >= amount:
-                v["loan_principal"] -= amount
+        if loan_balance + real_points >= amount:
+            if loan_balance >= amount:
+                v["loan_balance"] -= amount
             else:
-                remaining_deduction = amount - loan_principal
-                v["loan_principal"] = 0
+                remaining_deduction = amount - loan_balance
+                v["loan_balance"] = 0
                 v["points"] -= remaining_deduction
                 
             self.mark_dirty()
@@ -466,6 +469,7 @@ class ViewerService:
             return {"success": False, "message": "You already have an active loan. Please pay it back first."}
             
         v["loan_principal"] = amount
+        v["loan_balance"] = amount
         
         if plan_type == "lumpsum":
             v["loan_interest"] = int(amount * (plan.get("total_interest_pct", 0) / 100.0))
@@ -501,8 +505,14 @@ class ViewerService:
             
         pay_amount = min(amount, total_debt)
         
-        # Deduct from real points
-        v["points"] -= pay_amount
+        # Deduct from loan_balance first, then real points
+        if v.get("loan_balance", 0) >= pay_amount:
+            v["loan_balance"] -= pay_amount
+        else:
+            remaining = pay_amount - v.get("loan_balance", 0)
+            v["loan_balance"] = 0
+            v["points"] -= remaining
+            
         actual_paid = pay_amount
         
         # 1. Pay fines first

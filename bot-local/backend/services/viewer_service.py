@@ -27,10 +27,13 @@ class ViewerService:
         self._broadcast_func = None
         self._auto_save_started = False
 
-        # Migration: Ensure all viewers have 'points'
+        # Migration: Ensure all viewers have 'points' and 'loan_balance'
         for v in self.viewers.values():
             if "points" not in v:
                 v["points"] = v.get("count", 0) * 10
+                self._dirty = True
+            if "loan_balance" not in v and "loan_principal" in v:
+                v["loan_balance"] = v.get("loan_principal", 0)
                 self._dirty = True
 
     def _should_bypass_db(self):
@@ -388,10 +391,10 @@ class ViewerService:
         return self.viewers.get(author, {"count": 1})
 
     def get_total_points(self, author):
-        """Returns spendable balance = real_points + loan_principal."""
+        """Returns spendable balance = real_points + loan_balance."""
         if author not in self.viewers: return 0
         v = self.viewers[author]
-        return v.get("points", 0) + v.get("loan_principal", 0)
+        return v.get("points", 0) + v.get("loan_balance", 0)
 
     def deduct_points(self, author, amount):
         if self._should_bypass_db():
@@ -400,15 +403,15 @@ class ViewerService:
         if author not in self.viewers: return False
         
         v = self.viewers[author]
-        loan_principal = v.get("loan_principal", 0)
+        loan_balance = v.get("loan_balance", 0)
         real_points = v.get("points", 0)
         
-        if loan_principal + real_points >= amount:
-            if loan_principal >= amount:
-                v["loan_principal"] -= amount
+        if loan_balance + real_points >= amount:
+            if loan_balance >= amount:
+                v["loan_balance"] -= amount
             else:
-                remaining_deduction = amount - loan_principal
-                v["loan_principal"] = 0
+                remaining_deduction = amount - loan_balance
+                v["loan_balance"] = 0
                 v["points"] -= remaining_deduction
                 
             self.mark_dirty()
