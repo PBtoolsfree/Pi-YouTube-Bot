@@ -12,6 +12,7 @@ class ModerationService:
         self.sb_ws_getter = sb_ws_getter # Function to get the current WebSocket
         self.config_loader = config_loader
         self.msg_history = {} # {username: [timestamps]}
+        self.text_history = {} # {username: [{"timestamp": float, "text": str}]}
         self.internal_mutes = {} # {username: mute_until_timestamp}
         self.last_warning_time = {} # {username: timestamp}
         self.permit_list = {} # {username: expiration_timestamp}
@@ -36,6 +37,14 @@ class ModerationService:
             return False, ""
             
         filters = mod_cfg.get("filters", {})
+        now = time.time()
+        
+        # Update text history
+        if author not in self.text_history:
+            self.text_history[author] = []
+        self.text_history[author].append({"timestamp": now, "text": message})
+        # Keep only last 60 seconds for general advanced filtering
+        self.text_history[author] = [msg for msg in self.text_history[author] if now - msg["timestamp"] < 60]
         
         # 0. Permit Check (Link Protection Override)
         # Check if user has a temporary permit
@@ -181,6 +190,16 @@ class ModerationService:
                     char_ratio = unique_chars / len(word)
                     if char_ratio < 0.3:
                         return True, "Repetitive character pattern detected!"
+
+        # K. Fast Spam Filter (Fast Typing)
+        fast_cfg = filters.get("fast_spam_filter", {})
+        if fast_cfg.get("enabled"):
+            window = fast_cfg.get("window", 5)
+            limit = fast_cfg.get("limit", 10)
+            
+            fast_count = sum(1 for m in self.text_history.get(author, []) if now - m["timestamp"] <= window)
+            if fast_count > limit:
+                return True, "Stop typing so fast! (Fast Spam Detected)"
 
         return False, ""
 

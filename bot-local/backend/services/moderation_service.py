@@ -228,6 +228,16 @@ class ModerationService:
                         if similarity > 0.8:
                             return True, "Stop spamming similar messages!"
 
+        # K. Fast Spam Filter (Fast Typing)
+        fast_cfg = filters.get("fast_spam_filter", {})
+        if fast_cfg.get("enabled"):
+            window = fast_cfg.get("window", 5)
+            limit = fast_cfg.get("limit", 10)
+            
+            fast_count = sum(1 for m in self.text_history.get(author, []) if now - m["timestamp"] <= window)
+            if fast_count > limit:
+                return True, "Stop typing so fast! (Fast Spam Detected)"
+
         return False, ""
 
     def grant_permit(self, author, duration=60):
