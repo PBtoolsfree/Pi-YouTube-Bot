@@ -230,7 +230,7 @@ class ModerationService:
 
         # K. Fast Spam Filter (Fast Typing)
         fast_cfg = filters.get("fast_spam_filter", {})
-        if fast_cfg.get("enabled"):
+        if fast_cfg.get("enabled", True):
             window = fast_cfg.get("window", 5)
             limit = fast_cfg.get("limit", 10)
             
