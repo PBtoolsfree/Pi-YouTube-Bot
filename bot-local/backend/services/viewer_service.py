@@ -387,15 +387,32 @@ class ViewerService:
     def get_viewer(self, author):
         return self.viewers.get(author, {"count": 1})
 
+    def get_total_points(self, author):
+        """Returns spendable balance = real_points + loan_principal."""
+        if author not in self.viewers: return 0
+        v = self.viewers[author]
+        return v.get("points", 0) + v.get("loan_principal", 0)
+
     def deduct_points(self, author, amount):
         if self._should_bypass_db():
             self._forward_to_cloud("deduct_points", author=author, amount=amount)
             return True
         if author not in self.viewers: return False
-        if self.viewers[author]["points"] >= amount:
-            self.viewers[author]["points"] -= amount
+        
+        v = self.viewers[author]
+        loan_principal = v.get("loan_principal", 0)
+        real_points = v.get("points", 0)
+        
+        if loan_principal + real_points >= amount:
+            if loan_principal >= amount:
+                v["loan_principal"] -= amount
+            else:
+                remaining_deduction = amount - loan_principal
+                v["loan_principal"] = 0
+                v["points"] -= remaining_deduction
+                
             self.mark_dirty()
-            self._save_single_viewer(author, self.viewers[author])
+            self._save_single_viewer(author, v)
             self._notify_viewer_update(author, "deduct_points")
             return True
         return False

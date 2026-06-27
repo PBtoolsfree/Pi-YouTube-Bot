@@ -1538,8 +1538,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.gamble(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.gamble(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
                 if result.get("win"):
                      await self._fire_sb_alert("GAMBLE WIN", f"{author} won {amount} points!", author, "Gamble")
@@ -1552,8 +1552,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.slots(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.slots(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number.")
@@ -1564,8 +1564,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = await self.gambling.bowl(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = await self.gambling.bowl(author, amount, total_points, self.viewers)
                 await self._send_chat(result["message"])
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number.")
@@ -1578,8 +1578,8 @@ class BotService:
                 except ValueError:
                     await self._send_chat(f"@{author} Please enter a valid number.")
                     return
-            v = self.viewers.get_viewer(author)
-            result = await self.gambling.bat(author, amount, v.get("points", 0), self.viewers)
+            total_points = self.viewers.get_total_points(author)
+            result = await self.gambling.bat(author, amount, total_points, self.viewers)
             await self._send_chat(result["message"])
                 
 
@@ -1589,8 +1589,8 @@ class BotService:
                 return
             try:
                 amount = int(args[0])
-                v = self.viewers.get_viewer(author)
-                result = self.boss_fight.attack_boss(author, amount, v.get("points", 0), self.viewers)
+                total_points = self.viewers.get_total_points(author)
+                result = self.boss_fight.attack_boss(author, amount, total_points, self.viewers)
                 
                 if not result["success"]:
                     await self._send_chat(f"@{author} {result['message']}")
