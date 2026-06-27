@@ -32,6 +32,9 @@ class ModerationService:
         return False
 
     async def run_filters(self, author, message, mod_cfg):
+        if message.strip().startswith("!"):
+            return False, ""
+            
         filters = mod_cfg.get("filters", {})
         
         # 0. Permit Check (Link Protection Override)
