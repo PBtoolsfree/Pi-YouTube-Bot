@@ -12,6 +12,27 @@ class GambleService:
         self.history_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "gambling_history.json")
         self.active_challenge = None
 
+    def _format_bal(self, user, viewer_service, amount_lost, amount_won):
+        v = viewer_service.get_viewer(user)
+        real_points = v.get("points", 0)
+        loan_bal = v.get("loan_balance", 0)
+        loan_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+        
+        if amount_lost > 0:
+            if loan_bal >= amount_lost:
+                loan_bal -= amount_lost
+            else:
+                rem = amount_lost - loan_bal
+                loan_bal = 0
+                real_points -= rem
+                
+        if amount_won > 0:
+            real_points += amount_won
+            
+        if loan_debt > 0:
+            return f"(Bal: {int(real_points)} | Loan: {int(loan_bal)})"
+        return f"(Bal: {int(real_points)})"
+
 
 
     def _get_game_config(self, game_key, default_chance):
@@ -133,22 +154,22 @@ class GambleService:
         win = random.random() < total_chance
 
         if win:
-            new_balance = current_points + amount
             viewer_service.add_points(user, amount) # Adds the win amount on top of keeping the bet
             self._log_gamble(user, "gamble", amount, amount * 2, True)
+            bal_str = self._format_bal(user, viewer_service, 0, amount)
             return {
                 "success": True, 
-                "message": f"🎰 WINNER! {user} rolled high and won {amount} points! Balance: {new_balance}",
+                "message": f"🎰 WINNER! {user} rolled high and won {amount} points! {bal_str}",
                 "win": True,
                 "amount": amount
             }
         else:
-            new_balance = current_points - amount
             viewer_service.deduct_points(user, amount)
             self._log_gamble(user, "gamble", amount, 0, False)
+            bal_str = self._format_bal(user, viewer_service, amount, 0)
             return {
                 "success": True, 
-                "message": f"💸 {user} rolled low and lost {amount} points. Better luck next time! Balance: {new_balance}",
+                "message": f"💸 {user} rolled low and lost {amount} points. Better luck next time! {bal_str}",
                 "win": False,
                 "amount": amount
             }
@@ -204,15 +225,20 @@ class GambleService:
         # Payout
         if winnings > 0:
             viewer_service.add_points(user, winnings)
-            final_balance = current_points - amount + winnings
             self._log_gamble(user, "slots", amount, winnings, True)
+            
+            v = viewer_service.get_viewer(user)
+            total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
+            if winnings >= amount * 3 and total_debt > 0:
+                message += " 💰 Reminder: You have an active loan. Use !payloan to clear your debt!"
         else:
-            final_balance = current_points - amount
             self._log_gamble(user, "slots", amount, 0, False)
+
+        bal_str = self._format_bal(user, viewer_service, amount, winnings)
 
         return {
             "success": True,
-            "message": f"{result_display} {message} (Bal: {final_balance})",
+            "message": f"{result_display} {message} {bal_str}",
             "slots": [slot1, slot2, slot3],
             "winnings": winnings
         }
@@ -382,10 +408,9 @@ class GambleService:
         else:
             self._log_gamble(user, "bat", amount, 0, False)
             
-        # if self.audio:
-        #     await self.audio.speak(audio_msg, "public")
+        bal_str = self._format_bal(user, viewer_service, amount, winnings)
             
-        return {"success": True, "message": f"{chat_msg} (Bal: {current_points - amount + winnings})"}
+        return {"success": True, "message": f"{chat_msg} {bal_str}"}
 
 class BossFightService:
     def __init__(self):
