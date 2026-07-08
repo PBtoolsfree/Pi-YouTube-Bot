@@ -2896,6 +2896,21 @@ async def upload_qr(file: UploadFile = File(...)):
         cfg["tip_page"]["custom_qr_path"] = f"/uploads/{filename}"
         ConfigManager.save_config(cfg)
         
+        # Broadcast the QR code to Local Pi via WebSockets
+        try:
+            import base64
+            import asyncio
+            base64_data = base64.b64encode(contents).decode('utf-8')
+            payload = {
+                "type": "sync_qr",
+                "filename": filename,
+                "data": base64_data
+            }
+            if getattr(bot, "pi_clients", None):
+                asyncio.create_task(bot.pi_clients.broadcast(payload))
+        except Exception as ws_err:
+            logger.error(f"Failed to broadcast QR sync: {ws_err}")
+
         return {"status": "uploaded", "path": f"/uploads/{filename}"}
     except Exception as e:
         logger.exception("QR upload failed")
@@ -2966,6 +2981,30 @@ async def websocket_pi_client_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             try:
                 event = json.loads(data)
+                
+                # Handle QR sync request directly in the endpoint
+                if event.get("type") == "request_qr_sync":
+                    try:
+                        cfg_temp = ConfigManager.get_config()
+                        qr_path = cfg_temp.get("tip_page", {}).get("custom_qr_path")
+                        if qr_path and qr_path.startswith("/uploads/"):
+                            fname = qr_path.replace("/uploads/", "")
+                            uploads_d = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "uploads")
+                            fpath = os.path.join(uploads_d, fname)
+                            if os.path.exists(fpath):
+                                import base64
+                                with open(fpath, "rb") as f:
+                                    img_bytes = f.read()
+                                b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                                await websocket.send_json({
+                                    "type": "sync_qr",
+                                    "filename": fname,
+                                    "data": b64_data
+                                })
+                    except Exception as sync_err:
+                        logger.error(f"Error handling request_qr_sync: {sync_err}")
+                    continue
+
                 await bot.handle_pi_client_event(event, websocket=websocket)
             except Exception as parse_err:
                 logger.error(f"Error handling Pi event message: {parse_err}")

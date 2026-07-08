@@ -56,6 +56,7 @@ class CloudAlertClientService:
                     # Request initial viewers sync immediately
                     await self.send_event({"type": "request_viewer_sync"})
                     await self.send_event({"type": "request_history_sync"})
+                    await self.send_event({"type": "request_qr_sync"})
                     
                     while self.is_running:
                         msg = await ws.recv()
@@ -153,6 +154,38 @@ class CloudAlertClientService:
                     asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
                 except ImportError:
                     pass
+
+        elif etype == "sync_qr":
+            filename = event.get("filename")
+            b64_data = event.get("data")
+            if filename and b64_data:
+                try:
+                    import base64
+                    from backend.config_manager import ConfigManager
+                    img_data = base64.b64decode(b64_data)
+                    
+                    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads")
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    filepath = os.path.join(uploads_dir, filename)
+                    
+                    with open(filepath, "wb") as f:
+                        f.write(img_data)
+                        
+                    cfg = self.bot.load_config()
+                    if "tip_page" not in cfg:
+                        cfg["tip_page"] = {}
+                    cfg["tip_page"]["custom_qr_path"] = f"/uploads/{filename}"
+                    ConfigManager.save_config(cfg)
+                    logger.info(f"Successfully synced QR code from cloud: {filename}")
+                    
+                    # Force UI to fetch new QR
+                    try:
+                        from backend.api import broadcast_log
+                        asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+                    except ImportError:
+                        pass
+                except Exception as e:
+                    logger.error(f"Failed to sync QR code from cloud: {e}")
                     
         elif etype == "viewer_point_update":
             username = event.get("username")

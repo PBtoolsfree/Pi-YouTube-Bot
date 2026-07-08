@@ -179,6 +179,7 @@ class AudioService:
         self.queue_paused = {"public": False, "secret": False}
         self._shutdown: bool = False
         self.broadcast_func = None
+        self._bg_tasks = set()
 
         # ── Health tracking ───────────────────────────────────────────────────
         self._start_time: float = time.time()
@@ -264,6 +265,76 @@ class AudioService:
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         return cleaned
 
+    def _determine_voice(self, text: str, override_voice: Optional[str], channel: str) -> str:
+        """Determine the correct voice based on config and auto-language detection."""
+        cfg = ConfigManager.get_config()
+        audio_cfg = cfg.get("audio", {})
+        
+        if override_voice:
+            return override_voice
+            
+        auto_voices = audio_cfg.get("auto_voices", {})
+        auto_enabled = auto_voices.get("enabled", False)
+        
+        if not auto_enabled:
+            return audio_cfg.get("voice", "en-IN-PrabhatNeural")
+            
+        lang_code = "unknown"
+        text_lower = text.lower()
+        words = set(re.findall(r'\b[a-z]+\b', text_lower))
+        
+        hinglish_keywords = {'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat'}
+        benglish_keywords = {'kemon', 'acho', 'ami', 'tumi', 'korcho', 'kothay', 'hobe', 'jabo', 'valo', 'bhalo', 'khub', 'kore', 'amar', 'tomar', 'apni', 'tui', 'keno', 'khabe', 'naki', 'ache', 'nei', 'ekhon', 'dada', 'kori', 'kotha', 'bolo', 'bolcho'}
+
+        hinglish_score = len(words.intersection(hinglish_keywords))
+        benglish_score = len(words.intersection(benglish_keywords))
+
+        mapped_lang = "default"
+        if hinglish_score > 0 or benglish_score > 0:
+            if hinglish_score > benglish_score:
+                mapped_lang = "hi"
+            elif benglish_score > hinglish_score:
+                mapped_lang = "bn"
+            else:
+                mapped_lang = "hi"
+        else:
+            lang_code, _ = langid.classify(text)
+
+            if lang_code in ['hi', 'mr', 'ne']:
+                mapped_lang = "hi"
+            elif lang_code in ['bn', 'as']:
+                mapped_lang = "bn"
+            elif lang_code == 'en':
+                mapped_lang = "en"
+
+        config_channel = "private" if channel == "secret" else "public"
+        voice_dict = auto_voices.get(config_channel, {})
+        voice = voice_dict.get(mapped_lang) or voice_dict.get("default") or audio_cfg.get("voice", "en-IN-PrabhatNeural")
+        logger.debug("Auto Voice [%s]: text_lang=%s, mapped=%s, selected=%s", channel, lang_code, mapped_lang, voice)
+        return voice
+
+    async def _pre_generate_tts(self, item: dict, channel: str) -> None:
+        """Background task to generate TTS audio ahead of time to reduce latency."""
+        try:
+            raw_text = item["text"]
+            text = self._clean_for_tts(raw_text)
+            if not text:
+                return
+            
+            cfg = ConfigManager.get_config()
+            audio_cfg = cfg.get("audio", {})
+            
+            voice = self._determine_voice(text, item.get("voice"), channel)
+            rate = _validate_rate_volume(audio_cfg.get("rate", "+0%"))
+            volume = _validate_rate_volume(audio_cfg.get("volume", "+0%"))
+            
+            # Start generation. If it fails or times out, tmp_mp3 will be None.
+            tmp_mp3 = await self._generate_tts_audio(text, voice, rate, volume, channel)
+            item["tmp_mp3"] = tmp_mp3
+        except Exception as e:
+            logger.error("Background TTS generation failed for [%s]: %s", channel, e)
+            item["tmp_mp3"] = None
+
     async def speak(
         self, text: str, channel: str = "public", voice: Optional[str] = None
     ) -> None:
@@ -296,14 +367,21 @@ class AudioService:
             self.queues[channel].popleft()
             self.metrics["dropped_count"] += 1
 
-        self.queues[channel].append(
-            {
-                "text": text,
-                "voice": voice,
-                "timestamp": time.time(),
-                "id": f"{channel}_{time.time()}",
-            }
-        )
+        item = {
+            "text": text,
+            "voice": voice,
+            "timestamp": time.time(),
+            "id": f"{channel}_{time.time()}",
+            "tmp_mp3": None,
+            "gen_task": None,
+        }
+        self.queues[channel].append(item)
+        
+        # Start generating audio in the background so it's ready when played
+        task = asyncio.create_task(self._pre_generate_tts(item, channel))
+        self._bg_tasks.add(task)
+        item["gen_task"] = task
+        task.add_done_callback(self._bg_tasks.discard)
 
     async def skip_current(self) -> bool:
         """Terminate the currently playing audio process."""
@@ -425,9 +503,18 @@ class AudioService:
 
     async def _play(self, item: dict, channel: str) -> None:
         raw_text: str = item["text"]
-        override_voice: Optional[str] = item.get("voice")
         self.current_text = raw_text
         start_time = time.time()
+        
+        # Wait for the background generation task to finish if it hasn't already
+        gen_task = item.get("gen_task")
+        if gen_task:
+            try:
+                await gen_task
+            except Exception:
+                pass
+                
+        tmp_mp3 = item.get("tmp_mp3")
 
         text = self._clean_for_tts(raw_text)
         if not text:
@@ -436,50 +523,6 @@ class AudioService:
 
         cfg = ConfigManager.get_config()
         audio_cfg = cfg.get("audio", {})
-
-        auto_voices = audio_cfg.get("auto_voices", {})
-        auto_enabled = auto_voices.get("enabled", False)
-
-        voice = override_voice
-        if not voice:
-            if auto_enabled:
-                lang_code = "unknown"
-                text_lower = text.lower()
-                words = set(re.findall(r'\b[a-z]+\b', text_lower))
-                
-                hinglish_keywords = {'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat'}
-                benglish_keywords = {'kemon', 'acho', 'ami', 'tumi', 'korcho', 'kothay', 'hobe', 'jabo', 'valo', 'bhalo', 'khub', 'kore', 'amar', 'tomar', 'apni', 'tui', 'keno', 'khabe', 'naki', 'ache', 'nei', 'ekhon', 'dada', 'kori', 'kotha', 'bolo', 'bolcho'}
-
-                hinglish_score = len(words.intersection(hinglish_keywords))
-                benglish_score = len(words.intersection(benglish_keywords))
-
-                mapped_lang = "default"
-                if hinglish_score > 0 or benglish_score > 0:
-                    if hinglish_score > benglish_score:
-                        mapped_lang = "hi"
-                    elif benglish_score > hinglish_score:
-                        mapped_lang = "bn"
-                    else:
-                        mapped_lang = "hi"
-                else:
-                    lang_code, _ = langid.classify(text)
-
-                    if lang_code in ['hi', 'mr', 'ne']:
-                        mapped_lang = "hi"
-                    elif lang_code in ['bn', 'as']:
-                        mapped_lang = "bn"
-                    elif lang_code == 'en':
-                        mapped_lang = "en"
-
-                config_channel = "private" if channel == "secret" else "public"
-                voice_dict = auto_voices.get(config_channel, {})
-                voice = voice_dict.get(mapped_lang) or voice_dict.get("default") or audio_cfg.get("voice", "en-IN-PrabhatNeural")
-                logger.debug("Auto Voice [%s]: text_lang=%s, mapped=%s, selected=%s", channel, lang_code, mapped_lang, voice)
-            else:
-                voice = audio_cfg.get("voice", "en-IN-PrabhatNeural")
-
-        rate: str = _validate_rate_volume(audio_cfg.get("rate", "+0%"))
-        volume: str = _validate_rate_volume(audio_cfg.get("volume", "+0%"))
 
         # ── Max play duration (zombie protection) ─────────────────────────────
         max_duration: int = int(audio_cfg.get("max_play_duration", 30))
@@ -493,10 +536,7 @@ class AudioService:
         use_local = force_local  # set local_playback=true in config to force Pi speakers
 
         self.is_playing = True
-        tmp_mp3 = None
         try:
-            # ── Step 1: Generate TTS audio to a temp file ─────────────────────
-            tmp_mp3 = await self._generate_tts_audio(text, voice, rate, volume, channel)
             if tmp_mp3 is None:
                 _append_audio_log(f"[{channel}] TTS generation failed — skipping")
                 self._record_error("TTS generation failed (both edge-tts and gTTS)")
@@ -684,7 +724,10 @@ class AudioService:
                 communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
                 fd, tmp_path = tempfile.mkstemp(prefix="pibot_tts_", suffix=".mp3", dir=temp_dir)
                 os.close(fd)
-                await communicate.save(tmp_path)
+                
+                # Add explicit timeout for edge-tts save to avoid indefinite hanging
+                await asyncio.wait_for(communicate.save(tmp_path), timeout=10.0)
+                
                 if os.path.getsize(tmp_path) > 0:
                     _append_audio_log(f"[{channel}] edge-tts OK (attempt {attempt + 1}) → {os.path.basename(tmp_path)}")
                     return tmp_path
