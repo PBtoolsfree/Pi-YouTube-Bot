@@ -14,7 +14,7 @@ function safeFixed(value, digits = 1, fallback = "0") {
     return Number.isFinite(num) ? num.toFixed(digits) : fallback;
 }
 
-export default function Dashboard({ logs }) {
+export default function Dashboard({ logs, config }) {
     const displayedLogs = logs.slice(0, 5)
     const modActions = logs.filter(l => l.category === 'MOD').length
     const chatCount = logs.filter(l => l.category === 'CHAT').length
@@ -132,7 +132,7 @@ export default function Dashboard({ logs }) {
 
                 {/* Features Running Panel */}
                 <div className="lg:col-span-5">
-                    <FeaturesPanel />
+                    <FeaturesPanel config={config} />
                 </div>
             </div>
 
@@ -214,7 +214,7 @@ export default function Dashboard({ logs }) {
 // ────────────────────────────────────────────────────────────────────────────────
 // FEATURES RUNNING PANEL
 // ────────────────────────────────────────────────────────────────────────────────
-function FeaturesPanel() {
+function FeaturesPanel({ config }) {
     const [status, setStatus] = React.useState(null)
     const [aiEnabled, setAiEnabled] = React.useState(true)
     const [ttsEnabled, setTtsEnabled] = React.useState(true)
@@ -269,6 +269,7 @@ function FeaturesPanel() {
             statusLabel: workers.ai_engine?.status,
             toggleAction: 'toggle-ai',
             canToggle: true,
+            hideOnLocal: true,
         },
         {
             key: 'tts',
@@ -290,6 +291,7 @@ function FeaturesPanel() {
             active: workers.youtube_monitor?.status === 'running',
             statusLabel: workers.youtube_monitor?.status,
             canToggle: false,
+            hideOnLocal: true,
         },
         {
             key: 'streamer_bot',
@@ -310,6 +312,7 @@ function FeaturesPanel() {
             active: core.status === 'running',
             statusLabel: core.status,
             canToggle: false,
+            hideOnLocal: true,
         },
         {
             key: 'cloud_client',
@@ -323,7 +326,8 @@ function FeaturesPanel() {
         },
     ]
 
-    const activeCount = features.filter(f => f.active).length
+    const displayFeatures = features.filter(f => config?.is_cloud ? true : !f.hideOnLocal)
+    const activeCount = displayFeatures.filter(f => f.active).length
 
     const colorMap = {
         purple: { dot: 'bg-purple-500', ring: 'ring-purple-500/30', text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', btn: 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300' },
@@ -349,7 +353,7 @@ function FeaturesPanel() {
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-zinc-400">
                         <span className="text-emerald-400 font-bold">{activeCount}</span>
-                        <span className="text-zinc-600">/{features.length}</span>
+                        <span className="text-zinc-600">/{displayFeatures.length}</span>
                     </span>
                     <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
@@ -357,7 +361,7 @@ function FeaturesPanel() {
 
             <div className="flex-1 overflow-y-auto p-3 min-h-0">
                 <div className="grid grid-cols-2 gap-2">
-                    {features.map(feat => {
+                    {displayFeatures.map(feat => {
                         const c = colorMap[feat.color]
                         const isOn = !!feat.active
                         const isLoading = !!loading[feat.key]

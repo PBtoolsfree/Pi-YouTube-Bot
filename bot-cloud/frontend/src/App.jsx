@@ -249,7 +249,7 @@ function App() {
       config={config}
     >
       <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-4 border-violet-500 border-t-transparent rounded-full" /></div>}>
-        {activeTab === 'dashboard' && <Dashboard logs={logs} />}
+        {activeTab === 'dashboard' && <Dashboard logs={logs} config={config} />}
         {activeTab === 'goals' && <GoalsPage backendStatus={backendStatus} />}
         {activeTab === 'orchestrator' && <Orchestrator config={config} onSave={handleSaveConfig} />}
         {activeTab === 'backup' && <BackupPage />}

@@ -111,7 +111,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
                                 <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
-                                <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
                             </>
                         ) : (
@@ -123,8 +122,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="streamer_bot" icon={<Share2 />} label="Integrations" active={activeTab} onClick={setActiveTab} dot={navDot('streamer_bot')} dotColor={dotColor} />
                                 <NavItem id="audio_engine" icon={<Volume2 />} label="Audio Engine" active={activeTab} onClick={setActiveTab} dot={navDot('audio_engine')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
-                                <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
-                                <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
                             </>
                         )}
