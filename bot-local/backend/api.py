@@ -155,13 +155,10 @@ class TunnelSecurityASGIMiddleware:
             path.startswith("/assets")
             or path.startswith("/uploads")
             or path.startswith("/api/")
-            or path.startswith("/overlay")
-            or path.startswith("/obs")
             or path.startswith("/ws/")
             or (path in ["/", ""] and "mode" in request.query_params)
             or path in ["/favicon.ico", "/manifest.json", "/tip", "/tip/",
-                        "/logo.jpg", "/Background.jpg", "/vite.svg",
-                        "/public-avatar-overlay", "/giveawayspin"]
+                        "/logo.jpg", "/Background.jpg", "/vite.svg"]
             or path in allowed_paths
             or "*" in allowed_paths
             or any(
@@ -285,7 +282,6 @@ audio = AudioService()
 bot = BotService(audio=audio)
 redeem_svc = bot.redeem_svc
 active_websockets: List[WebSocket] = []
-active_overlay_websockets: List[WebSocket] = [] # Dedicated for OBS overlays
 active_pi_websockets: List[WebSocket] = []
 
 
@@ -320,14 +316,7 @@ async def broadcast_log(data: dict):
     for ws in to_remove:
         active_websockets.remove(ws)
         
-    to_remove_overlay = []
-    for ws in active_overlay_websockets:
-        try:
-            asyncio.create_task(ws.send_json(data))
-        except Exception:
-            to_remove_overlay.append(ws)
-    for ws in to_remove_overlay:
-        active_overlay_websockets.remove(ws)
+
 
 @app.get("/api/logs/history")
 async def get_log_history():
@@ -412,7 +401,6 @@ async def startup_event():
             bot.audio = audio
         else:
             logger.info("Cloud Mode: Skipping local Audio Engine initialization.")
-        bot.on_subscriber_update = broadcast_overlay
         if os.environ.get("RUN_MODE") == "cloud":
             bot.on_cloud_alert = broadcast_to_pi_clients
             asyncio.create_task(cloud_queue_processor())
@@ -1526,34 +1514,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_websockets:
             active_websockets.remove(websocket)
 
-# --- OVERLAY WEBSOCKET ---
-async def broadcast_overlay(count: int, type: str = "subscriber_count"):
-    payload = {"type": type, "count": count}
-    to_remove = []
-    for ws in active_overlay_websockets:
-        try:
-            await ws.send_json(payload)
-        except Exception:
-            to_remove.append(ws)
-    for ws in to_remove:
-        active_overlay_websockets.remove(ws)
 
-@app.websocket("/ws/overlay")
-async def websocket_overlay_endpoint(websocket: WebSocket):
-    # Block public access to overlay WebSocket
-    if websocket.headers.get("cf-connecting-ip") or websocket.headers.get("cf-ray"):
-        await websocket.close(code=1008, reason="Access Denied")
-        return
-    await websocket.accept()
-    active_overlay_websockets.append(websocket)
-    try:
-        # Send initial state
-        await websocket.send_json({"type": "subscriber_count", "count": bot.subscriber_count})
-        while True:
-            await websocket.receive_text() # Keep alive
-    except WebSocketDisconnect:
-        if websocket in active_overlay_websockets:
-            active_overlay_websockets.remove(websocket)
 
 
 

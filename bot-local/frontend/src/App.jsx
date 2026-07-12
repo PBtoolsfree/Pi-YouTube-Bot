@@ -4,21 +4,7 @@ import Layout from './components/Layout'
 
 // Overlay Pages (eagerly loaded — rendered immediately on URL match)
 import AudioOverlay from './pages/AudioOverlay'
-import ChatOverlay from './pages/ChatOverlay'
-import AlertOverlay from './pages/AlertOverlay'
-import SubscriberOverlay from './pages/SubscriberOverlay'
-import TransactionsOverlay from './pages/TransactionsOverlay'
-import HubOverlay from './pages/HubOverlay'
-import SuperChatOverlay from './pages/SuperChatOverlay'
 import TipPage from './pages/TipPage'
-import AppOverlay from './pages/AppOverlay'
-import GameOverlay from './pages/GameOverlay'
-import PublicAvatarOverlay from './pages/PublicAvatarOverlay'
-import TopViewersOverlay from './pages/TopViewersOverlay'
-import GoalOverlay from './pages/GoalOverlay'
-import GiveawaySpinOverlay from './pages/GiveawaySpinOverlay'
-import RotatingWidgetOverlay from './pages/RotatingWidgetOverlay'
-import BossOverlay from './pages/BossOverlay'
 
 // Dashboard Pages (lazy loaded — only fetched when tab is opened)
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -181,22 +167,9 @@ function App() {
 
   // 2. ROUTING & CONDITIONAL RETURNS
   const isOverlay = window.location.search.includes('mode=overlay')
-  const isChatOverlay = window.location.search.includes('mode=chat')
-  const isAlertOverlay = window.location.pathname === '/overlay/alert'
-  const isSubOverlay = window.location.pathname === '/overlay/subscriber' || window.location.search.includes('mode=sub_count')
-  const isTxOverlay = window.location.pathname === '/overlay/transactions' || window.location.search.includes('mode=transactions')
-  const isHubOverlay = window.location.pathname === '/overlay/hub' || window.location.search.includes('mode=hub')
-  const isSuperChat = window.location.pathname === '/overlay/superchat' || window.location.search.includes('mode=superchat')
-  const isAppOverlay = window.location.pathname === '/overlay/app' || window.location.pathname === '/overlay/phonepe' || window.location.pathname === '/overlay/paytm' || window.location.search.includes('mode=app') || window.location.search.includes('mode=phonepe')
-  const isGameOverlay = window.location.pathname === '/overlay/game' || window.location.pathname === '/obs/game' || window.location.search.includes('mode=game')
-  const isPublicAvatarOverlay = window.location.pathname === '/public-avatar-overlay'
-  const isTopViewersOverlay = window.location.search.includes('mode=top_viewers')
-  const isGoalOverlay = window.location.pathname === '/overlay/goal' || window.location.search.includes('mode=goal')
-  const isGiveawaySpin = window.location.pathname === '/giveawayspin'
-  const isRotatingWidget = window.location.pathname === '/overlay/rotating_hub' || window.location.search.includes('mode=rotating_hub')
-  const isBossOverlay = window.location.pathname === '/overlay/boss' || window.location.search.includes('mode=boss')
 
-  console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search, isSubOverlay })
+
+  console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search })
 
   // Explicit Route or Fallback Public Mode
   if (window.location.pathname === '/tip' || isPublicMode) {
@@ -204,20 +177,7 @@ function App() {
   }
 
   if (isOverlay) return <div className="bg-transparent h-screen w-screen"><AudioOverlay /></div>
-  if (isChatOverlay) return <div className="bg-transparent h-screen w-screen"><ChatOverlay /></div>
-  if (isAlertOverlay) return <div className="bg-transparent h-screen w-screen"><AlertOverlay /></div>
-  if (isSubOverlay) return <div className="bg-transparent h-screen w-screen"><SubscriberOverlay /></div>
-  if (isTxOverlay) return <div className="bg-transparent h-screen w-screen"><TransactionsOverlay /></div>
-  if (isHubOverlay) return <div className="bg-transparent h-screen w-screen"><HubOverlay /></div>
-  if (isSuperChat) return <div className="bg-transparent h-screen w-screen"><SuperChatOverlay config={config} /></div>
-  if (isAppOverlay) return <div className="bg-transparent h-screen w-screen"><AppOverlay /></div>
-  if (isGameOverlay) return <div className="bg-transparent h-screen w-screen"><GameOverlay /></div>
-  if (isPublicAvatarOverlay) return <div className="bg-transparent h-screen w-screen"><PublicAvatarOverlay /></div>
-  if (isTopViewersOverlay) return <div className="bg-transparent h-screen w-screen"><TopViewersOverlay /></div>
-  if (isGoalOverlay) return <div className="bg-transparent h-screen w-screen"><GoalOverlay /></div>
-  if (isGiveawaySpin) return <div className="bg-transparent h-screen w-screen"><GiveawaySpinOverlay /></div>
-  if (isRotatingWidget) return <div className="bg-transparent h-screen w-screen overflow-hidden"><RotatingWidgetOverlay /></div>
-  if (isBossOverlay) return <BossOverlay />
+
 
   if (!config) return (
     <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 text-white gap-4">
