@@ -1725,13 +1725,18 @@ class BotService:
             
             try:
                 def get_metadata():
-                    import subprocess, json
-                    result = subprocess.run(
-                        ["yt-dlp", "-J", "--no-warnings", channel_url],
-                        capture_output=True, text=True, check=False
-                    )
-                    if result.returncode == 0:
-                        return json.loads(result.stdout)
+                    import subprocess, json, sys
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", channel_url],
+                            capture_output=True, text=True, check=False
+                        )
+                        if result.returncode == 0:
+                            return json.loads(result.stdout)
+                        else:
+                            logger.error(f"yt-dlp error: {result.stderr}")
+                    except Exception as e:
+                        logger.error(f"yt-dlp exception: {e}")
                     return None
                     
                 metadata = await asyncio.to_thread(get_metadata)
