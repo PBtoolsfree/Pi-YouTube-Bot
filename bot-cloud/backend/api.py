@@ -983,6 +983,8 @@ async def get_system_status():
     
     if not sb_enabled:
         sb_status = "disabled"
+    elif bot_stats.get("streamer_bot_connected"):
+        sb_status = "connected"
     else:
         sb_status = sb_health_status
 
