@@ -1738,14 +1738,20 @@ class BotService:
                         if result.returncode == 0:
                             return json.loads(result.stdout)
                         else:
-                            logger.error(f"yt-dlp error: {result.stderr}")
+                            err_msg = result.stderr.strip() or "Unknown error"
+                            logger.error(f"yt-dlp error: {err_msg}")
+                            return {"error": err_msg}
                     except Exception as e:
                         logger.error(f"yt-dlp exception: {e}")
-                    return None
+                        return {"error": str(e)}
+                    return {"error": "Failed to run yt-dlp"}
                     
                 metadata = await asyncio.to_thread(get_metadata)
                 
-                if not metadata:
+                if metadata.get("error"):
+                    await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
+                    return
+                elif not metadata.get("id"):
                     await self._send_chat(f"@{author} Error: Could not fetch stream metadata (Check bot logs).")
                     return
                     
