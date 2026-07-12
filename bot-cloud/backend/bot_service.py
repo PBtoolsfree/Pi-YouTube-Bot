@@ -1756,6 +1756,116 @@ class BotService:
             redeem_name = " ".join(args)
             await self._handle_redeem_cmd(author, redeem_name, chat_obj)
 
+        elif cmd == "!clip":
+            config = self.load_config()
+            channel_id = config.get("youtube", {}).get("channel_id")
+            
+            video_id_arg = None
+            if len(args) > 0 and args[0]:
+                video_id_arg = args[0]
+                channel_url = f"https://www.youtube.com/watch?v={video_id_arg}"
+            elif channel_id:
+                channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
+            else:
+                await self._send_chat(f"@{author} Error: Channel ID not configured.")
+                return
+                
+            try:
+                metadata = {}
+                import calendar
+                from datetime import datetime
+                
+                if not video_id_arg:
+                    api_context = getattr(self, "_live_context", None)
+                    if not api_context or not api_context.get("actualStartTime"):
+                        api_context = await self.youtube_api.get_live_stream_context()
+                    if api_context and api_context.get("actualStartTime"):
+                        start_ts_str = api_context["actualStartTime"]
+                        dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                        metadata = {
+                            "id": api_context.get("id"),
+                            "is_live": True,
+                            "release_timestamp": calendar.timegm(dt.timetuple()),
+                            "title": api_context.get("title", "Live Stream")
+                        }
+                else:
+                    try:
+                        creds = self.youtube_api._get_credentials()
+                        if creds:
+                            service = await asyncio.to_thread(self.youtube_api._build_service_sync, creds=creds)
+                            req = service.videos().list(id=video_id_arg, part="snippet,liveStreamingDetails")
+                            resp = await asyncio.to_thread(req.execute)
+                            items = resp.get("items", [])
+                            if items:
+                                details = items[0].get("liveStreamingDetails", {})
+                                snippet = items[0].get("snippet", {})
+                                start_ts_str = details.get("actualStartTime")
+                                if start_ts_str:
+                                    dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                                    metadata = {
+                                        "id": items[0].get("id"),
+                                        "is_live": True,
+                                        "release_timestamp": calendar.timegm(dt.timetuple()),
+                                        "title": snippet.get("title", "Live Stream")
+                                    }
+                    except Exception as e:
+                        logger.error(f"Clip specific video API Error: {e}")
+                
+                if not metadata:
+                    def get_metadata():
+                        import json, urllib.request, re, subprocess, sys
+                        try:
+                            req = urllib.request.Request(channel_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                            html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                            match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
+                            if match:
+                                data = json.loads(match.group(1))
+                                is_live = data.get("videoDetails", {}).get("isLiveContent", False)
+                                start_ts_str = data.get("microformat", {}).get("playerMicroformatRenderer", {}).get("liveBroadcastDetails", {}).get("startTimestamp")
+                                if is_live and start_ts_str:
+                                    dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                                    return {"id": data["videoDetails"]["videoId"], "is_live": True, "release_timestamp": calendar.timegm(dt.timetuple()), "title": data["videoDetails"]["title"]}
+                        except Exception as e:
+                            logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
+                        
+                        try:
+                            res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--no-playlist", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False, timeout=15)
+                            if res.returncode == 0:
+                                return json.loads(res.stdout)
+                            err_str = res.stderr.strip()
+                            if "is not currently live" in err_str:
+                                return {"error": "Channel is not currently live."}
+                            if "Sign in to confirm" in err_str:
+                                return {"error": "Bot verification blocked this request. Stream must be live to use API fallback."}
+                            return {"error": err_str or "Unknown error"}
+                        except Exception as e:
+                            return {"error": str(e)}
+                        return {"error": "Failed"}
+                        
+                    metadata = await asyncio.to_thread(get_metadata)
+                
+                if metadata.get("error"):
+                    await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
+                    return
+                    
+                video_id = metadata.get("id") or video_id_arg
+                start_ts = metadata.get("release_timestamp")
+                
+                if video_id and start_ts:
+                    # Execute create_clip on the Cloud server directly
+                    await self.handle_pi_client_event({
+                        "type": "create_clip",
+                        "author": author,
+                        "video_id": video_id,
+                        "start_timestamp": start_ts,
+                        "title": metadata.get("title", "Live Stream"),
+                        "thumbnail": metadata.get("thumbnail")
+                    })
+                else:
+                    await self._send_chat(f"@{author} Could not get live stream start time. Is the stream live?")
+            except Exception as e:
+                logger.error(f"Clip command error: {e}")
+
         elif cmd == "!gamble":
             if not args:
                 await self._send_chat(f"@{author} Usage: !gamble <amount>")
