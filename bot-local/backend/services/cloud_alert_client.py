@@ -58,6 +58,12 @@ class CloudAlertClientService:
                     await self.send_event({"type": "request_history_sync"})
                     await self.send_event({"type": "request_qr_sync"})
                     
+                    # Notify Cloud of Streamer.bot status
+                    await self.send_event({
+                        "type": "streamerbot_status",
+                        "connected": getattr(self.bot, "is_sb_connected", getattr(self.bot, "sb_ws", None) is not None)
+                    })
+                    
                     while self.is_running:
                         msg = await ws.recv()
                         try:
@@ -216,6 +222,15 @@ class CloudAlertClientService:
             action_name = event.get("action_name")
             if action_name and hasattr(self.bot, "_trigger_sb_action"):
                 asyncio.create_task(self.bot._trigger_sb_action(action_name))
+
+        elif etype == "trigger_sb_raw":
+            payload_str = event.get("payload")
+            if payload_str and getattr(self.bot, "sb_ws", None):
+                try:
+                    asyncio.create_task(self.bot.sb_ws.send(payload_str))
+                    logger.info("Forwarded raw action to Streamer.bot from Cloud.")
+                except Exception as e:
+                    logger.error(f"Failed to forward raw SB action: {e}")
 
         elif etype == "log":
             category = event.get("category")

@@ -174,6 +174,8 @@ class BotService:
 
     @property
     def is_sb_connected(self):
+        if os.environ.get("RUN_MODE") == "cloud":
+            return getattr(self, "remote_sb_connected", False)
         """Returns True if Streamer.bot WebSocket is connected."""
         if not getattr(self, "sb_ws", None):
             return False
@@ -2117,11 +2119,26 @@ class BotService:
             await self._send_chat(f"@{author} Unknown reward '{redeem_name}'. Use !shop to see list.")
             return
         
+        target_sb_ws = self.sb_ws
+        
+        # Proxy for Cloud to send actions via Local Pi
+        if os.environ.get("RUN_MODE") == "cloud":
+            class CloudSBProxy:
+                def __init__(self, bot): self.bot = bot
+                async def send(self, payload):
+                    if getattr(self.bot, "pi_clients", None):
+                        await self.bot.pi_clients.broadcast({
+                            "type": "trigger_sb_raw",
+                            "payload": payload
+                        })
+                def __bool__(self): return getattr(self.bot, "remote_sb_connected", False)
+            target_sb_ws = CloudSBProxy(self)
+
         result = await self.redeem_svc.trigger(
             reward["id"],
             author,
             viewer_service=self.viewers,
-            sb_ws=self.sb_ws,
+            sb_ws=target_sb_ws,
             broadcast_func=self.broadcast_func,
         )
         if result["ok"]:
@@ -2285,6 +2302,14 @@ class BotService:
                     self.id = msg_id
             
             await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded, force_ai=force_ai)
+            
+        elif etype == "streamerbot_status":
+            # Sync status from local Pi
+            self.remote_sb_connected = event.get("connected", False)
+            if self.remote_sb_connected:
+                logger.info("Local Pi reported Streamer.bot is CONNECTED")
+            else:
+                logger.warning("Local Pi reported Streamer.bot is DISCONNECTED")
             
         elif etype == "sb_event":
             sb_data = event.get("data")
@@ -2494,8 +2519,15 @@ class BotService:
                     "args": args,
                     "id": "PiBotAlert"
                 }
-                if self.sb_ws is not None:
+                
+                if os.environ.get("RUN_MODE") == "cloud" and getattr(self, "pi_clients", None):
+                    await self.pi_clients.broadcast({
+                        "type": "trigger_sb_raw",
+                        "payload": json.dumps(payload)
+                    })
+                elif self.sb_ws is not None:
                     await self.sb_ws.send(json.dumps(payload))
+                
                 await self._log_ui("DEBUG", f"Sent Action: '{action_name}' to Streamer.bot")
             except Exception as e:
                 logger.warning(f"Failed to send Alert to SB: {e}")

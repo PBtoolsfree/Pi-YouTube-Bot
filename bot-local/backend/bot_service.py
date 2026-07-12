@@ -794,6 +794,13 @@ class BotService:
                         }
                         await self._log_ui("SYSTEM", "Connected to Streamer.bot WS")
                         
+                        # Notify Cloud Bot
+                        if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                            asyncio.create_task(self.cloud_alert_client.send_event({
+                                "type": "streamerbot_status", 
+                                "connected": True
+                            }))
+                            
                         subscribe_msg: Dict[str, Any] = {
                             "request": "Subscribe",
                             "id": "PiBotSubs",
@@ -852,6 +859,13 @@ class BotService:
                          self.worker_health["streamerbot"] = {"restart_count": 0}
                      self.worker_health["streamerbot"]["status"] = "disconnected"
                      await self._log_ui("SYSTEM", "Streamer.bot WS Connection Closed.")
+                     
+                     # Notify Cloud Bot
+                     if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                         asyncio.create_task(self.cloud_alert_client.send_event({
+                             "type": "streamerbot_status", 
+                             "connected": False
+                         }))
 
             except Exception as e:
                 self.sb_ws = None
@@ -861,6 +875,14 @@ class BotService:
                 self.worker_health["streamerbot"]["last_error"] = str(e)
                 logger.warning(f"Streamer.bot WS Error: {e}")
                 await self._log_ui("SYSTEM", "Streamer.bot WS Disconnected. Retrying...")
+                
+                # Notify Cloud Bot
+                if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                    asyncio.create_task(self.cloud_alert_client.send_event({
+                        "type": "streamerbot_status", 
+                        "connected": False
+                    }))
+                    
                 await asyncio.sleep(5)
 
     async def _handle_sb_event(self, data):
