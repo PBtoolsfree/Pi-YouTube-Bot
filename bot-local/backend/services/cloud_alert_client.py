@@ -193,16 +193,12 @@ class CloudAlertClientService:
             if username and data:
                 self.bot.viewers.viewers[username] = data
                 self.bot.viewers._notify_viewer_update(username, "viewer_point_update")
-                # Trigger immediate mod sync
-                asyncio.create_task(self.bot.sync_leaderboard_mods())
 
         elif etype == "full_viewer_sync":
             viewers_data = event.get("viewers", {})
             self.bot.viewers.viewers = viewers_data
             logger.info(f"Successfully synced {len(viewers_data)} viewers from Cloud Database!")
             self.bot.viewers._notify_viewer_update(event="full_viewer_sync")
-            # Trigger immediate mod sync
-            asyncio.create_task(self.bot.sync_leaderboard_mods())
 
         elif etype == "send_chat":
             msg = event.get("message")
