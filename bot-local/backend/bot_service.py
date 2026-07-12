@@ -303,9 +303,19 @@ class BotService:
              logger.error(f"Sheet Auto-Connect Failed: {e}")
 
         if os.environ.get("RUN_MODE") == "cloud":
-            logger.info("Running in Cloud Mode. Minimal services started. Skipping local loops.")
+            logger.info("Running in Cloud Mode. Starting Heavy Lifting Services (AI, YouTube, Goals).")
+            self._spawn_managed_loop("youtube_stats", self._youtube_stats_loop)
+            self._spawn_managed_loop("rewards_expiration", self._rewards_expiration_loop)
+            self._spawn_managed_loop("leaderboard_mod_sync", self._leaderboard_mod_sync_loop)
+            self._spawn_managed_loop("goal_monitoring", self._goal_monitoring_loop)
+            self._spawn_managed_loop("auto_message", self._auto_message_loop)
+            if hasattr(self, "_dynamic_engagement_loop"):
+                self.dynamic_engagement_task = self._spawn_managed_loop("dynamic_engagement", self._dynamic_engagement_loop)
+            if hasattr(self, "_stream_context_loop"):
+                self._spawn_managed_loop("stream_context", self._stream_context_loop)
             return
 
+        logger.info("Running in Local Pi Mode. Starting Hardware/Local Services (Audio, Streamer.bot).")
         # Always start SB loop so it can dynamically connect when enabled via UI
         self.sb_ws_task = self._spawn_managed_loop("sb_ws", self._sb_ws_loop)
         if self.tunnel:
@@ -313,24 +323,6 @@ class BotService:
         if self.cloud_alert_client:
             await self.cloud_alert_client.start()
         self._spawn_managed_loop("email_monitor", self._email_monitor_loop)
-        self.dynamic_engagement_task = self._spawn_managed_loop("dynamic_engagement", self._dynamic_engagement_loop)
-        self._spawn_managed_loop("stream_context", self._stream_context_loop)
-
-
-        # Start YouTube Stats Loop (Subscriber Count auto-update)
-        self._spawn_managed_loop("youtube_stats", self._youtube_stats_loop)
-
-        # Start Rewards Expiration Loop
-        self._spawn_managed_loop("rewards_expiration", self._rewards_expiration_loop)
-
-        # Start Leaderboard Top 3 Mod Sync Loop
-        self._spawn_managed_loop("leaderboard_mod_sync", self._leaderboard_mod_sync_loop)
-        
-        # Start Goals Monitoring Loop
-        self._spawn_managed_loop("goal_monitoring", self._goal_monitoring_loop)
-        
-        # Start Auto-Message Loop
-        self._spawn_managed_loop("auto_message", self._auto_message_loop)
 
     async def _auto_message_loop(self):
         """Sends scheduled auto-messages at configured intervals."""
