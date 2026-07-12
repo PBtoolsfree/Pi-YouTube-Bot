@@ -783,11 +783,9 @@ export default function SettingsPage({ config, onSave }) {
                                     <div className="space-y-2">
                                         <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Channel IDs (Comma-Separated)</label>
                                         <Input
-                                            value={localConfig.discord_integration?.channel_ids || localConfig.discord_integration?.channel_id || ''}
+                                            value={localConfig.discord_integration?.channel_ids ?? localConfig.discord_integration?.channel_id ?? ''}
                                             onChange={(e) => {
                                                 updateNested('discord_integration.channel_ids', e.target.value);
-                                                // Optional: remove old channel_id so it doesn't stay indefinitely,
-                                                // but for now updating channel_ids is enough.
                                             }}
                                             className="bg-zinc-950 border-zinc-700 h-9"
                                             placeholder="1507640240393683045, 987654321098765"
