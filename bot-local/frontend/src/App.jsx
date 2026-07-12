@@ -51,6 +51,9 @@ function App() {
     // ONLY force public mode if we are on a known public domain (Vercel, Cloudflare, etc)
     // OR if the user is explicitly visiting /tip
     const hostname = window.location.hostname;
+    if (hostname.includes('pbhero.qzz.io')) {
+      return false;
+    }
     return (
       hostname.includes('vercel.app') ||
       hostname.includes('trycloudflare.com') ||
@@ -112,6 +115,7 @@ function App() {
       // AUTO-DETECT PUBLIC MODE (Host based only)
       if (
         window.location.hostname &&
+        !window.location.hostname.includes('pbhero.qzz.io') &&
         (window.location.hostname.includes('vercel.app') || 
          window.location.hostname.includes('trycloudflare.com') ||
          window.location.hostname.includes('qzz.io') ||
