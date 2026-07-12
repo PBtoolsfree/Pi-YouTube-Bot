@@ -503,7 +503,7 @@ class YouTubeService:
         try:
             service = await asyncio.to_thread(self._build_service_sync, creds=creds)
             request = service.liveBroadcasts().list(
-                part="snippet",
+                part="snippet,liveStreamingDetails",
                 broadcastStatus="active",
                 broadcastType="all"
             )
@@ -514,9 +514,12 @@ class YouTubeService:
                 return None
                 
             snippet = items[0].get("snippet", {})
+            details = items[0].get("liveStreamingDetails", {})
             return {
+                "id": items[0].get("id"),
                 "title": snippet.get("title", ""),
-                "description": snippet.get("description", "")
+                "description": snippet.get("description", ""),
+                "actualStartTime": details.get("actualStartTime")
             }
         except Exception as e:
             logger.error(f"Live Stream Context Error: {e}")

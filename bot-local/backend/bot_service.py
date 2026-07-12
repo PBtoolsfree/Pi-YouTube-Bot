@@ -1639,6 +1639,8 @@ class BotService:
         elif cmd == "!clip":
             config = self.load_config()
             channel_id = config.get("youtube", {}).get("channel_id")
+            
+            video_id_arg = None
             if len(args) > 0 and args[0]:
                 video_id_arg = args[0]
                 channel_url = f"https://www.youtube.com/watch?v={video_id_arg}"
@@ -1649,39 +1651,64 @@ class BotService:
                 return
                 
             try:
-                def get_metadata():
-                    import json, urllib.request, re, calendar, subprocess, sys
-                    from datetime import datetime
-                    try:
-                        req = urllib.request.Request(channel_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                        html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
-                        match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
-                        if match:
-                            data = json.loads(match.group(1))
-                            is_live = data.get("videoDetails", {}).get("isLiveContent", False)
-                            start_ts_str = data.get("microformat", {}).get("playerMicroformatRenderer", {}).get("liveBroadcastDetails", {}).get("startTimestamp")
-                            if is_live and start_ts_str:
-                                dt = datetime.strptime(start_ts_str[:19], "%Y-%m-%dT%H:%M:%S")
-                                return {"id": data["videoDetails"]["videoId"], "is_live": True, "release_timestamp": calendar.timegm(dt.timetuple()), "title": data["videoDetails"]["title"]}
-                    except Exception as e:
-                        logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
+                metadata = {}
+                
+                # Try to use Official API to bypass IP Blocks (Costs max 1 quota)
+                import calendar
+                from datetime import datetime
+                
+                if not video_id_arg:
+                    # Fetching for current active stream
+                    api_context = getattr(self, "_live_context", None)
+                    if not api_context or not api_context.get("actualStartTime"):
+                        # Fetch fresh context if missing
+                        api_context = await self.youtube_api.get_live_stream_context()
                     
-                    try:
-                        res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False)
-                        if res.returncode == 0:
-                            return json.loads(res.stdout)
-                        return {"error": res.stderr.strip() or "Unknown error"}
-                    except Exception as e:
-                        return {"error": str(e)}
-                    return {"error": "Failed"}
-                    
-                metadata = await asyncio.to_thread(get_metadata)
+                    if api_context and api_context.get("actualStartTime"):
+                        start_ts_str = api_context["actualStartTime"]
+                        dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                        start_ts = calendar.timegm(dt.timetuple())
+                        metadata = {
+                            "id": api_context.get("id"),
+                            "is_live": True,
+                            "release_timestamp": start_ts,
+                            "title": api_context.get("title", "Live Stream")
+                        }
+                
+                # Fallback to Scraper/yt-dlp if API fails or if a specific video_id is passed
+                if not metadata:
+                    def get_metadata():
+                        import json, urllib.request, re, subprocess, sys
+                        try:
+                            req = urllib.request.Request(channel_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                            html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                            match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
+                            if match:
+                                data = json.loads(match.group(1))
+                                is_live = data.get("videoDetails", {}).get("isLiveContent", False)
+                                start_ts_str = data.get("microformat", {}).get("playerMicroformatRenderer", {}).get("liveBroadcastDetails", {}).get("startTimestamp")
+                                if is_live and start_ts_str:
+                                    dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                                    return {"id": data["videoDetails"]["videoId"], "is_live": True, "release_timestamp": calendar.timegm(dt.timetuple()), "title": data["videoDetails"]["title"]}
+                        except Exception as e:
+                            logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
+                        
+                        try:
+                            res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False)
+                            if res.returncode == 0:
+                                return json.loads(res.stdout)
+                            return {"error": res.stderr.strip() or "Unknown error"}
+                        except Exception as e:
+                            return {"error": str(e)}
+                        return {"error": "Failed"}
+                        
+                    metadata = await asyncio.to_thread(get_metadata)
                 
                 if metadata.get("error"):
                     await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
                     return
                     
-                video_id = metadata.get("id")
+                video_id = metadata.get("id") or video_id_arg
                 start_ts = metadata.get("release_timestamp")
                 
                 if video_id and start_ts:
@@ -1699,7 +1726,7 @@ class BotService:
                     else:
                         await self._send_chat(f"@{author} Could not connect to Cloud Bot to generate clip.")
                 else:
-                    await self._send_chat(f"@{author} Could not get live stream start time.")
+                    await self._send_chat(f"@{author} Could not get live stream start time. Is the stream live?")
             except Exception as e:
                 logger.error(f"Clip command error: {e}")
 
