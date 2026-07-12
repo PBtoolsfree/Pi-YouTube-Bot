@@ -746,8 +746,25 @@ export default function SettingsPage({ config, onSave }) {
                             </CardContent>
                         </Card>
 
-
-
+                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                            <CardHeader className="pb-3 border-b border-zinc-800">
+                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Discord Integration</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-4 space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Webhook URL (For !clip)</label>
+                                    <Input
+                                        value={localConfig.discord_integration?.webhook_url || ''}
+                                        onChange={(e) => updateNested('discord_integration.webhook_url', e.target.value)}
+                                        className="bg-zinc-950 border-zinc-700 h-9"
+                                        placeholder="https://discord.com/api/webhooks/..."
+                                    />
+                                    <p className="text-[10px] text-zinc-500">
+                                        Paste your Discord Webhook URL here to receive stream clips.
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                             <CardHeader className="pb-3 border-b border-zinc-800">

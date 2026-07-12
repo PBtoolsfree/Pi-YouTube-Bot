@@ -1113,6 +1113,19 @@ async def restart_bot():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- CLIPS ENDPOINTS ---
+
+@app.get("/api/clips")
+async def get_clips():
+    if hasattr(bot, "recent_clips"):
+        return {"status": "success", "clips": bot.recent_clips}
+    return {"status": "success", "clips": []}
+
+@app.delete("/api/clips")
+async def clear_clips():
+    bot.recent_clips = []
+    return {"status": "success", "message": "Clips cleared"}
+
 # --- INTEGRATIONS CONTROL ---
 
 @app.post("/api/integrations/telegram/restart")

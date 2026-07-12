@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     LayoutDashboard, Settings, Cpu, Activity, Power, Monitor, Shield, Users,
     ShieldBan, Volume2, Heart, Share2, Beaker, Sparkles, IndianRupee, Cloud,
-    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server, History
+    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server, History, Video
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -101,6 +101,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="personalities" icon={<Sparkles />} label="Personalities" active={activeTab} onClick={setActiveTab} dot={navDot('personalities')} dotColor={dotColor} />
                                 <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
+                                <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
                             </>
@@ -120,6 +121,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                                 <NavItem id="obs" icon={<Monitor />} label="OBS Source" active={activeTab} onClick={setActiveTab} dot={navDot('obs')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
                                 <NavItem id="super_chat_settings" icon={<Gem />} label="Super Chat" active={activeTab} onClick={() => setActiveTab('super_chat_settings')} dot={navDot('super_chat_settings')} dotColor={dotColor} />
+                                <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
                             </>

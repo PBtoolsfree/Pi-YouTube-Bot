@@ -45,6 +45,7 @@ const AgentPage = lazy(() => import('./pages/Agent'))
 const BackupPage = lazy(() => import('./pages/Backup'))
 const RedeemManagerPage = lazy(() => import('./pages/RedeemManager'))
 const GiveawaysPage = lazy(() => import('./pages/Giveaways'))
+const ClipsPage = lazy(() => import('./pages/Clips'))
 
 // SAFEGUARD: Access env vars safely (Force Update)
 const env = import.meta.env || {}
@@ -271,6 +272,7 @@ function App() {
         {activeTab === 'backup' && <BackupPage />}
         {activeTab === 'redeems' && <RedeemManagerPage />}
         {activeTab === 'giveaways' && <GiveawaysPage />}
+        {activeTab === 'clips' && <ClipsPage />}
       </Suspense>
     </Layout>
   )

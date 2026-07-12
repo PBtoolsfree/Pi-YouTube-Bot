@@ -57,7 +57,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
-        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan"
+        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -168,6 +168,9 @@ class BotService:
         
         # Live YouTube Stream Likes
         self.live_likes_count = -1
+
+        # Recent clips (for dashboard)
+        self.recent_clips = []
 
     @property
     def is_sb_connected(self):
@@ -1589,7 +1592,7 @@ class BotService:
             cmd_name = parts[0].lower().strip()
             
             # Cloud only commands that should be processed even if forwarded from local Pi
-            cloud_only_commands = {"loan", "payloan"}
+            cloud_only_commands = {"loan", "payloan", "clip"}
             
             if is_valid_command(cmd_name, config):
                 if not is_forwarded or cmd_name in cloud_only_commands:
@@ -1704,6 +1707,103 @@ class BotService:
                 await self._send_chat(f"@{author} You have {pts} Points! Rank: {rank} {emoji}. {req} Points until {next_rank['name']}!")
             else:
                 await self._send_chat(f"@{author} You have {pts} Points! Rank: {rank} {emoji}. You are at the max rank!")
+                
+        elif cmd == "!clip":
+            cooldown_key = f"clip_{author}"
+            last_used = self._custom_cmd_cooldowns.get(cooldown_key, 0)
+            if time.time() - last_used < 15:
+                return # Anti-spam, silently ignore
+            self._custom_cmd_cooldowns[cooldown_key] = time.time()
+            
+            yt_cfg = config.get("youtube", {})
+            channel_id = yt_cfg.get("channel_id")
+            if not channel_id:
+                await self._send_chat(f"@{author} Error: Channel ID not configured in settings.")
+                return
+            
+            channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
+            
+            try:
+                def get_metadata():
+                    import subprocess, json
+                    result = subprocess.run(
+                        ["yt-dlp", "-J", "--no-warnings", channel_url],
+                        capture_output=True, text=True, check=False
+                    )
+                    if result.returncode == 0:
+                        return json.loads(result.stdout)
+                    return None
+                    
+                metadata = await asyncio.to_thread(get_metadata)
+                
+                if not metadata or not metadata.get("is_live"):
+                    await self._send_chat(f"@{author} Clip feature only works when the stream is live!")
+                    return
+                    
+                video_id = metadata.get("id")
+                start_timestamp = metadata.get("release_timestamp")
+                title = metadata.get("title", "Live Stream")
+                
+                if not start_timestamp:
+                    await self._send_chat(f"@{author} Could not calculate stream start time for clipping.")
+                    return
+                    
+                current_time = int(time.time())
+                elapsed_seconds = max(0, current_time - start_timestamp)
+                
+                clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
+                
+                timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
+                clip_entry = {
+                    "timestamp": timestamp_str,
+                    "author": author,
+                    "url": clip_url,
+                    "status": "Generated"
+                }
+                
+                if not hasattr(self, "recent_clips"):
+                    self.recent_clips = []
+                self.recent_clips.insert(0, clip_entry) # Add to front
+                if len(self.recent_clips) > 100:
+                    self.recent_clips = self.recent_clips[:100]
+                
+                await self._send_chat(f"🎬 @{author}, aapka epic moment save kar liya gaya hai! Link Discord par bhej diya hai, check out #stream-clips channel! 🚀")
+                
+                dc_cfg = config.get("discord_integration", {})
+                webhook_url = dc_cfg.get("webhook_url")
+                
+                if webhook_url:
+                    embed = {
+                        "title": "🎬 New Stream Clip!",
+                        "description": "A highlight moment was captured on stream!",
+                        "color": 16711680, # YouTube Red
+                        "fields": [
+                            {"name": "👤 Clipped By", "value": f"`{author}`", "inline": True},
+                            {"name": "📺 Stream", "value": title, "inline": False},
+                            {"name": "🔗 Watch Clip", "value": f"[**Watch Clip ➜**]({clip_url})", "inline": False}
+                        ],
+                        "footer": {"text": "Pi YouTube Bot - Auto Clipper"}
+                    }
+                    
+                    thumbnail = metadata.get("thumbnail")
+                    if thumbnail:
+                        embed["thumbnail"] = {"url": thumbnail}
+                        
+                    payload = {"embeds": [embed]}
+                    
+                    async def send_webhook(url, data):
+                        import httpx
+                        async with httpx.AsyncClient() as client:
+                            try:
+                                await client.post(url, json=data, timeout=5.0)
+                            except Exception as e:
+                                logger.error(f"Failed to send Discord webhook: {e}")
+                                
+                    asyncio.create_task(send_webhook(webhook_url, payload))
+                
+            except Exception as e:
+                logger.error(f"Clip command error: {e}")
+                await self._send_chat(f"@{author} Sorry, there was an error processing your clip request.")
         
         elif cmd == "!give":
             if not self.gambling._is_game_enabled("give"):
