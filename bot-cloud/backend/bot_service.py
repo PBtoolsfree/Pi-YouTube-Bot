@@ -1729,7 +1729,39 @@ class BotService:
             
             try:
                 def get_metadata():
-                    import subprocess, json, sys
+                    import subprocess, json, sys, urllib.request, re, calendar
+                    from datetime import datetime
+                    
+                    # 1. Zero-Quota Fast HTML Scraper (Bypasses yt-dlp bot checks)
+                    try:
+                        req = urllib.request.Request(
+                            channel_url, 
+                            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'}
+                        )
+                        html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                        match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
+                        if match:
+                            data = json.loads(match.group(1))
+                            video_details = data.get("videoDetails", {})
+                            microformat = data.get("microformat", {}).get("playerMicroformatRenderer", {})
+                            
+                            is_live = video_details.get("isLiveContent", False)
+                            start_ts_str = microformat.get("liveBroadcastDetails", {}).get("startTimestamp")
+                            
+                            if is_live and start_ts_str:
+                                dt = datetime.strptime(start_ts_str[:19], "%Y-%m-%dT%H:%M:%S")
+                                start_ts = calendar.timegm(dt.timetuple())
+                                return {
+                                    "id": video_details.get("videoId"),
+                                    "is_live": True,
+                                    "live_status": "is_live",
+                                    "release_timestamp": start_ts,
+                                    "title": video_details.get("title", "Live Stream")
+                                }
+                    except Exception as e:
+                        logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
+
+                    # 2. yt-dlp Fallback
                     try:
                         result = subprocess.run(
                             [
@@ -1750,7 +1782,7 @@ class BotService:
                     except Exception as e:
                         logger.error(f"yt-dlp exception: {e}")
                         return {"error": str(e)}
-                    return {"error": "Failed to run yt-dlp"}
+                    return {"error": "Failed to run get_metadata"}
                     
                 metadata = await asyncio.to_thread(get_metadata)
                 
