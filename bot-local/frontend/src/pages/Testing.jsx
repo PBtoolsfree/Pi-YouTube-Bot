@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import axios from 'axios'
 import { Beaker, MessageSquare, Mic, Send, Trash2, CheckCircle, XCircle, Activity, ShieldCheck, Zap } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Input, Button, Label } from '@/components/ui'
@@ -49,10 +49,9 @@ export default function TestingPage() {
         setLoading(true)
         const timestamp = new Date().toLocaleTimeString()
         try {
-            // We just trigger it, and wait for the WebSocket to give us the actual response
             const res = await axios.post('/api/chat', { prompt: aiPrompt })
             setResponses(prev => [
-                { type: 'SYSTEM', prompt: aiPrompt, text: "Sent to Cloud VPS. Waiting for AI...", time: timestamp },
+                { type: 'AI', prompt: aiPrompt, text: res.data.response, time: timestamp },
                 ...prev
             ])
             setAiPrompt('')
@@ -65,36 +64,6 @@ export default function TestingPage() {
             setLoading(false)
         }
     }
-
-    // Listen to window events or we can just poll/listen to global log state if available.
-    // Wait, since we don't have a WebSocketContext imported here, let's just add an effect to listen to the global WebSocket if possible.
-    // Better yet, just use a simple interval to fetch logs and look for our response.
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            try {
-                const res = await axios.get('/api/logs/history');
-                if (Array.isArray(res.data)) {
-                    // Get the most recent AI_RESPONSE or AI_ERROR
-                    const recentAiLogs = res.data.filter(l => l.category === 'AI_RESPONSE' || l.category === 'AI_ERROR');
-                    if (recentAiLogs.length > 0) {
-                        const latest = recentAiLogs[recentAiLogs.length - 1]; // Assuming history is chronologically appended (oldest first, newest last) or newest first?
-                        // Let's check if we already have this exact text in our responses
-                        setResponses(prev => {
-                            const alreadyExists = prev.some(r => r.text === latest.message);
-                            if (!alreadyExists) {
-                                return [
-                                    { type: latest.category === 'AI_ERROR' ? 'ERROR' : 'AI_REPLY', text: latest.message, time: new Date(latest.timestamp * 1000).toLocaleTimeString() },
-                                    ...prev
-                                ];
-                            }
-                            return prev;
-                        });
-                    }
-                }
-            } catch (err) {}
-        }, 3000);
-        return () => clearInterval(interval);
-    }, []);
 
     const handleTtsTest = async (channel) => {
         if (!ttsText.trim()) return
@@ -225,7 +194,7 @@ export default function TestingPage() {
                                 </div>
                             </div>
                             <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
-                                This will forward the test to your Cloud VPS AI Engine.
+                                This will use your configured AI Strategy and Providers.
                             </p>
                         </form>
                     </CardContent>

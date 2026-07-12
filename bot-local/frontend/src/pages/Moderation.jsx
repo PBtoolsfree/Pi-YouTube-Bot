@@ -75,8 +75,6 @@ export default function ModerationPage({ config, onSave }) {
         if (!update.moderation.filters.length_protection) update.moderation.filters.length_protection = { enabled: true, limit: 300 }
         if (!update.moderation.filters.repetition_filter) update.moderation.filters.repetition_filter = { enabled: true }
         if (!update.moderation.filters.gibberish_filter) update.moderation.filters.gibberish_filter = { enabled: true }
-        if (!update.moderation.filters.identical_message_filter) update.moderation.filters.identical_message_filter = { enabled: true, limit: 3, window: 30 }
-        if (!update.moderation.filters.advanced_spam_filter) update.moderation.filters.advanced_spam_filter = { enabled: true, short_spam_limit: 3 }
 
         if (mode === 'strict') {
             update.moderation.protection_logic.max_warnings = 1
@@ -86,8 +84,6 @@ export default function ModerationPage({ config, onSave }) {
             update.moderation.filters.excess_symbols.limit = 5
             update.moderation.filters.length_protection.limit = 150
             update.moderation.filters.caps_protection.limit = 50
-            update.moderation.filters.identical_message_filter.limit = 2
-            update.moderation.filters.advanced_spam_filter.short_spam_limit = 2
         } else if (mode === 'balanced') {
             update.moderation.protection_logic.max_warnings = 3
             update.moderation.protection_logic.warning_window = 60
@@ -96,8 +92,6 @@ export default function ModerationPage({ config, onSave }) {
             update.moderation.filters.excess_symbols.limit = 10
             update.moderation.filters.length_protection.limit = 300
             update.moderation.filters.caps_protection.limit = 70
-            update.moderation.filters.identical_message_filter.limit = 3
-            update.moderation.filters.advanced_spam_filter.short_spam_limit = 3
         } else if (mode === 'chill') {
             update.moderation.protection_logic.max_warnings = 5
             update.moderation.protection_logic.warning_window = 30
@@ -106,8 +100,6 @@ export default function ModerationPage({ config, onSave }) {
             update.moderation.filters.excess_symbols.limit = 20
             update.moderation.filters.length_protection.limit = 500
             update.moderation.filters.caps_protection.limit = 90
-            update.moderation.filters.identical_message_filter.limit = 5
-            update.moderation.filters.advanced_spam_filter.short_spam_limit = 5
         }
         setLocalConfig(update)
     }
@@ -441,7 +433,7 @@ export default function ModerationPage({ config, onSave }) {
 
                     {/* Auto Spam & Gibberish Blocker */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm overflow-hidden">
-                        <div className="flex flex-row items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
+                        <div className="flex flex-row items-center justify-between p-4 bg-zinc-900">
                             <div>
                                 <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
                                     <Shield className="h-4 w-4 text-violet-400" /> Auto Spam & Gibberish Blocker
@@ -453,81 +445,13 @@ export default function ModerationPage({ config, onSave }) {
                                 onCheckedChange={(c) => updateNested('moderation.filters.gibberish_filter.enabled', c)}
                             />
                         </div>
-                        <CardContent className="p-4 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-xs font-medium text-zinc-300">Advanced Similar Message Filter</div>
-                                    <div className="text-[10px] text-zinc-500">Catches slight message variations & random short letter spam</div>
-                                </div>
-                                <Switch
-                                    className="scale-75 origin-right"
-                                    checked={localConfig.moderation?.filters?.advanced_spam_filter?.enabled ?? false}
-                                    onCheckedChange={(c) => updateNested('moderation.filters.advanced_spam_filter.enabled', c)}
-                                />
-                            </div>
-                            
-                            {localConfig.moderation?.filters?.advanced_spam_filter?.enabled && (
-                                <div className="flex items-center justify-between pl-1 border-l-2 border-violet-500/30">
-                                    <div>
-                                        <div className="text-xs font-medium text-zinc-400">Max Short Messages</div>
-                                        <div className="text-[10px] text-zinc-500">Max short gibberish per window (e.g. ko, lo)</div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Input type="number" min="1" max="10" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
-                                            value={localConfig.moderation?.filters?.advanced_spam_filter?.short_spam_limit ?? 3}
-                                            onChange={(e) => updateNested('moderation.filters.advanced_spam_filter.short_spam_limit', parseInt(e.target.value))} />
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Identical Message Blocker */}
-                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm overflow-hidden">
-                        <div className="flex flex-row items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
-                            <div>
-                                <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
-                                    <Repeat className="h-4 w-4 text-cyan-400" /> Identical Message Blocker
-                                </CardTitle>
-                                <p className="text-[11px] text-zinc-400 mt-1">Restrict spamming the exact same message.</p>
-                            </div>
-                            <Switch
-                                checked={localConfig.moderation?.filters?.identical_message_filter?.enabled ?? false}
-                                onCheckedChange={(c) => updateNested('moderation.filters.identical_message_filter.enabled', c)}
-                            />
-                        </div>
-                        {localConfig.moderation?.filters?.identical_message_filter?.enabled && (
-                            <CardContent className="p-4 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-xs font-medium text-zinc-300">Max identical messages</div>
-                                        <div className="text-[10px] text-zinc-500">Allowed times in a row</div>
-                                    </div>
-                                    <Input type="number" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
-                                        value={localConfig.moderation?.filters?.identical_message_filter?.limit ?? 3}
-                                        onChange={(e) => updateNested('moderation.filters.identical_message_filter.limit', parseInt(e.target.value))} />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-xs font-medium text-zinc-300">Time Window</div>
-                                        <div className="text-[10px] text-zinc-500">Window in seconds</div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Input type="number" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
-                                            value={localConfig.moderation?.filters?.identical_message_filter?.window ?? 30}
-                                            onChange={(e) => updateNested('moderation.filters.identical_message_filter.window', parseInt(e.target.value))} />
-                                        <span className="text-[10px] text-zinc-500 w-10">sec</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        )}
                     </Card>
 
                     {/* Spam Blocker & Emoji Spammer */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                         <CardHeader className="p-4 border-b border-zinc-800">
                             <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-indigo-400" /> Fast Spam & Emoji Blocker
+                                <Zap className="h-4 w-4 text-indigo-400" /> Spam & Emoji Blocker
                             </CardTitle>
                             <p className="text-[11px] text-zinc-400 mt-1">Stop fast typing or spamming too many emojis.</p>
                         </CardHeader>

@@ -231,7 +231,7 @@ export default function Backup() {
                     <div className="bg-zinc-900/60 rounded-xl p-4 mb-5 border border-white/5">
                         <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-3">Files included</p>
                         <div className="space-y-1.5">
-                            {['config.json', 'client_secret.json', 'sheets_client_secret.json', 'service_account.json', '.env', 'viewers.db', 'subscriber_count.json'].map(f => (
+                            {['config.json', '.env', 'viewers.db', 'data/donations.json', 'data/brain.db', 'data/youtube_memory.db'].map(f => (
                                 <div key={f} className="flex items-center gap-2 text-xs text-zinc-400">
                                     <div className="h-1 w-1 rounded-full bg-emerald-500" />
                                     {f}
