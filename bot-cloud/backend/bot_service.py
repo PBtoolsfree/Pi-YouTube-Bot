@@ -1717,11 +1717,15 @@ class BotService:
             
             yt_cfg = config.get("youtube", {})
             channel_id = yt_cfg.get("channel_id")
-            if not channel_id:
+            
+            if len(args) > 0 and args[0]:
+                video_id_arg = args[0]
+                channel_url = f"https://www.youtube.com/watch?v={video_id_arg}"
+            elif channel_id:
+                channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
+            else:
                 await self._send_chat(f"@{author} Error: Channel ID not configured in settings.")
                 return
-            
-            channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
             
             try:
                 def get_metadata():
