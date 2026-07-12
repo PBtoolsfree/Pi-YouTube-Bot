@@ -764,27 +764,19 @@ export default function SettingsPage({ config, onSave }) {
                             <CardContent className="pt-4 space-y-4">
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Webhook URL (Option A)</label>
-                                        <Input
-                                            value={localConfig.discord_integration?.webhook_url || ''}
-                                            onChange={(e) => updateNested('discord_integration.webhook_url', e.target.value)}
-                                            className="bg-zinc-950 border-zinc-700 h-9"
-                                            placeholder="https://discord.com/api/webhooks/..."
-                                        />
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Integration Mode</label>
+                                        <select
+                                            className="w-full bg-zinc-950 border border-zinc-700 rounded-md h-9 px-3 text-sm text-zinc-100"
+                                            disabled
+                                        >
+                                            <option>Discord Bot Mode (Multi-Channel broadcast)</option>
+                                        </select>
                                         <p className="text-[10px] text-zinc-500">
-                                            Paste your Discord Webhook URL here to receive stream clips.
+                                            Select how you want to forward clips to Discord.
                                         </p>
                                     </div>
-                                    <div className="relative pt-2">
-                                        <div className="absolute inset-0 flex items-center">
-                                            <span className="w-full border-t border-zinc-800" />
-                                        </div>
-                                        <div className="relative flex justify-center text-[10px] uppercase">
-                                            <span className="bg-zinc-900 px-2 text-zinc-500">Or Option B: Discord Bot</span>
-                                        </div>
-                                    </div>
                                     <div className="space-y-2 pt-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Bot Token</label>
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Bot Token</label>
                                         <Input
                                             type="password"
                                             value={localConfig.discord_integration?.bot_token || ''}
@@ -792,15 +784,25 @@ export default function SettingsPage({ config, onSave }) {
                                             className="bg-zinc-950 border-zinc-700 h-9"
                                             placeholder="MTExMjIzMzM0NDQ1NTU..."
                                         />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Your Discord application bot token. Ensure your bot is added to your target servers.
+                                        </p>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Channel ID</label>
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Channel IDs (Comma-Separated)</label>
                                         <Input
-                                            value={localConfig.discord_integration?.channel_id || ''}
-                                            onChange={(e) => updateNested('discord_integration.channel_id', e.target.value)}
+                                            value={localConfig.discord_integration?.channel_ids || localConfig.discord_integration?.channel_id || ''}
+                                            onChange={(e) => {
+                                                updateNested('discord_integration.channel_ids', e.target.value);
+                                                // Optional: remove old channel_id so it doesn't stay indefinitely,
+                                                // but for now updating channel_ids is enough.
+                                            }}
                                             className="bg-zinc-950 border-zinc-700 h-9"
-                                            placeholder="123456789012345678"
+                                            placeholder="1507640240393683045, 987654321098765"
                                         />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Target text channel IDs where the Discord Bot has permissions to post.
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>

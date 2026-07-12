@@ -1770,11 +1770,10 @@ class BotService:
                 await self._send_chat(f"🎬 @{author}, aapka epic moment save kar liya gaya hai! Link Discord par bhej diya hai, check out #stream-clips channel! 🚀")
                 
                 dc_cfg = config.get("discord_integration", {})
-                webhook_url = dc_cfg.get("webhook_url")
                 bot_token = dc_cfg.get("bot_token")
-                channel_id = dc_cfg.get("channel_id")
+                channel_ids_str = dc_cfg.get("channel_ids") or dc_cfg.get("channel_id")
                 
-                if webhook_url or (bot_token and channel_id):
+                if bot_token and channel_ids_str:
                     embed = {
                         "title": "🎬 New Stream Clip!",
                         "description": "A highlight moment was captured on stream!",
@@ -1793,25 +1792,23 @@ class BotService:
                         
                     payload = {"embeds": [embed]}
                     
-                    async def send_discord_msg():
+                    async def send_discord_msgs():
                         import httpx
                         async with httpx.AsyncClient() as client:
-                            try:
-                                if bot_token and channel_id:
-                                    # Send using Bot API
-                                    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
-                                    headers = {
-                                        "Authorization": f"Bot {bot_token}",
-                                        "Content-Type": "application/json"
-                                    }
+                            headers = {
+                                "Authorization": f"Bot {bot_token}",
+                                "Content-Type": "application/json"
+                            }
+                            # Split channel IDs by comma and clean whitespace
+                            ch_ids = [cid.strip() for cid in channel_ids_str.split(",") if cid.strip()]
+                            for cid in ch_ids:
+                                try:
+                                    url = f"https://discord.com/api/v10/channels/{cid}/messages"
                                     await client.post(url, headers=headers, json=payload, timeout=5.0)
-                                elif webhook_url:
-                                    # Fallback to Webhook URL
-                                    await client.post(webhook_url, json=payload, timeout=5.0)
-                            except Exception as e:
-                                logger.error(f"Failed to send Discord notification: {e}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send Discord notification to channel {cid}: {e}")
                                 
-                    asyncio.create_task(send_discord_msg())
+                    asyncio.create_task(send_discord_msgs())
                 
             except Exception as e:
                 logger.error(f"Clip command error: {e}")
