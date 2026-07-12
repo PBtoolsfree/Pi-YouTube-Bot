@@ -2341,8 +2341,8 @@ async def login_youtube(request: Request):
         else:
             host = _convert_ip_to_nip_io(host)  # Convert raw IPs to nip.io
 
-        # Detect scheme: use http strictly
-        scheme = "http"
+        # Detect scheme from reverse proxy (HTTPS) or fallback to request scheme
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/youtube/callback"
         
         url, state = auth.get_auth_url(redirect_uri=redirect_uri)
@@ -2382,8 +2382,8 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
         else:
             host = _convert_ip_to_nip_io(host)  # Convert raw IPs to nip.io
 
-        # Detect scheme: use http strictly
-        scheme = "http"
+        # Detect scheme from reverse proxy (HTTPS) or fallback to request scheme
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/youtube/callback"
         
         # Run in thread — exchange_code uses synchronous 'requests' library internally
@@ -2499,7 +2499,7 @@ async def login_sheets(request: Request):
         else:
             host = _convert_ip_to_nip_io(host)
 
-        scheme = "http"
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
         
         # SPECIFIC SCOPES FOR SHEETS
@@ -2543,7 +2543,7 @@ async def callback_sheets(request: Request, code: Optional[str] = None, state: O
         else:
             host = _convert_ip_to_nip_io(host)
 
-        scheme = "http"
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
         
         sheets_scopes = [
