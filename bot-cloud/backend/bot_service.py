@@ -1592,7 +1592,7 @@ class BotService:
             cmd_name = parts[0].lower().strip()
             
             # Cloud only commands that should be processed even if forwarded from local Pi
-            cloud_only_commands = {"loan", "payloan", "clip"}
+            cloud_only_commands = {"loan", "payloan"}
             
             if is_valid_command(cmd_name, config):
                 if not is_forwarded or cmd_name in cloud_only_commands:
@@ -1708,172 +1708,6 @@ class BotService:
             else:
                 await self._send_chat(f"@{author} You have {pts} Points! Rank: {rank} {emoji}. You are at the max rank!")
                 
-        elif cmd == "!clip":
-            cooldown_key = f"clip_{author}"
-            last_used = self._custom_cmd_cooldowns.get(cooldown_key, 0)
-            if time.time() - last_used < 15:
-                return # Anti-spam, silently ignore
-            self._custom_cmd_cooldowns[cooldown_key] = time.time()
-            
-            yt_cfg = config.get("youtube", {})
-            channel_id = yt_cfg.get("channel_id")
-            
-            if len(args) > 0 and args[0]:
-                video_id_arg = args[0]
-                channel_url = f"https://www.youtube.com/watch?v={video_id_arg}"
-            elif channel_id:
-                channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
-            else:
-                await self._send_chat(f"@{author} Error: Channel ID not configured in settings.")
-                return
-            
-            try:
-                def get_metadata():
-                    import subprocess, json, sys, urllib.request, re, calendar
-                    from datetime import datetime
-                    
-                    # 1. Zero-Quota Fast HTML Scraper (Bypasses yt-dlp bot checks)
-                    try:
-                        req = urllib.request.Request(
-                            channel_url, 
-                            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'}
-                        )
-                        html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
-                        match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
-                        if match:
-                            data = json.loads(match.group(1))
-                            video_details = data.get("videoDetails", {})
-                            microformat = data.get("microformat", {}).get("playerMicroformatRenderer", {})
-                            
-                            is_live = video_details.get("isLiveContent", False)
-                            start_ts_str = microformat.get("liveBroadcastDetails", {}).get("startTimestamp")
-                            
-                            if is_live and start_ts_str:
-                                dt = datetime.strptime(start_ts_str[:19], "%Y-%m-%dT%H:%M:%S")
-                                start_ts = calendar.timegm(dt.timetuple())
-                                return {
-                                    "id": video_details.get("videoId"),
-                                    "is_live": True,
-                                    "live_status": "is_live",
-                                    "release_timestamp": start_ts,
-                                    "title": video_details.get("title", "Live Stream")
-                                }
-                    except Exception as e:
-                        logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
-
-                    # 2. yt-dlp Fallback
-                    try:
-                        result = subprocess.run(
-                            [
-                                sys.executable, "-m", "yt_dlp", 
-                                "-J", 
-                                "--no-warnings", 
-                                "--extractor-args", "youtube:player_client=ios,android",
-                                channel_url
-                            ],
-                            capture_output=True, text=True, check=False
-                        )
-                        if result.returncode == 0:
-                            return json.loads(result.stdout)
-                        else:
-                            err_msg = result.stderr.strip() or "Unknown error"
-                            logger.error(f"yt-dlp error: {err_msg}")
-                            return {"error": err_msg}
-                    except Exception as e:
-                        logger.error(f"yt-dlp exception: {e}")
-                        return {"error": str(e)}
-                    return {"error": "Failed to run get_metadata"}
-                    
-                metadata = await asyncio.to_thread(get_metadata)
-                
-                if metadata.get("error"):
-                    await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
-                    return
-                elif not metadata.get("id"):
-                    await self._send_chat(f"@{author} Error: Could not fetch stream metadata (Check bot logs).")
-                    return
-                    
-                is_live_flag = metadata.get("is_live")
-                live_status = metadata.get("live_status")
-                
-                if not is_live_flag and live_status != "is_live":
-                    await self._send_chat(f"@{author} Clip feature only works when the stream is live! (Status: {live_status}, Flag: {is_live_flag})")
-                    return
-                    
-                video_id = metadata.get("id")
-                start_timestamp = metadata.get("release_timestamp")
-                title = metadata.get("title", "Live Stream")
-                
-                if not start_timestamp:
-                    await self._send_chat(f"@{author} Could not calculate stream start time for clipping.")
-                    return
-                    
-                current_time = int(time.time())
-                elapsed_seconds = max(0, current_time - start_timestamp)
-                
-                clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
-                
-                timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
-                clip_entry = {
-                    "timestamp": timestamp_str,
-                    "author": author,
-                    "url": clip_url,
-                    "status": "Generated"
-                }
-                
-                if not hasattr(self, "recent_clips"):
-                    self.recent_clips = []
-                self.recent_clips.insert(0, clip_entry) # Add to front
-                if len(self.recent_clips) > 100:
-                    self.recent_clips = self.recent_clips[:100]
-                
-                await self._send_chat(f"🎬 @{author}, aapka epic moment save kar liya gaya hai! Link Discord par bhej diya hai, check out #stream-clips channel! 🚀")
-                
-                dc_cfg = config.get("discord_integration", {})
-                bot_token = dc_cfg.get("bot_token")
-                channel_ids_str = dc_cfg.get("channel_ids") or dc_cfg.get("channel_id")
-                
-                if bot_token and channel_ids_str:
-                    embed = {
-                        "title": "🎬 New Stream Clip!",
-                        "description": "A highlight moment was captured on stream!",
-                        "color": 16711680, # YouTube Red
-                        "fields": [
-                            {"name": "👤 Clipped By", "value": f"`{author}`", "inline": True},
-                            {"name": "📺 Stream", "value": title, "inline": False},
-                            {"name": "🔗 Watch Clip", "value": f"[**Watch Clip ➜**]({clip_url})", "inline": False}
-                        ],
-                        "footer": {"text": "Pi YouTube Bot - Auto Clipper"}
-                    }
-                    
-                    thumbnail = metadata.get("thumbnail")
-                    if thumbnail:
-                        embed["thumbnail"] = {"url": thumbnail}
-                        
-                    payload = {"embeds": [embed]}
-                    
-                    async def send_discord_msgs():
-                        import httpx
-                        async with httpx.AsyncClient() as client:
-                            headers = {
-                                "Authorization": f"Bot {bot_token}",
-                                "Content-Type": "application/json"
-                            }
-                            # Split channel IDs by comma and clean whitespace
-                            ch_ids = [cid.strip() for cid in channel_ids_str.split(",") if cid.strip()]
-                            for cid in ch_ids:
-                                try:
-                                    url = f"https://discord.com/api/v10/channels/{cid}/messages"
-                                    await client.post(url, headers=headers, json=payload, timeout=5.0)
-                                except Exception as e:
-                                    logger.error(f"Failed to send Discord notification to channel {cid}: {e}")
-                                
-                    asyncio.create_task(send_discord_msgs())
-                
-            except Exception as e:
-                logger.error(f"Clip command error: {e}")
-                await self._send_chat(f"@{author} Sorry, there was an error processing your clip request.")
-        
         elif cmd == "!give":
             if not self.gambling._is_game_enabled("give"):
                 await self._send_chat(f"@{author} The !give command is currently disabled by the streamer.")
@@ -2467,6 +2301,77 @@ class BotService:
             sb_data = event.get("data")
             if sb_data:
                 await self._handle_sb_event(sb_data)
+
+        elif etype == "create_clip":
+            author = event.get("author")
+            video_id = event.get("video_id")
+            start_timestamp = event.get("start_timestamp")
+            title = event.get("title", "Live Stream")
+            
+            import time
+            current_time = int(time.time())
+            elapsed_seconds = max(0, current_time - start_timestamp)
+            clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
+            
+            timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
+            clip_entry = {
+                "timestamp": timestamp_str,
+                "author": author,
+                "url": clip_url,
+                "status": "Generated"
+            }
+            
+            if not hasattr(self, "recent_clips"):
+                self.recent_clips = []
+            self.recent_clips.insert(0, clip_entry)
+            if len(self.recent_clips) > 100:
+                self.recent_clips = self.recent_clips[:100]
+            
+            # Use self._send_chat so it gets broadcasted back to the Pi
+            await self._send_chat(f"🎬 @{author}, aapka epic moment save kar liya gaya hai! Link Discord par bhej diya hai, check out #stream-clips channel! 🚀")
+            
+            # Discord Integration
+            config = self.load_config()
+            dc_cfg = config.get("discord_integration", {})
+            bot_token = dc_cfg.get("bot_token")
+            channel_ids_str = dc_cfg.get("channel_ids") or dc_cfg.get("channel_id")
+            
+            if bot_token and channel_ids_str:
+                embed = {
+                    "title": "🎬 New Stream Clip!",
+                    "description": "A highlight moment was captured on stream!",
+                    "color": 16711680,
+                    "fields": [
+                        {"name": "👤 Clipped By", "value": f"`{author}`", "inline": True},
+                        {"name": "📺 Stream", "value": title, "inline": False},
+                        {"name": "🔗 Watch Clip", "value": f"[**Watch Clip ➜**]({clip_url})", "inline": False}
+                    ],
+                    "footer": {"text": "Pi YouTube Bot - Auto Clipper"}
+                }
+                thumbnail = event.get("thumbnail")
+                if thumbnail:
+                    embed["thumbnail"] = {"url": thumbnail}
+                    
+                payload = {"embeds": [embed]}
+                
+                async def send_discord_msgs():
+                    import httpx
+                    async with httpx.AsyncClient() as client:
+                        headers = {
+                            "Authorization": f"Bot {bot_token}",
+                            "Content-Type": "application/json"
+                        }
+                        channel_ids = [cid.strip() for cid in channel_ids_str.split(",") if cid.strip()]
+                        for cid in channel_ids:
+                            try:
+                                url = f"https://discord.com/api/v10/channels/{cid}/messages"
+                                resp = await client.post(url, headers=headers, json=payload)
+                                if resp.status_code not in [200, 204]:
+                                    logger.error(f"Discord API Error {resp.status_code}: {resp.text}")
+                            except Exception as e:
+                                logger.error(f"Failed to send to Discord channel {cid}: {e}")
+                
+                self._spawn_task(send_discord_msgs())
 
         elif etype == "sync_config":
             key = event.get("key")

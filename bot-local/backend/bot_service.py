@@ -1636,6 +1636,73 @@ class BotService:
         elif cmd == "!memes" or cmd == "!rewards":
             await self._handle_memes_cmd(author)
 
+        elif cmd == "!clip":
+            config = self.load_config()
+            channel_id = config.get("youtube", {}).get("channel_id")
+            if len(args) > 0 and args[0]:
+                video_id_arg = args[0]
+                channel_url = f"https://www.youtube.com/watch?v={video_id_arg}"
+            elif channel_id:
+                channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
+            else:
+                await self._send_chat(f"@{author} Error: Channel ID not configured.")
+                return
+                
+            try:
+                def get_metadata():
+                    import json, urllib.request, re, calendar, subprocess, sys
+                    from datetime import datetime
+                    try:
+                        req = urllib.request.Request(channel_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                        html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                        match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', html)
+                        if match:
+                            data = json.loads(match.group(1))
+                            is_live = data.get("videoDetails", {}).get("isLiveContent", False)
+                            start_ts_str = data.get("microformat", {}).get("playerMicroformatRenderer", {}).get("liveBroadcastDetails", {}).get("startTimestamp")
+                            if is_live and start_ts_str:
+                                dt = datetime.strptime(start_ts_str[:19], "%Y-%m-%dT%H:%M:%S")
+                                return {"id": data["videoDetails"]["videoId"], "is_live": True, "release_timestamp": calendar.timegm(dt.timetuple()), "title": data["videoDetails"]["title"]}
+                    except Exception as e:
+                        logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
+                    
+                    try:
+                        res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False)
+                        if res.returncode == 0:
+                            return json.loads(res.stdout)
+                        return {"error": res.stderr.strip() or "Unknown error"}
+                    except Exception as e:
+                        return {"error": str(e)}
+                    return {"error": "Failed"}
+                    
+                metadata = await asyncio.to_thread(get_metadata)
+                
+                if metadata.get("error"):
+                    await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
+                    return
+                    
+                video_id = metadata.get("id")
+                start_ts = metadata.get("release_timestamp")
+                
+                if video_id and start_ts:
+                    # Forward the clip event to Cloud bot to process Discord & Dashboard
+                    if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
+                        self._spawn_task(self.cloud_alert_client.send_event({
+                            "type": "create_clip",
+                            "author": author,
+                            "video_id": video_id,
+                            "start_timestamp": start_ts,
+                            "title": metadata.get("title", "Live Stream"),
+                            "thumbnail": metadata.get("thumbnail")
+                        }))
+                        logger.info(f"Sent create_clip event to cloud for {author}")
+                    else:
+                        await self._send_chat(f"@{author} Could not connect to Cloud Bot to generate clip.")
+                else:
+                    await self._send_chat(f"@{author} Could not get live stream start time.")
+            except Exception as e:
+                logger.error(f"Clip command error: {e}")
+
         else:
             # Custom Commands Fallback
             config = self.load_config()
