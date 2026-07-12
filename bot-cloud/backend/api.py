@@ -117,6 +117,15 @@ webhook_logger = WebhookLogger()
 def _is_public_request(request: Request) -> bool:
     """Determine if a request comes from the public internet (via Cloudflare Tunnel)."""
     host = request.headers.get("host", "").lower()
+    
+    # ---------------------------------------------------------
+    # NEW LOGIC: Allow direct Dashboard access via specific domain
+    # If the user is accessing via their main dashboard domain,
+    # treat it as a local/admin request to avoid redirecting to /tip
+    # ---------------------------------------------------------
+    if "pbhero.qzz.io" in host:
+        return False
+        
     cfg = _get_config()
     # Allow configurable tunnel domains
     tunnel_domains = cfg.get("security", {}).get(
