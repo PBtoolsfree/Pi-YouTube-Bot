@@ -14,7 +14,7 @@ export default function SettingsPage({ config, onSave }) {
 
     // Internal save handler
     const handleSave = () => onSave(localConfig)
-    const [activeSection, setActiveSection] = useState('youtube') // Start with YouTube as it's the priority
+    const [activeSection, setActiveSection] = useState('stream') // Start with stream
 
     // Sync localConfig when config prop updates
     React.useEffect(() => {
@@ -47,11 +47,16 @@ export default function SettingsPage({ config, onSave }) {
     }
 
     const sections = [
-        { id: 'youtube', label: 'YouTube & Auth', icon: <Youtube className="h-4 w-4" /> },
-        { id: 'ai', label: 'AI & Personality', icon: <MessageSquare className="h-4 w-4" /> },
-        { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
-        { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
+        ...(localConfig?.is_cloud ? [
+            { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
+            { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
+            { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
+            { id: 'bot_integration', label: 'Bot Integration', icon: <Radio className="h-4 w-4" /> },
+        ] : [
+            { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
+        ]),
+        { id: 'backup', label: 'Backup/Restore', icon: <Database className="h-4 w-4" /> }
     ]
 
     // ─── BACKUP STATE ───────────────────────────────────────────
@@ -323,7 +328,7 @@ export default function SettingsPage({ config, onSave }) {
 
     return (
         <div className="pb-10 space-y-6">
-            <PageStatusBar services={['bot', 'youtube', 'streamerBot', 'ai', 'tts']} />
+            <PageStatusBar services={localConfig?.is_cloud ? ['bot'] : ['bot', 'youtube', 'streamerBot', 'ai', 'tts']} />
 
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-1">
@@ -416,21 +421,24 @@ export default function SettingsPage({ config, onSave }) {
                                         className="bg-zinc-950 border-zinc-700 text-sm text-zinc-100 h-9"
                                     />
                                 </div>
-                                <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-zinc-300">Automated Moderation</label>
-                                        <p className="text-[10px] text-zinc-500">Allow the bot to assign/remove YouTube moderators</p>
+                                {localConfig?.is_cloud && (
+                                    <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+                                        <div>
+                                            <label className="text-sm font-medium text-zinc-300">Automated Moderation</label>
+                                            <p className="text-[10px] text-zinc-500">Allow the bot to assign/remove YouTube moderators</p>
+                                        </div>
+                                        <Switch
+                                            checked={localConfig.youtube?.moderation_enabled || false}
+                                            onCheckedChange={(c) => updateNested('youtube.moderation_enabled', c)}
+                                        />
                                     </div>
-                                    <Switch
-                                        checked={localConfig.youtube?.moderation_enabled || false}
-                                        onCheckedChange={(c) => updateNested('youtube.moderation_enabled', c)}
-                                    />
-                                </div>
+                                )}
                             </CardContent>
                         </Card>
 
                         {/* 2. Authentication */}
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                        {localConfig?.is_cloud && (
+                            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                             <CardHeader className="pb-3 border-b border-zinc-800">
                                 <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
                                     <Key className="h-4 w-4 text-yellow-500" /> Authentication
@@ -663,6 +671,7 @@ export default function SettingsPage({ config, onSave }) {
 
                             </CardContent>
                         </Card>
+                        )}
                     </div>
                 )}
 
@@ -715,101 +724,137 @@ export default function SettingsPage({ config, onSave }) {
                     </div>
                 )}
 
-                {activeSection === 'integrations' && (
+                {(activeSection === 'integrations' || activeSection === 'bot_integration') && (
                     <div className="grid gap-6 md:grid-cols-2">
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Streamer.bot</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-zinc-300">Enabled</label>
-                                    <Switch
-                                        checked={localConfig.streamer_bot?.enabled || false}
-                                        onCheckedChange={(c) => updateNested('streamer_bot.enabled', c)}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Host</label>
-                                        <Input
-                                            value={localConfig.streamer_bot?.host || ''}
-                                            onChange={(e) => updateNested('streamer_bot.host', e.target.value)}
-                                            className="bg-zinc-950 border-zinc-700 h-9"
+                        {!localConfig?.is_cloud && (
+                            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                                <CardHeader className="pb-3 border-b border-zinc-800">
+                                    <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Streamer.bot</CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-medium text-zinc-300">Enabled</label>
+                                        <Switch
+                                            checked={localConfig.streamer_bot?.enabled || false}
+                                            onCheckedChange={(c) => updateNested('streamer_bot.enabled', c)}
                                         />
                                     </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-zinc-500 uppercase">Host</label>
+                                            <Input
+                                                value={localConfig.streamer_bot?.host || ''}
+                                                onChange={(e) => updateNested('streamer_bot.host', e.target.value)}
+                                                className="bg-zinc-950 border-zinc-700 h-9"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-zinc-500 uppercase">Port</label>
+                                            <Input
+                                                value={localConfig.streamer_bot?.port || 8080}
+                                                onChange={(e) => updateNested('streamer_bot.port', parseInt(e.target.value))}
+                                                className="bg-zinc-950 border-zinc-700 h-9"
+                                            />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                            <CardHeader className="pb-3 border-b border-zinc-800">
+                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Discord Integration</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-4 space-y-4">
+                                <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Port</label>
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Bot Token</label>
                                         <Input
-                                            value={localConfig.streamer_bot?.port || 8080}
-                                            onChange={(e) => updateNested('streamer_bot.port', parseInt(e.target.value))}
+                                            type="password"
+                                            value={localConfig.discord_integration?.bot_token || ''}
+                                            onChange={(e) => updateNested('discord_integration.bot_token', e.target.value)}
                                             className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="MTExMjIzMzM0NDQ1NTU..."
                                         />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Your Discord application bot token. Ensure your bot is added to your target servers.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Channel IDs (Comma-Separated)</label>
+                                        <Input
+                                            value={localConfig.discord_integration?.channel_ids ?? localConfig.discord_integration?.channel_id ?? ''}
+                                            onChange={(e) => {
+                                                updateNested('discord_integration.channel_ids', e.target.value);
+                                            }}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="1507640240393683045, 987654321098765"
+                                        />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Target text channel IDs where the Discord Bot has permissions to post.
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>
                         </Card>
 
+                        {!localConfig?.is_cloud && (
+                            <>
+                                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                                    <CardHeader className="pb-3 border-b border-zinc-800">
+                                        <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Audio Engine</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="pt-4 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-sm font-medium text-zinc-300">Enabled</label>
+                                            <Switch
+                                                checked={localConfig.audio?.enabled || false}
+                                                onCheckedChange={(c) => updateNested('audio.enabled', c)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-zinc-500 uppercase">Target IP</label>
+                                            <Input
+                                                value={localConfig.audio?.gaming_pc_ip || ''}
+                                                onChange={(e) => updateNested('audio.gaming_pc_ip', e.target.value)}
+                                                className="bg-zinc-950 border-zinc-700 h-9"
+                                                placeholder="192.168.x.x"
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
 
-
-
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Audio Engine</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-zinc-300">Enabled</label>
-                                    <Switch
-                                        checked={localConfig.audio?.enabled || false}
-                                        onCheckedChange={(c) => updateNested('audio.enabled', c)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Target IP</label>
-                                    <Input
-                                        value={localConfig.audio?.gaming_pc_ip || ''}
-                                        onChange={(e) => updateNested('audio.gaming_pc_ip', e.target.value)}
-                                        className="bg-zinc-950 border-zinc-700 h-9"
-                                        placeholder="192.168.x.x"
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
-                                    <Cloud className="h-4 w-4 text-blue-400" />
-                                    Cloud Connection
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-zinc-300">Enabled</label>
-                                    <Switch
-                                        checked={localConfig.cloud_alert_enabled !== false}
-                                        onCheckedChange={(c) => updateNested('cloud_alert_enabled', c)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Cloud Server WebSocket URL</label>
-                                    <Input
-                                        value={localConfig.cloud_alert_url || ''}
-                                        onChange={(e) => updateNested('cloud_alert_url', e.target.value)}
-                                        className="bg-zinc-950 border-zinc-700 h-9 font-mono text-xs"
-                                        placeholder="ws://80.225.201.233:8000/ws/pi-client"
-                                    />
-                                    <p className="text-[10px] text-zinc-500">
-                                        The Local Pi will connect to this Cloud Server URL to receive real-time donation alerts. (Copy this from your Cloud Dashboard).
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-
-
-
+                                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                                    <CardHeader className="pb-3 border-b border-zinc-800">
+                                        <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
+                                            <Cloud className="h-4 w-4 text-blue-400" />
+                                            Cloud Connection
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="pt-4 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-sm font-medium text-zinc-300">Enabled</label>
+                                            <Switch
+                                                checked={localConfig.cloud_alert_enabled !== false}
+                                                onCheckedChange={(c) => updateNested('cloud_alert_enabled', c)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-zinc-500 uppercase">Cloud Server WebSocket URL</label>
+                                            <Input
+                                                value={localConfig.cloud_alert_url || ''}
+                                                onChange={(e) => updateNested('cloud_alert_url', e.target.value)}
+                                                className="bg-zinc-950 border-zinc-700 h-9 font-mono text-xs"
+                                                placeholder="ws://80.225.201.233:8000/ws/pi-client"
+                                            />
+                                            <p className="text-[10px] text-zinc-500">
+                                                The Local Pi will connect to this Cloud Server URL to receive real-time donation alerts. (Copy this from your Cloud Dashboard).
+                                            </p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </>
+                        )}
                     </div>
                 )}
 

@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     LayoutDashboard, Settings, Cpu, Activity, Power, Monitor, Shield, Users,
     ShieldBan, Volume2, Heart, Share2, Beaker, Sparkles, IndianRupee, Cloud,
-    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server, History
+    Gem, Terminal, Clock, Bot, Brain, Youtube, Mail, Link2, Radio, Archive, Clapperboard, Target, Gift, Smartphone, Server, History, Video
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -90,27 +90,50 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
 
                 <div className="flex-1 overflow-y-auto py-2">
                     <nav className="p-4 space-y-1">
+                        {config?.is_cloud ? (
+                            <>
                                 <NavItem id="dashboard" icon={<Activity />} label="Dashboard" active={activeTab} onClick={setActiveTab} dot={navDot('dashboard')} dotColor={dotColor} />
                                 <NavItem id="goals" icon={<Target />} label="Goals" active={activeTab} onClick={setActiveTab} dot={navDot('goals')} dotColor={dotColor} />
                                 <NavItem id="moderation" icon={<Shield />} label="Moderation" active={activeTab} onClick={setActiveTab} dot={navDot('moderation')} dotColor={dotColor} />
-                                <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
                                 <NavItem id="viewers" icon={<Users />} label="Audience" active={activeTab} onClick={setActiveTab} dot={navDot('viewers')} dotColor={dotColor} />
-                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty Log" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
-                                <NavItem id="tip_history" icon={<History />} label="Tip History" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="giveaways" icon={<Gift />} label="Giveaways" active={activeTab} onClick={setActiveTab} dot={navDot('giveaways')} dotColor={dotColor} />
                                 <NavItem id="redeems" icon={<Clapperboard />} label="Rewards Shop" active={activeTab} onClick={setActiveTab} dot={navDot('redeems')} dotColor={dotColor} />
-                                <NavItem id="streamer_bot" icon={<Share2 />} label="Integrations" active={activeTab} onClick={setActiveTab} dot={navDot('streamer_bot')} dotColor={dotColor} />
-                                <NavItem id="audio_engine" icon={<Volume2 />} label="Audio Engine" active={activeTab} onClick={setActiveTab} dot={navDot('audio_engine')} dotColor={dotColor} />
-                                <NavItem id="obs" icon={<Monitor />} label="OBS Source" active={activeTab} onClick={setActiveTab} dot={navDot('obs')} dotColor={dotColor} />
-                                <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
                                 <NavItem id="super_chat_settings" icon={<Gem />} label="Super Chat" active={activeTab} onClick={() => setActiveTab('super_chat_settings')} dot={navDot('super_chat_settings')} dotColor={dotColor} />
+                                <NavItem id="obs" icon={<Monitor />} label="OBS Source" active={activeTab} onClick={setActiveTab} dot={navDot('obs')} dotColor={dotColor} />
+                                <NavItem id="tip_page_settings" icon={<IndianRupee />} label="Tip Page Settings" active={activeTab} onClick={setActiveTab} dot={navDot('tip_page_settings')} dotColor={dotColor} />
+                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
+                                <NavItem id="local_pi_connection" icon={<Server />} label="Local Pi Connection" active={activeTab} onClick={setActiveTab} dot={navDot('local_pi_connection')} dotColor={dotColor} />
+                                <NavItem id="domain" icon={<Link2 />} label="Domain Integration" active={activeTab} onClick={setActiveTab} dot={navDot('domain')} dotColor={dotColor} />
+                                <NavItem id="cloudflare" icon={<Cloud />} label="Cloudflare" active={activeTab} onClick={setActiveTab} dot={navDot('cloudflare')} dotColor={dotColor} />
+                                <NavItem id="app_webhook" icon={<Smartphone />} label="App Webhook" active={activeTab} onClick={setActiveTab} dot={navDot('app_webhook')} dotColor={dotColor} />
+                                <NavItem id="agent" icon={<Bot />} label="🤖 Agent" active={activeTab} onClick={setActiveTab} dot={navDot('agent')} dotColor={dotColor} />
+                                <NavItem id="personalities" icon={<Sparkles />} label="Personalities" active={activeTab} onClick={setActiveTab} dot={navDot('personalities')} dotColor={dotColor} />
+                                <NavItem id="orchestrator" icon={<Cpu />} label="Orchestrator" active={activeTab} onClick={setActiveTab} dot={navDot('orchestrator')} dotColor={dotColor} />
+                                <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
+                                <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
                                 <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
+                            </>
+                        ) : (
+                            <>
+                                <NavItem id="dashboard" icon={<Activity />} label="Dashboard" active={activeTab} onClick={setActiveTab} dot={navDot('dashboard')} dotColor={dotColor} />
+                                <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
+                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty Log" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
+                                <NavItem id="tip_history" icon={<History />} label="Tip History" active={activeTab} onClick={setActiveTab} />
+                                <NavItem id="streamer_bot" icon={<Share2 />} label="Integrations" active={activeTab} onClick={setActiveTab} dot={navDot('streamer_bot')} dotColor={dotColor} />
+                                <NavItem id="audio_engine" icon={<Volume2 />} label="Audio Engine" active={activeTab} onClick={setActiveTab} dot={navDot('audio_engine')} dotColor={dotColor} />
+                                <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />
+                                <NavItem id="clips" icon={<Video />} label="Clips" active={activeTab} onClick={setActiveTab} />
+                                <NavItem id="backup" icon={<Archive />} label="Backup" active={activeTab} onClick={setActiveTab} dot={navDot('backup')} dotColor={dotColor} />
+                                <NavItem id="settings" icon={<Settings />} label="Settings" active={activeTab} onClick={() => setActiveTab('settings')} dot={navDot('settings')} dotColor={dotColor} />
+                            </>
+                        )}
                     </nav>
                 </div>
 
                 {/* Bottom: Mini feature status */}
-                <div className="p-4 border-t border-sidebar-accent bg-sidebar-accent/30 shrink-0 space-y-2">
+                {!config?.is_cloud && (
+                    <div className="p-4 border-t border-sidebar-accent bg-sidebar-accent/30 shrink-0 space-y-2">
                         {/* Service mini indicators */}
                         <div className="hidden md:flex flex-col gap-1.5 pb-1">
                             <div className="flex items-center gap-2 text-xs">
@@ -136,6 +159,7 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                             <div className={`w-3 h-3 rounded-full shadow-sm ${svc.bot ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                         </div>
                     </div>
+                )}
             </aside>
 
             {/* Main Content */}

@@ -23,12 +23,15 @@ import BossOverlay from './pages/BossOverlay'
 // Dashboard Pages (lazy loaded — only fetched when tab is opened)
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const GoalsPage = lazy(() => import('./pages/Goals'))
+const Orchestrator = lazy(() => import('./pages/Orchestrator'))
 const OBSPage = lazy(() => import('./pages/OBS'))
 const ModerationPage = lazy(() => import('./pages/Moderation'))
 const ViewersPage = lazy(() => import('./pages/Viewers'))
 const AudioEnginePage = lazy(() => import('./pages/AudioEngine'))
 const LoyaltyPage = lazy(() => import('./pages/Loyalty'))
+const LoyaltyManagerPage = lazy(() => import('./pages/LoyaltyManager'))
 const TipHistoryPage = lazy(() => import('./pages/TipHistory'))
+const PersonalitiesPage = lazy(() => import('./pages/Personalities'))
 const StreamerBotPage = lazy(() => import('./pages/StreamerBot'))
 const TestingPage = lazy(() => import('./pages/Testing'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
@@ -38,9 +41,12 @@ const CloudflareSettings = lazy(() => import('./pages/CloudflareSettings'))
 const AppWebhookSettings = lazy(() => import('./pages/AppWebhookSettings'))
 const LocalPiConnection = lazy(() => import('./pages/LocalPiConnection'))
 const SuperChatSettings = lazy(() => import('./pages/SuperChatSettings'))
+const AgentPage = lazy(() => import('./pages/Agent'))
 const BackupPage = lazy(() => import('./pages/Backup'))
 const RedeemManagerPage = lazy(() => import('./pages/RedeemManager'))
 const GiveawaysPage = lazy(() => import('./pages/Giveaways'))
+const ClipsPage = lazy(() => import('./pages/Clips'))
+const DomainSettings = lazy(() => import('./pages/DomainSettings'))
 
 // SAFEGUARD: Access env vars safely (Force Update)
 const env = import.meta.env || {}
@@ -245,10 +251,13 @@ function App() {
       <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-4 border-violet-500 border-t-transparent rounded-full" /></div>}>
         {activeTab === 'dashboard' && <Dashboard logs={logs} />}
         {activeTab === 'goals' && <GoalsPage backendStatus={backendStatus} />}
+        {activeTab === 'orchestrator' && <Orchestrator config={config} onSave={handleSaveConfig} />}
+        {activeTab === 'backup' && <BackupPage />}
         {activeTab === 'moderation' && <ModerationPage config={config} onSave={handleSaveConfig} logs={logs} />}
         {activeTab === 'viewers' && <ViewersPage />}
-        {activeTab === 'loyalty' && <LoyaltyPage />}
+        {activeTab === 'loyalty' && (config?.is_cloud ? <LoyaltyManagerPage /> : <LoyaltyPage />)}
         {activeTab === 'tip_history' && <TipHistoryPage />}
+        {activeTab === 'personalities' && <PersonalitiesPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'streamer_bot' && <StreamerBotPage logs={logs} config={config} onSave={handleSaveConfig} backendStatus={backendStatus} />}
         {activeTab === 'ignore_list' && <IgnoreListPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'audio_engine' && <AudioEnginePage />}
@@ -260,9 +269,12 @@ function App() {
         {activeTab === 'local_pi_connection' && <LocalPiConnection />}
         {activeTab === 'super_chat_settings' && <SuperChatSettings config={config} onSave={handleSaveConfig} />}
         {activeTab === 'cloudflare' && <CloudflareSettings />}
+        {activeTab === 'agent' && <AgentPage />}
         {activeTab === 'backup' && <BackupPage />}
         {activeTab === 'redeems' && <RedeemManagerPage />}
         {activeTab === 'giveaways' && <GiveawaysPage />}
+        {activeTab === 'clips' && <ClipsPage />}
+        {activeTab === 'domain' && <DomainSettings config={config} onSave={handleSaveConfig} />}
       </Suspense>
     </Layout>
   )
