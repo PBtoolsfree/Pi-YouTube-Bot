@@ -1729,7 +1729,7 @@ class BotService:
                             logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
                         
                         try:
-                            res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False)
+                            res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--no-playlist", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False, timeout=15)
                             if res.returncode == 0:
                                 return json.loads(res.stdout)
                             err_str = res.stderr.strip()
