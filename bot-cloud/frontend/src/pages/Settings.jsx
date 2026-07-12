@@ -48,15 +48,15 @@ export default function SettingsPage({ config, onSave }) {
 
     const sections = [
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
-        { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
-        ...(!localConfig?.is_cloud ? [
-            { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
-            { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
+        ...(localConfig?.is_cloud ? [
+            { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
             { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
-            { id: 'backup', label: 'Backup/Restore', icon: <Database className="h-4 w-4" /> }
-        ] : [
+            { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
             { id: 'bot_integration', label: 'Bot Integration', icon: <Radio className="h-4 w-4" /> },
-        ])
+        ] : [
+            { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
+        ]),
+        { id: 'backup', label: 'Backup/Restore', icon: <Database className="h-4 w-4" /> }
     ]
 
     // ─── BACKUP STATE ───────────────────────────────────────────
@@ -421,7 +421,7 @@ export default function SettingsPage({ config, onSave }) {
                                         className="bg-zinc-950 border-zinc-700 text-sm text-zinc-100 h-9"
                                     />
                                 </div>
-                                {!localConfig?.is_cloud && (
+                                {localConfig?.is_cloud && (
                                     <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
                                         <div>
                                             <label className="text-sm font-medium text-zinc-300">Automated Moderation</label>
@@ -437,7 +437,7 @@ export default function SettingsPage({ config, onSave }) {
                         </Card>
 
                         {/* 2. Authentication */}
-                        {!localConfig?.is_cloud && (
+                        {localConfig?.is_cloud && (
                             <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                             <CardHeader className="pb-3 border-b border-zinc-800">
                                 <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
