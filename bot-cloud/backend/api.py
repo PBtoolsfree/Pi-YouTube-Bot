@@ -924,11 +924,25 @@ async def delete_redeem(reward_id: str):
 @app.post("/api/redeems/{reward_id}/test")
 async def test_redeem(reward_id: str):
     """Trigger a redeem without spending points (for testing)."""
+    target_sb_ws = bot.sb_ws
+    
+    if os.environ.get("RUN_MODE") == "cloud":
+        class CloudSBProxy:
+            def __init__(self, bot): self.bot = bot
+            async def send(self, payload):
+                if getattr(self.bot, "pi_clients", None):
+                    await self.bot.pi_clients.broadcast({
+                        "type": "trigger_sb_raw",
+                        "payload": payload
+                    })
+            def __bool__(self): return getattr(self.bot, "remote_sb_connected", False)
+        target_sb_ws = CloudSBProxy(bot)
+
     result = await redeem_svc.trigger(
         reward_id,
         author="[TEST]",
         viewer_service=bot.viewers,
-        sb_ws=bot.sb_ws,
+        sb_ws=target_sb_ws,
         broadcast_func=broadcast_log,
         skip_cost=True,
     )
