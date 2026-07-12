@@ -48,8 +48,8 @@ export default function SettingsPage({ config, onSave }) {
 
     const sections = [
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
+        { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
         ...(!localConfig?.is_cloud ? [
-            { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
             { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
             { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
             { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
@@ -328,7 +328,7 @@ export default function SettingsPage({ config, onSave }) {
 
     return (
         <div className="pb-10 space-y-6">
-            <PageStatusBar services={['bot', 'youtube', 'streamerBot', 'ai', 'tts']} />
+            <PageStatusBar services={localConfig?.is_cloud ? ['bot'] : ['bot', 'youtube', 'streamerBot', 'ai', 'tts']} />
 
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-1">
@@ -764,18 +764,6 @@ export default function SettingsPage({ config, onSave }) {
                             <CardContent className="pt-4 space-y-4">
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Integration Mode</label>
-                                        <select
-                                            className="w-full bg-zinc-950 border border-zinc-700 rounded-md h-9 px-3 text-sm text-zinc-100"
-                                            disabled
-                                        >
-                                            <option>Discord Bot Mode (Multi-Channel broadcast)</option>
-                                        </select>
-                                        <p className="text-[10px] text-zinc-500">
-                                            Select how you want to forward clips to Discord.
-                                        </p>
-                                    </div>
-                                    <div className="space-y-2 pt-2">
                                         <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Bot Token</label>
                                         <Input
                                             type="password"
