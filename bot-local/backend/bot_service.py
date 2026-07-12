@@ -1661,19 +1661,40 @@ class BotService:
                     # Fetching for current active stream
                     api_context = getattr(self, "_live_context", None)
                     if not api_context or not api_context.get("actualStartTime"):
-                        # Fetch fresh context if missing
                         api_context = await self.youtube_api.get_live_stream_context()
                     
                     if api_context and api_context.get("actualStartTime"):
                         start_ts_str = api_context["actualStartTime"]
                         dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
-                        start_ts = calendar.timegm(dt.timetuple())
                         metadata = {
                             "id": api_context.get("id"),
                             "is_live": True,
-                            "release_timestamp": start_ts,
+                            "release_timestamp": calendar.timegm(dt.timetuple()),
                             "title": api_context.get("title", "Live Stream")
                         }
+                else:
+                    # Fetch specific video using Official API
+                    try:
+                        creds = self.youtube_api._get_credentials()
+                        if creds:
+                            service = await asyncio.to_thread(self.youtube_api._build_service_sync, creds=creds)
+                            req = service.videos().list(id=video_id_arg, part="snippet,liveStreamingDetails")
+                            resp = await asyncio.to_thread(req.execute)
+                            items = resp.get("items", [])
+                            if items:
+                                details = items[0].get("liveStreamingDetails", {})
+                                snippet = items[0].get("snippet", {})
+                                start_ts_str = details.get("actualStartTime")
+                                if start_ts_str:
+                                    dt = datetime.strptime(start_ts_str[:19].replace('Z',''), "%Y-%m-%dT%H:%M:%S")
+                                    metadata = {
+                                        "id": items[0].get("id"),
+                                        "is_live": True, # Assume live or past live if it has actualStartTime
+                                        "release_timestamp": calendar.timegm(dt.timetuple()),
+                                        "title": snippet.get("title", "Live Stream")
+                                    }
+                    except Exception as e:
+                        logger.error(f"Clip specific video API Error: {e}")
                 
                 # Fallback to Scraper/yt-dlp if API fails or if a specific video_id is passed
                 if not metadata:

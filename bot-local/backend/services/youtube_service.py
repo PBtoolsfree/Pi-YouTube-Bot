@@ -505,7 +505,8 @@ class YouTubeService:
             request = service.liveBroadcasts().list(
                 part="snippet,liveStreamingDetails",
                 broadcastStatus="active",
-                broadcastType="all"
+                broadcastType="all",
+                mine=True
             )
             response = await asyncio.to_thread(request.execute)
             
