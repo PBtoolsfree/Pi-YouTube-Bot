@@ -14,11 +14,11 @@ cd bot-cloud
 
 if [ -d ".venv" ]; then
     echo "Updating Python dependencies..."
-    .venv/bin/pip install -r requirements.txt
+    .venv/bin/pip install -U -r requirements.txt
 else
     echo "Virtual environment not found, creating..."
     python3 -m venv .venv
-    .venv/bin/pip install -r requirements.txt
+    .venv/bin/pip install -U -r requirements.txt
 fi
 
 if [ -d "frontend" ]; then

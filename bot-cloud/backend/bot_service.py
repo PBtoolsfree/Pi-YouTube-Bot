@@ -1732,7 +1732,13 @@ class BotService:
                     import subprocess, json, sys
                     try:
                         result = subprocess.run(
-                            [sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", channel_url],
+                            [
+                                sys.executable, "-m", "yt_dlp", 
+                                "-J", 
+                                "--no-warnings", 
+                                "--extractor-args", "youtube:player_client=ios,android",
+                                channel_url
+                            ],
                             capture_output=True, text=True, check=False
                         )
                         if result.returncode == 0:
