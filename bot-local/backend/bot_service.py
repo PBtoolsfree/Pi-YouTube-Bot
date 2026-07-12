@@ -1718,7 +1718,12 @@ class BotService:
                             res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False)
                             if res.returncode == 0:
                                 return json.loads(res.stdout)
-                            return {"error": res.stderr.strip() or "Unknown error"}
+                            err_str = res.stderr.strip()
+                            if "is not currently live" in err_str:
+                                return {"error": "Channel is not currently live."}
+                            if "Sign in to confirm" in err_str:
+                                return {"error": "Bot verification blocked this request. Stream must be live to use API fallback."}
+                            return {"error": err_str or "Unknown error"}
                         except Exception as e:
                             return {"error": str(e)}
                         return {"error": "Failed"}
@@ -1744,6 +1749,7 @@ class BotService:
                             "thumbnail": metadata.get("thumbnail")
                         }))
                         logger.info(f"Sent create_clip event to cloud for {author}")
+                        await self._send_chat(f"@{author} 🎬 Clip successfully captured and sent to Discord!")
                     else:
                         await self._send_chat(f"@{author} Could not connect to Cloud Bot to generate clip.")
                 else:
