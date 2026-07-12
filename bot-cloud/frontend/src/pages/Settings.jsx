@@ -48,6 +48,11 @@ export default function SettingsPage({ config, onSave }) {
 
     const sections = [
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
+        { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
+        { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
+        { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
+        { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
+        { id: 'backup', label: 'Backup/Restore', icon: <Database className="h-4 w-4" /> }
     ]
 
     // ─── BACKUP STATE ───────────────────────────────────────────
@@ -751,17 +756,46 @@ export default function SettingsPage({ config, onSave }) {
                                 <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Discord Integration</CardTitle>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Webhook URL (For !clip)</label>
-                                    <Input
-                                        value={localConfig.discord_integration?.webhook_url || ''}
-                                        onChange={(e) => updateNested('discord_integration.webhook_url', e.target.value)}
-                                        className="bg-zinc-950 border-zinc-700 h-9"
-                                        placeholder="https://discord.com/api/webhooks/..."
-                                    />
-                                    <p className="text-[10px] text-zinc-500">
-                                        Paste your Discord Webhook URL here to receive stream clips.
-                                    </p>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Webhook URL (Option A)</label>
+                                        <Input
+                                            value={localConfig.discord_integration?.webhook_url || ''}
+                                            onChange={(e) => updateNested('discord_integration.webhook_url', e.target.value)}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="https://discord.com/api/webhooks/..."
+                                        />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Paste your Discord Webhook URL here to receive stream clips.
+                                        </p>
+                                    </div>
+                                    <div className="relative pt-2">
+                                        <div className="absolute inset-0 flex items-center">
+                                            <span className="w-full border-t border-zinc-800" />
+                                        </div>
+                                        <div className="relative flex justify-center text-[10px] uppercase">
+                                            <span className="bg-zinc-900 px-2 text-zinc-500">Or Option B: Discord Bot</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 pt-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Bot Token</label>
+                                        <Input
+                                            type="password"
+                                            value={localConfig.discord_integration?.bot_token || ''}
+                                            onChange={(e) => updateNested('discord_integration.bot_token', e.target.value)}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="MTExMjIzMzM0NDQ1NTU..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Channel ID</label>
+                                        <Input
+                                            value={localConfig.discord_integration?.channel_id || ''}
+                                            onChange={(e) => updateNested('discord_integration.channel_id', e.target.value)}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="123456789012345678"
+                                        />
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

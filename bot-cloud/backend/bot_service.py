@@ -1771,8 +1771,10 @@ class BotService:
                 
                 dc_cfg = config.get("discord_integration", {})
                 webhook_url = dc_cfg.get("webhook_url")
+                bot_token = dc_cfg.get("bot_token")
+                channel_id = dc_cfg.get("channel_id")
                 
-                if webhook_url:
+                if webhook_url or (bot_token and channel_id):
                     embed = {
                         "title": "🎬 New Stream Clip!",
                         "description": "A highlight moment was captured on stream!",
@@ -1791,15 +1793,25 @@ class BotService:
                         
                     payload = {"embeds": [embed]}
                     
-                    async def send_webhook(url, data):
+                    async def send_discord_msg():
                         import httpx
                         async with httpx.AsyncClient() as client:
                             try:
-                                await client.post(url, json=data, timeout=5.0)
+                                if bot_token and channel_id:
+                                    # Send using Bot API
+                                    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+                                    headers = {
+                                        "Authorization": f"Bot {bot_token}",
+                                        "Content-Type": "application/json"
+                                    }
+                                    await client.post(url, headers=headers, json=payload, timeout=5.0)
+                                elif webhook_url:
+                                    # Fallback to Webhook URL
+                                    await client.post(webhook_url, json=payload, timeout=5.0)
                             except Exception as e:
-                                logger.error(f"Failed to send Discord webhook: {e}")
+                                logger.error(f"Failed to send Discord notification: {e}")
                                 
-                    asyncio.create_task(send_webhook(webhook_url, payload))
+                    asyncio.create_task(send_discord_msg())
                 
             except Exception as e:
                 logger.error(f"Clip command error: {e}")
