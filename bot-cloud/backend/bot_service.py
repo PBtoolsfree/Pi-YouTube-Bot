@@ -1745,8 +1745,15 @@ class BotService:
                     
                 metadata = await asyncio.to_thread(get_metadata)
                 
-                if not metadata or not metadata.get("is_live"):
-                    await self._send_chat(f"@{author} Clip feature only works when the stream is live!")
+                if not metadata:
+                    await self._send_chat(f"@{author} Error: Could not fetch stream metadata (Check bot logs).")
+                    return
+                    
+                is_live_flag = metadata.get("is_live")
+                live_status = metadata.get("live_status")
+                
+                if not is_live_flag and live_status != "is_live":
+                    await self._send_chat(f"@{author} Clip feature only works when the stream is live! (Status: {live_status}, Flag: {is_live_flag})")
                     return
                     
                 video_id = metadata.get("id")
