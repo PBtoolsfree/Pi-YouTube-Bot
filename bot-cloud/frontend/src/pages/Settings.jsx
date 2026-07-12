@@ -421,21 +421,24 @@ export default function SettingsPage({ config, onSave }) {
                                         className="bg-zinc-950 border-zinc-700 text-sm text-zinc-100 h-9"
                                     />
                                 </div>
-                                <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-zinc-300">Automated Moderation</label>
-                                        <p className="text-[10px] text-zinc-500">Allow the bot to assign/remove YouTube moderators</p>
+                                {!localConfig?.is_cloud && (
+                                    <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+                                        <div>
+                                            <label className="text-sm font-medium text-zinc-300">Automated Moderation</label>
+                                            <p className="text-[10px] text-zinc-500">Allow the bot to assign/remove YouTube moderators</p>
+                                        </div>
+                                        <Switch
+                                            checked={localConfig.youtube?.moderation_enabled || false}
+                                            onCheckedChange={(c) => updateNested('youtube.moderation_enabled', c)}
+                                        />
                                     </div>
-                                    <Switch
-                                        checked={localConfig.youtube?.moderation_enabled || false}
-                                        onCheckedChange={(c) => updateNested('youtube.moderation_enabled', c)}
-                                    />
-                                </div>
+                                )}
                             </CardContent>
                         </Card>
 
                         {/* 2. Authentication */}
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                        {!localConfig?.is_cloud && (
+                            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                             <CardHeader className="pb-3 border-b border-zinc-800">
                                 <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
                                     <Key className="h-4 w-4 text-yellow-500" /> Authentication
@@ -668,6 +671,7 @@ export default function SettingsPage({ config, onSave }) {
 
                             </CardContent>
                         </Card>
+                        )}
                     </div>
                 )}
 
