@@ -1538,6 +1538,8 @@ class BotService:
             await self._send_chat(result["message"])
 
         elif cmd == "!buy":
+            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
+                return
             if not args:
                 await self._send_chat(f"@{author} Usage: !buy <item_name>. Use !shop to see available rewards.")
                 return
@@ -1637,9 +1639,13 @@ class BotService:
             await self._send_chat(msg)
 
         elif cmd == "!shop":
+            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
+                return
             await self._handle_memes_cmd(author)
 
         elif cmd == "!redeem":
+            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
+                return
             if not args:
                 await self._handle_memes_cmd(author)
                 return
@@ -1648,6 +1654,8 @@ class BotService:
             await self._handle_redeem_cmd(author, redeem_name, chat_obj)
 
         elif cmd == "!memes" or cmd == "!rewards":
+            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
+                return
             await self._handle_memes_cmd(author)
 
 

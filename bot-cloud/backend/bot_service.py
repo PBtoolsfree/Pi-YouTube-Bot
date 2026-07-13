@@ -1583,7 +1583,7 @@ class BotService:
             cmd_name = parts[0].lower().strip()
             
             # Cloud only commands that should be processed even if forwarded from local Pi
-            cloud_only_commands = {"loan", "payloan"}
+            cloud_only_commands = {"loan", "payloan", "shop", "redeem", "buy", "memes", "rewards"}
             
             if is_valid_command(cmd_name, config):
                 if not is_forwarded or cmd_name in cloud_only_commands:
