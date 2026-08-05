@@ -49,6 +49,9 @@ export default function CustomOverlay() {
                         top: `${w.y}px`,
                         width: `${w.width}px`,
                         height: `${w.height}px`,
+                        transform: `scale(${w.scale || 1})`,
+                        transformOrigin: 'top left',
+                        opacity: w.opacity ?? 1,
                         border: 'none',
                         backgroundColor: 'transparent'
                     }}

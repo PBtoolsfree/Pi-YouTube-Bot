@@ -29,7 +29,6 @@ export default function OverlayEditor() {
         const handleResize = () => {
             if (canvasRef.current) {
                 const parent = canvasRef.current.parentElement
-                // Sidebar is 300px, top bar is 64px
                 const availableWidth = window.innerWidth - 300 - 40 // 40 for padding
                 const availableHeight = window.innerHeight - 64 - 40
                 
@@ -51,7 +50,7 @@ export default function OverlayEditor() {
             setOverlayId(id)
             fetchOverlay(id)
         } else {
-            setLoading(false) // New overlay mode
+            setLoading(false)
         }
     }, [])
 
@@ -90,7 +89,9 @@ export default function OverlayEditor() {
             x: 100,
             y: 100,
             width: wt.defaultW,
-            height: wt.defaultH
+            height: wt.defaultH,
+            scale: 1,
+            opacity: 1
         }
         setWidgets([...widgets, newWidget])
         setSelectedWidgetId(newWidget.id)
@@ -106,7 +107,7 @@ export default function OverlayEditor() {
     }
 
     const goBack = () => {
-        window.location.href = '/?mode=obs' // Or somehow go back to OBS tab, for now just reload root
+        window.location.href = '/?mode=obs'
     }
 
     if (loading) return <div className="flex items-center justify-center h-screen bg-zinc-950 text-white">Loading...</div>
@@ -123,6 +124,8 @@ export default function OverlayEditor() {
             default: return `/?mode=${type}`
         }
     }
+
+    const selectedWidget = widgets.find(w => w.id === selectedWidgetId)
 
     return (
         <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
@@ -169,10 +172,82 @@ export default function OverlayEditor() {
                             </div>
                         ))}
                     </div>
-                    {selectedWidgetId && (
-                        <div className="p-4 border-t border-zinc-800 bg-zinc-950">
-                            <h3 className="font-semibold text-sm mb-3">Widget Settings</h3>
-                            <Button variant="destructive" size="sm" className="w-full" onClick={() => removeWidget(selectedWidgetId)}>
+
+                    {/* Properties Panel */}
+                    {selectedWidget && (
+                        <div className="p-4 border-t border-zinc-800 bg-zinc-950 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
+                            <h3 className="font-semibold text-sm mb-4 text-emerald-400 flex items-center gap-2">
+                                <MousePointer2 className="w-4 h-4" /> Properties ({selectedWidget.type})
+                            </h3>
+                            
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">X Position</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedWidget.x} 
+                                        onChange={e => updateWidget(selectedWidget.id, { x: parseInt(e.target.value) || 0 })}
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Y Position</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedWidget.y} 
+                                        onChange={e => updateWidget(selectedWidget.id, { y: parseInt(e.target.value) || 0 })}
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Base Width</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedWidget.width} 
+                                        onChange={e => updateWidget(selectedWidget.id, { width: parseInt(e.target.value) || 100 })}
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Base Height</label>
+                                    <Input 
+                                        type="number" 
+                                        value={selectedWidget.height} 
+                                        onChange={e => updateWidget(selectedWidget.id, { height: parseInt(e.target.value) || 100 })}
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale (%)</label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="range" 
+                                            min="10" 
+                                            max="300" 
+                                            value={Math.round((selectedWidget.scale || 1) * 100)} 
+                                            onChange={e => updateWidget(selectedWidget.id, { scale: parseInt(e.target.value) / 100 })}
+                                            className="flex-1 accent-emerald-500"
+                                        />
+                                        <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.scale || 1) * 100)}%</span>
+                                    </div>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Opacity (%)</label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="range" 
+                                            min="0" 
+                                            max="100" 
+                                            value={Math.round((selectedWidget.opacity ?? 1) * 100)} 
+                                            onChange={e => updateWidget(selectedWidget.id, { opacity: parseInt(e.target.value) / 100 })}
+                                            className="flex-1 accent-emerald-500"
+                                        />
+                                        <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.opacity ?? 1) * 100)}%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Button variant="destructive" size="sm" className="w-full" onClick={() => removeWidget(selectedWidget.id)}>
                                 <Trash2 className="w-4 h-4 mr-2" /> Delete Widget
                             </Button>
                         </div>
@@ -192,15 +267,26 @@ export default function OverlayEditor() {
                             height: 1080,
                             transform: `scale(${scale})`,
                             transformOrigin: 'center center',
-                            backgroundColor: '#000',
+                            backgroundColor: '#0a0a0a', // Darker background to contrast with border
                             backgroundImage: 'linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b), linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b)',
                             backgroundSize: '20px 20px',
                             backgroundPosition: '0 0, 10px 10px',
-                            boxShadow: '0 0 0 1px rgba(255,255,255,0.1), 0 25px 50px -12px rgba(0,0,0,0.5)',
+                            boxShadow: '0 0 0 4px #000, 0 25px 50px -12px rgba(0,0,0,0.5)',
                         }}
-                        className="relative overflow-hidden shrink-0"
+                        className="relative overflow-hidden shrink-0 border border-zinc-700"
                         onClick={e => e.stopPropagation()} // Prevent unselecting
                     >
+                        {/* Title Safe Area Guide */}
+                        <div className="absolute inset-0 pointer-events-none z-0 border-[4px] border-emerald-500/10"></div>
+                        <div className="absolute top-[5%] bottom-[5%] left-[5%] right-[5%] pointer-events-none z-0 border border-dashed border-zinc-500/30">
+                            <span className="absolute bottom-1 right-2 text-zinc-500/50 text-[10px] font-mono">SAFE ZONE (5%)</span>
+                        </div>
+                        
+                        {/* 1920x1080 watermark */}
+                        <div className="absolute top-4 left-4 pointer-events-none z-0 text-zinc-600/30 font-bold text-4xl select-none">
+                            1920 × 1080
+                        </div>
+
                         {widgets.map(w => (
                             <DraggableWidget 
                                 key={w.id}
@@ -224,7 +310,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
     const [isResizing, setIsResizing] = useState(false)
     
     // For drag/resize delta calculations
-    const startPos = useRef({ x: 0, y: 0, w: 0, h: 0, mx: 0, my: 0 })
+    const startPos = useRef({ x: 0, y: 0, w: 0, scale: 1, mx: 0, my: 0 })
 
     const handleDragStart = (e) => {
         e.stopPropagation()
@@ -244,7 +330,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
         setIsResizing(true)
         startPos.current = {
             w: widget.width,
-            h: widget.height,
+            scale: widget.scale || 1,
             mx: e.clientX,
             my: e.clientY
         }
@@ -261,10 +347,14 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 })
             } else if (isResizing) {
                 const dx = (e.clientX - startPos.current.mx) / scale
-                const dy = (e.clientY - startPos.current.my) / scale
+                
+                // Calculate new scale based on drag distance
+                const originalDisplayWidth = startPos.current.w * startPos.current.scale
+                const newDisplayWidth = Math.max(50, originalDisplayWidth + dx)
+                const newScale = newDisplayWidth / startPos.current.w
+                
                 onUpdate({
-                    width: Math.max(100, Math.round(startPos.current.w + dx)),
-                    height: Math.max(100, Math.round(startPos.current.h + dy))
+                    scale: newScale
                 })
             }
         }
@@ -293,6 +383,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 top: widget.y,
                 width: widget.width,
                 height: widget.height,
+                transform: `scale(${widget.scale || 1})`,
+                transformOrigin: 'top left',
+                opacity: widget.opacity ?? 1,
                 border: isSelected ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.2)',
                 backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.5)',
                 cursor: isDragging ? 'grabbing' : 'grab',
@@ -308,20 +401,30 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 title="Preview"
             />
             
-            {/* Label overlay (appears on hover or select) */}
+            {/* Label overlay */}
             {(isSelected || true) && (
-                <div className="absolute top-0 left-0 bg-zinc-900/90 text-xs font-mono text-zinc-300 px-2 py-1 select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap overflow-hidden">
-                    {widget.type} [{widget.width}x{widget.height}]
+                <div 
+                    className="absolute top-0 left-0 bg-zinc-900/90 text-xs font-mono text-zinc-300 px-2 py-1 select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap overflow-hidden"
+                    style={{ transform: `scale(${1 / (widget.scale || 1)})`, transformOrigin: 'top left' }}
+                >
+                    {widget.type} [{widget.width}x{widget.height}] {widget.scale && widget.scale !== 1 ? `x${widget.scale.toFixed(2)}` : ''}
                 </div>
             )}
 
             {/* Resize handle */}
             {isSelected && (
                 <div 
-                    className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 cursor-se-resize"
-                    style={{ right: -2, bottom: -2 }}
+                    className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 cursor-se-resize rounded-tl flex items-center justify-center text-white"
+                    style={{ 
+                        right: -2, 
+                        bottom: -2,
+                        transform: `scale(${1 / (widget.scale || 1)})`,
+                        transformOrigin: 'bottom right'
+                    }}
                     onMouseDown={handleResizeStart}
-                />
+                >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v6h-6M3 9V3h6M21 3l-7 7M3 21l7-7"/></svg>
+                </div>
             )}
         </div>
     )
