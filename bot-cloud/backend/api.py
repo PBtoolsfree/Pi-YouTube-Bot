@@ -814,7 +814,7 @@ async def spawn_pokemon():
     if not hasattr(bot, "pokemon"):
         return {"success": False, "message": "Pokemon service not initialized"}
     
-    await bot.pokemon.spawn_wild_pokemon()
+    await bot.pokemon.spawn_wild_pokemon(force=True)
     return {"success": True, "message": "Wild Pokemon spawned!"}
 
 # --- MEME REDEEMS CRUD ---

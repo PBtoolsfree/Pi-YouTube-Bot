@@ -51,13 +51,21 @@ class PokemonService:
 
     async def _spawn_loop(self):
         while True:
-            # Spawn every 10-20 minutes
-            delay = random.randint(600, 1200)
+            config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
+            pokemon_config = config.get("games", {}).get("pokemon", {})
+            interval_min = pokemon_config.get("spawn_interval", 15)
+            
+            # Convert minutes to seconds and add some variance (+/- 10%)
+            base_delay = interval_min * 60
+            variance = int(base_delay * 0.1)
+            delay = base_delay + random.randint(-variance, variance)
+            if delay < 60: delay = 60 # minimum 1 minute
+            
             await asyncio.sleep(delay)
             await self.spawn_wild_pokemon()
 
-    async def spawn_wild_pokemon(self):
-        if self.active_wild_pokemon is not None:
+    async def spawn_wild_pokemon(self, force=False):
+        if self.active_wild_pokemon is not None and not force:
             return # Already one spawned
 
         pokemon = random.choice(POKEMON_LIST)

@@ -912,6 +912,8 @@ export default function LoyaltyManagerPage() {
                                     onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_cost: parseInt(v) || 0 } } }))} type="number" />
                                 <ConfigField label="Duel Win Reward" value={loyaltyConfig.games?.pokemon?.duel_reward ?? 100}
                                     onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_reward: parseInt(v) || 0 } } }))} type="number" />
+                                <ConfigField label="Spawn Interval (Minutes)" value={loyaltyConfig.games?.pokemon?.spawn_interval ?? 15}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, spawn_interval: parseInt(v) || 15 } } }))} type="number" />
                             </div>
 
                             <div className="pt-4 border-t border-zinc-800 flex justify-between items-center">
