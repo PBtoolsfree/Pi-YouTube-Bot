@@ -86,7 +86,7 @@ class PokemonService:
             })
         
         # Announce in chat
-        await self.bot.send_chat_message(f"🚨 A wild {pokemon['name']} has appeared on stream! Type !catch to capture it!")
+        await self.bot._send_chat(f"🚨 A wild {pokemon['name']} has appeared on stream! Type !catch to capture it!")
 
     async def handle_catch(self, user):
         if not self.active_wild_pokemon:
@@ -115,6 +115,15 @@ class PokemonService:
         if old_pokemon:
             return f"🎉 @{user} caught the wild {pokemon['name']}! (Replaced their {old_pokemon})"
         return f"🎉 @{user} caught their first Pokemon: {pokemon['name']}! Use '!battle @user <bet>' to fight others!"
+
+    async def handle_check_pokemon(self, user):
+        poke = self.get_user_pokemon(user)
+        if poke:
+            wins = self.users_data.get(user, {}).get("wins", 0)
+            losses = self.users_data.get(user, {}).get("losses", 0)
+            return f"@{user}, your active Pokemon is {poke['name']} (Power: {poke['power']}). Battles: {wins}W - {losses}L."
+        return f"@{user}, you don't have a Pokemon! Wait for a wild spawn and type !catch."
+
 
     def get_user_pokemon(self, user):
         user_data = self.users_data.get(user)
@@ -162,7 +171,7 @@ class PokemonService:
             await asyncio.sleep(60)
             if challenger in self.pending_battles:
                 del self.pending_battles[challenger]
-                await self.bot.send_chat_message(f"@{challenger}, your battle challenge to {target} expired.")
+                await self.bot._send_chat(f"@{challenger}, your battle challenge to {target} expired.")
 
         task = asyncio.create_task(expire_challenge())
         

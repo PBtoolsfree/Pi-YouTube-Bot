@@ -23,6 +23,15 @@ export default function PokemonOverlay() {
                         setSpawnedPokemon(socketData.pokemon)
                         setCatchEvent(null)
                         
+                        try {
+                            const formattedName = socketData.pokemon.name.toLowerCase().replace(/[^a-z0-9-]/g, '')
+                            const audio = new Audio(`https://play.pokemonshowdown.com/audio/cries/${formattedName}.mp3`)
+                            audio.volume = 0.5
+                            audio.play().catch(e => console.log('Audio play blocked:', e))
+                        } catch(e) {
+                            console.error('Failed to play pokemon cry', e)
+                        }
+                        
                         // Auto hide after 60s if not caught
                         setTimeout(() => {
                             setSpawnedPokemon(null)

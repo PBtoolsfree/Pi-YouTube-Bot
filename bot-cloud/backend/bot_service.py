@@ -58,7 +58,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
-        "catch", "battle", "accept"
+        "catch", "battle", "accept", "pokemon", "pokemons"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -1758,6 +1758,12 @@ class BotService:
             if not getattr(self, "pokemon", None):
                 return
             result = await self.pokemon.handle_accept(author)
+            await self._send_chat(result)
+
+        elif cmd in ["!pokemon", "!pokemons"]:
+            if not getattr(self, "pokemon", None):
+                return
+            result = await self.pokemon.handle_check_pokemon(author)
             await self._send_chat(result)
 
         elif cmd == "!rob":
