@@ -35,7 +35,7 @@ export default function CustomOverlay() {
             case 'ticker': return `/?mode=ticker`
             case 'hub': return `/?mode=hub`
             case 'goal': return `/overlay/goal`
-            case 'qr_code': return `/?mode=app`
+            case 'qr_code': return `/?mode=qrcode`
             case 'rotating_hub': return `/?mode=rotating_hub`
             case 'boss': return `/?mode=boss`
             case 'giveaway_spin': return `/giveawayspin`
