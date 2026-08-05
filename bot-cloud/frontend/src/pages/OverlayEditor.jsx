@@ -345,6 +345,18 @@ export default function OverlayEditor() {
                                             <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.opacity ?? 1) * 100)}%</span>
                                         </div>
                                     </div>
+                                    <div className="col-span-2 flex items-center justify-between mt-2 p-2 bg-zinc-900 rounded-lg border border-zinc-800">
+                                        <label className="text-xs text-zinc-300 font-medium cursor-pointer flex-1" htmlFor="bgToggle">
+                                            Enable Dark Background
+                                        </label>
+                                        <input 
+                                            id="bgToggle"
+                                            type="checkbox" 
+                                            checked={!!selectedWidget.hasBackground} 
+                                            onChange={e => updateWidget(selectedWidget.id, { hasBackground: e.target.checked })}
+                                            className="w-4 h-4 accent-emerald-500 rounded bg-zinc-800 border-zinc-700 cursor-pointer"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         ) : (
@@ -498,7 +510,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 transformOrigin: 'top left',
                 opacity: widget.opacity ?? 1,
                 border: isSelected ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.2)', // Purple border for selection
-                backgroundColor: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'rgba(0,0,0,0.5)',
+                backgroundColor: isSelected ? 'rgba(168, 85, 247, 0.1)' : (widget.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent'),
+                backdropFilter: widget.hasBackground ? 'blur(10px)' : 'none',
+                borderRadius: widget.hasBackground ? '16px' : '0px',
                 cursor: isDragging ? 'grabbing' : 'grab',
                 zIndex: computedZIndex
             }}

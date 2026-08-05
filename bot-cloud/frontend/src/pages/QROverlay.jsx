@@ -35,36 +35,35 @@ export default function QROverlay() {
 
     return (
         <div className="w-screen h-screen overflow-hidden bg-transparent flex flex-col items-center justify-center p-8 gap-4 font-sans">
-            <motion.h2 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-2xl md:text-3xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 drop-shadow-lg"
-                style={{ textShadow: '0 0 15px rgba(0,240,255,0.5)' }}>
-                Scan to Support
-            </motion.h2>
-
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ opacity: { duration: 0.5 } }}
-                className="relative p-[3px] rounded-3xl overflow-hidden shadow-[0_0_40px_rgba(0,240,255,0.2)] will-change-transform"
+                className="flex flex-col items-center gap-4 w-max"
             >
-                {/* Spinning thin border */}
-                <div className="absolute inset-0 z-0 animate-[spin_4s_linear_infinite]"
-                    style={{ background: 'conic-gradient(from 0deg, transparent 0%, #00f0ff 25%, #fff 40%, #00f0ff 55%, transparent 75%, #10b981 88%, transparent 100%)' }} />
+                <div className="relative p-[3px] rounded-3xl overflow-hidden shadow-[0_0_40px_rgba(0,240,255,0.2)] will-change-transform">
+                    {/* Spinning thin border */}
+                    <div className="absolute inset-0 z-0 animate-[spin_4s_linear_infinite]"
+                        style={{ background: 'conic-gradient(from 0deg, transparent 0%, #00f0ff 25%, #fff 40%, #00f0ff 55%, transparent 75%, #10b981 88%, transparent 100%)' }} />
 
-                {/* Inner content (QR Code) */}
-                <div className="relative bg-white rounded-[22px] overflow-hidden z-10 p-2 flex items-center justify-center w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] md:w-[300px] md:h-[300px]">
-                    {qrPath ? (
-                        <img src={qrPath} alt="Donate QR" className="w-full h-full object-contain rounded-[18px]" />
-                    ) : upiVpa ? (
-                        <QRCode value={upiUrlQR} size={400} className="w-full h-full p-2 object-contain" />
-                    ) : (
-                        <div className="bg-zinc-900 w-full h-full flex items-center justify-center p-8 text-center rounded-[18px]">
-                            <span className="text-sm text-zinc-500 font-medium">Please set UPI ID in Tip Settings</span>
-                        </div>
-                    )}
+                    {/* Inner content (QR Code) */}
+                    <div className="relative bg-white rounded-[22px] overflow-hidden z-10 p-2 flex items-center justify-center w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] md:w-[300px] md:h-[300px]">
+                        {qrPath ? (
+                            <img src={qrPath} alt="Donate QR" className="w-full h-full object-contain rounded-[18px]" />
+                        ) : upiVpa ? (
+                            <QRCode value={upiUrlQR} size={400} className="w-full h-full p-2 object-contain" />
+                        ) : (
+                            <div className="bg-zinc-900 w-full h-full flex items-center justify-center p-8 text-center rounded-[18px]">
+                                <span className="text-sm text-zinc-500 font-medium">Please set UPI ID in Tip Settings</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
+                
+                <h2 className="w-full text-center text-lg md:text-xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 drop-shadow-lg"
+                    style={{ textShadow: '0 0 10px rgba(0,240,255,0.5)' }}>
+                    Scan to Support
+                </h2>
             </motion.div>
 
             {showCustomUpi && upiVpa && (

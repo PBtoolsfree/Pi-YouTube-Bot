@@ -47,7 +47,7 @@ export default function CustomOverlay() {
 
     return (
         <div style={{ position: 'relative', width: `${res.w}px`, height: `${res.h}px`, overflow: 'hidden' }}>
-            {overlay.widgets?.map(w => (
+            {overlay.widgets?.map((w, index) => (
                 <iframe
                     key={w.id}
                     src={getWidgetUrl(w.type)}
@@ -61,7 +61,10 @@ export default function CustomOverlay() {
                         transformOrigin: 'top left',
                         opacity: w.opacity ?? 1,
                         border: 'none',
-                        backgroundColor: 'transparent'
+                        backgroundColor: w.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent',
+                        backdropFilter: w.hasBackground ? 'blur(10px)' : 'none',
+                        borderRadius: w.hasBackground ? '16px' : '0px',
+                        zIndex: index
                     }}
                     title={w.type}
                 />
