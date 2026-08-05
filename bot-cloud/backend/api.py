@@ -545,6 +545,17 @@ async def update_config(payload: ConfigUpdate):
         saved = ConfigManager.save_config(payload.config)
         if not saved:
             raise HTTPException(500, "Failed to save config")
+            
+        # Broadcast to Cloud UI clients
+        asyncio.create_task(broadcast_log({"type": "config_update", "config": payload.config}))
+        
+        # Broadcast to Local Pi clients
+        if getattr(bot, "pi_clients", None):
+            asyncio.create_task(bot.pi_clients.broadcast({
+                "type": "sync_config_full",
+                "config": payload.config
+            }))
+            
         return {"status": "success"}
     except HTTPException:
         raise

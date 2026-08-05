@@ -161,6 +161,20 @@ class CloudAlertClientService:
                 except ImportError:
                     pass
 
+        elif etype == "sync_config_full":
+            new_cfg = event.get("config")
+            if new_cfg:
+                from backend.config_manager import ConfigManager
+                ConfigManager.save_config(new_cfg)
+                logger.info("Local config completely synced from Cloud.")
+                
+                # Broadcast to Local UI
+                try:
+                    from backend.api import broadcast_log
+                    asyncio.create_task(broadcast_log({"type": "config_update", "config": new_cfg}))
+                except ImportError:
+                    pass
+
         elif etype == "sync_qr":
             filename = event.get("filename")
             b64_data = event.get("data")
