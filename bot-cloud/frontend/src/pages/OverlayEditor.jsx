@@ -18,6 +18,10 @@ const WIDGET_TYPES = [
     { type: 'ticker', label: 'News Ticker (Gaming)', defaultW: 1920, defaultH: 60 },
     { type: 'hub', label: 'Stream Hub', defaultW: 1920, defaultH: 108 },
     { type: 'goal', label: 'Goal Widget', defaultW: 700, defaultH: 150 },
+    { type: 'qr_code', label: 'UPI QR Code', defaultW: 300, defaultH: 400 },
+    { type: 'rotating_hub', label: 'Rotating Hub', defaultW: 400, defaultH: 400 },
+    { type: 'boss', label: 'Boss Fight', defaultW: 500, defaultH: 600 },
+    { type: 'giveaway_spin', label: 'Giveaway Spin', defaultW: 800, defaultH: 800 },
 ]
 
 export default function OverlayEditor() {
@@ -152,6 +156,10 @@ export default function OverlayEditor() {
             case 'ticker': return `/?mode=ticker`
             case 'hub': return `/?mode=hub`
             case 'goal': return `/overlay/goal`
+            case 'qr_code': return `/?mode=app`
+            case 'rotating_hub': return `/?mode=rotating_hub`
+            case 'boss': return `/?mode=boss`
+            case 'giveaway_spin': return `/giveawayspin`
             default: return `/?mode=${type}`
         }
     }
