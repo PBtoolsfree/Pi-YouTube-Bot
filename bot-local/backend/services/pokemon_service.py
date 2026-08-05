@@ -70,10 +70,12 @@ class PokemonService:
         self.logger.info(f"A wild {pokemon['name']} appeared!")
         
         # Broadcast spawn to overlays
-        await self.bot.broadcast_ui("POKEMON_EVENT", {
-            "action": "spawn",
-            "pokemon": self.active_wild_pokemon
-        })
+        if self.bot.broadcast_func:
+            await self.bot.broadcast_func({
+                "type": "POKEMON_EVENT",
+                "action": "spawn",
+                "pokemon": self.active_wild_pokemon
+            })
         
         # Announce in chat
         await self.bot.send_chat_message(f"🚨 A wild {pokemon['name']} has appeared on stream! Type !catch to capture it!")
@@ -94,11 +96,13 @@ class PokemonService:
         self.save_data()
         
         # Broadcast catch to overlays
-        await self.bot.broadcast_ui("POKEMON_EVENT", {
-            "action": "catch",
-            "user": user,
-            "pokemon": pokemon
-        })
+        if self.bot.broadcast_func:
+            await self.bot.broadcast_func({
+                "type": "POKEMON_EVENT",
+                "action": "catch",
+                "user": user,
+                "pokemon": pokemon
+            })
         
         if old_pokemon:
             return f"🎉 @{user} caught the wild {pokemon['name']}! (Replaced their {old_pokemon})"
@@ -219,12 +223,14 @@ class PokemonService:
         self.save_data()
         
         # Broadcast battle to overlays
-        await self.bot.broadcast_ui("POKEMON_EVENT", {
-            "action": "battle",
-            "challenger": {"name": challenger, "pokemon": challenger_poke},
-            "target": {"name": target, "pokemon": target_poke},
-            "winner": winner,
-            "bet": bet
-        })
+        if self.bot.broadcast_func:
+            await self.bot.broadcast_func({
+                "type": "POKEMON_EVENT",
+                "action": "battle",
+                "challenger": {"name": challenger, "pokemon": challenger_poke},
+                "target": {"name": target, "pokemon": target_poke},
+                "winner": winner,
+                "bet": bet
+            })
         
         return f"🏆 BATTLE RESULTS: @{winner}'s {winner_poke['name']} defeated @{loser}'s {loser_poke['name']} and won {bet} points!"
