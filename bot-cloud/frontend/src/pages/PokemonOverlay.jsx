@@ -1,51 +1,78 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function PokemonOverlay({ socketData }) {
+export default function PokemonOverlay() {
     const [spawnedPokemon, setSpawnedPokemon] = useState(null)
     const [battleData, setBattleData] = useState(null)
     const [catchEvent, setCatchEvent] = useState(null)
+    const wsRef = useRef(null)
 
     useEffect(() => {
-        if (!socketData || socketData.type !== 'POKEMON_EVENT') return
+        const connect = () => {
+            const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+            const ws = new WebSocket(`${proto}://${window.location.host}/ws/logs`)
+            
+            ws.onmessage = (event) => {
+                try {
+                    const socketData = JSON.parse(event.data)
+                    if (socketData.type !== 'POKEMON_EVENT') return
 
-        const { action } = socketData
+                    const { action } = socketData
 
-        if (action === 'spawn') {
-            setSpawnedPokemon(socketData.pokemon)
-            setCatchEvent(null)
+                    if (action === 'spawn') {
+                        setSpawnedPokemon(socketData.pokemon)
+                        setCatchEvent(null)
+                        
+                        // Auto hide after 60s if not caught
+                        setTimeout(() => {
+                            setSpawnedPokemon(null)
+                        }, 60000)
+                    } 
+                    else if (action === 'catch') {
+                        setSpawnedPokemon(null)
+                        setCatchEvent({
+                            user: socketData.user,
+                            pokemon: socketData.pokemon
+                        })
+                        
+                        // Hide catch message after 5 seconds
+                        setTimeout(() => {
+                            setCatchEvent(null)
+                        }, 5000)
+                    }
+                    else if (action === 'battle') {
+                        setBattleData({
+                            challenger: socketData.challenger,
+                            target: socketData.target,
+                            winner: socketData.winner,
+                            bet: socketData.bet
+                        })
+                        
+                        // Hide battle UI after 10 seconds
+                        setTimeout(() => {
+                            setBattleData(null)
+                        }, 10000)
+                    }
+                } catch (e) {
+                    console.error("WebSocket message parse error", e)
+                }
+            }
             
-            // Auto hide after 60s if not caught
-            setTimeout(() => {
-                setSpawnedPokemon(null)
-            }, 60000)
-        } 
-        else if (action === 'catch') {
-            setSpawnedPokemon(null)
-            setCatchEvent({
-                user: socketData.user,
-                pokemon: socketData.pokemon
-            })
+            ws.onclose = () => {
+                setTimeout(connect, 3000)
+            }
             
-            // Hide catch message after 5 seconds
-            setTimeout(() => {
-                setCatchEvent(null)
-            }, 5000)
+            wsRef.current = ws
         }
-        else if (action === 'battle') {
-            setBattleData({
-                challenger: socketData.challenger,
-                target: socketData.target,
-                winner: socketData.winner,
-                bet: socketData.bet
-            })
-            
-            // Hide battle UI after 10 seconds
-            setTimeout(() => {
-                setBattleData(null)
-            }, 10000)
+        
+        connect()
+        
+        return () => {
+            if (wsRef.current) {
+                wsRef.current.close()
+            }
         }
-    }, [socketData])
+    }, [])
 
     return (
         <div className="w-screen h-screen overflow-hidden bg-transparent pointer-events-none relative flex flex-col items-center justify-end pb-20 font-sans">

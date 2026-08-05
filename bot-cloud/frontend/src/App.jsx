@@ -242,7 +242,7 @@ function App() {
   if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
   if (isTickerOverlay) return <TickerOverlay />
   if (isQROverlay) return <QROverlay />
-  if (isPokemonOverlay) return <PokemonOverlay socketData={socketData} />
+  if (isPokemonOverlay) return <PokemonOverlay />
   if (isOverlayEditor) return <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center bg-zinc-950"><div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full" /></div>}><OverlayEditor /></Suspense>
 
   if (!config) return (

@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
     Heart, Calendar, ArrowUpRight, Award, UserPlus, Clock, Zap, Volume2, Activity,
     Search, Plus, Minus, RotateCcw, Trash2, Settings, Save, ChevronUp, ChevronDown,
-    Gift, Edit2, Check, X, Users, TrendingUp, Crown, AlertCircle, Dices, History
+    Gift, Edit2, Check, X, Users, TrendingUp, Crown, AlertCircle, Dices, History, Gamepad2
 } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Button, Input, Switch } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
@@ -221,6 +221,7 @@ export default function LoyaltyManagerPage() {
                 <TabButton id="gambling" label="Games & Economy" icon={<Dices />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="loans" label="Banking & Loans" icon={<Crown />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="manage" label="Manage Viewers" icon={<Users />} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="games" label="Games" icon={<Gamepad2 />} active={activeTab} onClick={setActiveTab} />
 
                 <TabButton id="settings" label="Settings" icon={<Settings />} active={activeTab} onClick={setActiveTab} />
             </div>
@@ -562,6 +563,22 @@ export default function LoyaltyManagerPage() {
                                             <p className="text-[11px] text-zinc-400">Fight the live Boss using your points! Top 3 dealers share a massive pool.</p>
                                         </div>
                                     </div>
+                                    {/* Pokemon Safari */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(244,63,94,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!catch</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!battle &lt;user&gt; &lt;amt&gt;</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!accept</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Catch wild Pokémon and use them to duel others!</p>
+                                            <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
+                                                <li>When a Pokémon appears, type <code>!catch</code> to capture it.</li>
+                                                <li>Type <code>!battle &lt;user&gt; &lt;amount&gt;</code> to challenge someone. Target types <code>!accept</code>.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -781,6 +798,135 @@ export default function LoyaltyManagerPage() {
 
 
 
+            {/* ═══════════════ GAMES ═══════════════ */}
+            {activeTab === 'games' && loyaltyConfig && (
+                <div className="space-y-6">
+                    {/* Games & Economy Tuning */}
+                    <Card className="bg-zinc-900 border-zinc-800">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Dices className="h-4 w-4 text-emerald-500" /> Games & Economy Tuning
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4">
+                            <div className="grid md:grid-cols-4 gap-4">
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-emerald-400">Gamble Enabled</label>
+                                    <Switch checked={loyaltyConfig.games?.gamble?.enabled ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, enabled: val } } }))} />
+                                </div>
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-emerald-400">Slots Enabled</label>
+                                    <Switch checked={loyaltyConfig.games?.slots?.enabled ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, slots: { ...c.games?.slots, enabled: val } } }))} />
+                                </div>
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-emerald-400">Give Enabled</label>
+                                    <Switch checked={loyaltyConfig.games?.give?.enabled ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, give: { ...c.games?.give, enabled: val } } }))} />
+                                </div>
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-emerald-400">Rob Enabled</label>
+                                    <Switch checked={loyaltyConfig.games?.rob?.enabled ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, enabled: val } } }))} />
+                                </div>
+                                <ConfigField label="Gamble Base Win (%)" value={loyaltyConfig.games?.gamble?.win_chance ?? 50}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, win_chance: parseInt(v) || 0 } } }))} type="number" />
+                                <ConfigField label="Rob Base Win (%)" value={loyaltyConfig.games?.rob?.win_chance ?? 40}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, win_chance: parseInt(v) || 0 } } }))} type="number" />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Boss Fight Controls */}
+                    <Card className="bg-zinc-900 border-zinc-800">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Zap className="h-4 w-4 text-red-500" /> Boss Fight Controls
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4">
+                            <div className="flex items-end gap-4">
+                                <div className="space-y-1.5 flex-1">
+                                    <label className="text-xs font-medium text-red-400">Boss HP (e.g. 5000)</label>
+                                    <Input id="bossHpInput" type="number" defaultValue={5000} className="h-9 bg-zinc-950 border-zinc-800 text-sm" />
+                                </div>
+                                <div className="space-y-1.5 flex-1">
+                                    <label className="text-xs font-medium text-red-400">Boss Type</label>
+                                    <select id="bossTypeSelect" className="h-9 w-full bg-zinc-950 border border-zinc-800 text-sm text-zinc-300 rounded-md px-3" defaultValue="random">
+                                        <option value="random">Random</option>
+                                        <option value="thanos">Thanos</option>
+                                        <option value="dragon">Dragon</option>
+                                        <option value="demon">Demon</option>
+                                    </select>
+                                </div>
+                                <Button className="h-9 px-6 bg-red-600 hover:bg-red-500 text-white font-bold" onClick={async () => {
+                                    try {
+                                        const hp = parseInt(document.getElementById("bossHpInput").value) || 5000;
+                                        let bType = document.getElementById("bossTypeSelect").value;
+                                        if (bType === "random") {
+                                            const arr = ["thanos", "dragon", "demon"];
+                                            bType = arr[Math.floor(Math.random() * arr.length)];
+                                        }
+                                        await axios.post('/api/loyalty/start_boss', { hp, boss_type: bType });
+                                        alert("Boss Spawned!");
+                                    } catch (e) {
+                                        alert("Error spawning boss: " + e.message);
+                                    }
+                                }}>
+                                    Start Boss Fight
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Pokemon Safari Adventure */}
+                    <Card className="bg-zinc-900 border-zinc-800">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <span className="text-rose-500">🔴</span> Pokémon Safari Adventure
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4">
+                            <div className="grid md:grid-cols-4 gap-4">
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-rose-400">Game Enabled</label>
+                                    <Switch checked={loyaltyConfig.games?.pokemon?.enabled ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, enabled: val } } }))} />
+                                </div>
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-rose-400">Enable Images</label>
+                                    <Switch checked={loyaltyConfig.games?.pokemon?.images ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, images: val } } }))} />
+                                </div>
+                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
+                                    <label className="text-xs font-medium text-rose-400">Enable Cries</label>
+                                    <Switch checked={loyaltyConfig.games?.pokemon?.cries ?? true}
+                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, cries: val } } }))} />
+                                </div>
+                                <ConfigField label="Catch Success Rate (%)" value={loyaltyConfig.games?.pokemon?.catch_rate ?? 50}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_rate: parseInt(v) || 0 } } }))} type="number" />
+                                <ConfigField label="Catch Cost (Points)" value={loyaltyConfig.games?.pokemon?.catch_cost ?? 10}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_cost: parseInt(v) || 0 } } }))} type="number" />
+                                <ConfigField label="Duel Entry Cost" value={loyaltyConfig.games?.pokemon?.duel_cost ?? 50}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_cost: parseInt(v) || 0 } } }))} type="number" />
+                                <ConfigField label="Duel Win Reward" value={loyaltyConfig.games?.pokemon?.duel_reward ?? 100}
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_reward: parseInt(v) || 0 } } }))} type="number" />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Save Button */}
+                    <div className="flex justify-end">
+                        <Button onClick={saveConfig} disabled={saving}
+                            className="bg-violet-600 hover:bg-violet-500 text-white px-6 flex items-center gap-2">
+                            <Save className="h-4 w-4" />
+                            {saving ? 'Saving...' : 'Save Configuration'}
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* ═══════════════ SETTINGS ═══════════════ */}
             {activeTab === 'settings' && loyaltyConfig && (
                 <div className="space-y-6">
@@ -827,86 +973,7 @@ export default function LoyaltyManagerPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Games & Economy Tuning */}
-                    <Card className="bg-zinc-900 border-zinc-800">
-                        <CardHeader className="pb-3 border-b border-zinc-800">
-                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                                <Dices className="h-4 w-4 text-emerald-500" /> Games & Economy Tuning
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 space-y-4">
-                            <div className="grid md:grid-cols-4 gap-4">
-                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
-                                    <label className="text-xs font-medium text-emerald-400">Gamble Enabled</label>
-                                    <Switch checked={loyaltyConfig.games?.gamble?.enabled ?? true}
-                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, enabled: val } } }))} />
-                                </div>
-                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
-                                    <label className="text-xs font-medium text-emerald-400">Slots Enabled</label>
-                                    <Switch checked={loyaltyConfig.games?.slots?.enabled ?? true}
-                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, slots: { ...c.games?.slots, enabled: val } } }))} />
-                                </div>
-                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
-                                    <label className="text-xs font-medium text-emerald-400">Give Enabled</label>
-                                    <Switch checked={loyaltyConfig.games?.give?.enabled ?? true}
-                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, give: { ...c.games?.give, enabled: val } } }))} />
-                                </div>
-                                <div className="space-y-1.5 flex flex-col justify-center pb-1">
-                                    <label className="text-xs font-medium text-emerald-400">Rob Enabled</label>
-                                    <Switch checked={loyaltyConfig.games?.rob?.enabled ?? true}
-                                        onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, enabled: val } } }))} />
-                                </div>
-                                <ConfigField label="Gamble Base Win (%)" value={loyaltyConfig.games?.gamble?.win_chance ?? 50}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, win_chance: parseInt(v) || 0 } } }))} type="number" />
-                                <ConfigField label="Rob Base Win (%)" value={loyaltyConfig.games?.rob?.win_chance ?? 40}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, win_chance: parseInt(v) || 0 } } }))} type="number" />
-                            </div>
 
-
-                        </CardContent>
-                    </Card>
-
-                    {/* Boss Fight Controls */}
-                    <Card className="bg-zinc-900 border-zinc-800">
-                        <CardHeader className="pb-3 border-b border-zinc-800">
-                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                                <Zap className="h-4 w-4 text-red-500" /> Boss Fight Controls
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 space-y-4">
-                            <div className="flex items-end gap-4">
-                                <div className="space-y-1.5 flex-1">
-                                    <label className="text-xs font-medium text-red-400">Boss HP (e.g. 5000)</label>
-                                    <Input id="bossHpInput" type="number" defaultValue={5000} className="h-9 bg-zinc-950 border-zinc-800 text-sm" />
-                                </div>
-                                <div className="space-y-1.5 flex-1">
-                                    <label className="text-xs font-medium text-red-400">Boss Type</label>
-                                    <select id="bossTypeSelect" className="h-9 w-full bg-zinc-950 border border-zinc-800 text-sm text-zinc-300 rounded-md px-3" defaultValue="random">
-                                        <option value="random">Random</option>
-                                        <option value="thanos">Thanos</option>
-                                        <option value="dragon">Dragon</option>
-                                        <option value="demon">Demon</option>
-                                    </select>
-                                </div>
-                                <Button className="h-9 px-6 bg-red-600 hover:bg-red-500 text-white font-bold" onClick={async () => {
-                                    try {
-                                        const hp = parseInt(document.getElementById("bossHpInput").value) || 5000;
-                                        let bType = document.getElementById("bossTypeSelect").value;
-                                        if (bType === "random") {
-                                            const arr = ["thanos", "dragon", "demon"];
-                                            bType = arr[Math.floor(Math.random() * arr.length)];
-                                        }
-                                        await axios.post('/api/loyalty/start_boss', { hp, boss_type: bType });
-                                        alert("Boss Spawned!");
-                                    } catch (e) {
-                                        alert("Error spawning boss: " + e.message);
-                                    }
-                                }}>
-                                    Start Boss Fight
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
 
                     {/* Rank Thresholds */}
                     <Card className="bg-zinc-900 border-zinc-800">
