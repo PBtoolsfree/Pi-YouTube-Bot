@@ -82,7 +82,7 @@ export default function TickerOverlay() {
                 {/* News Label */}
                 <div className="absolute left-0 top-0 bottom-0 px-8 flex items-center bg-[#00f0ff] text-black font-black text-xl italic tracking-widest z-10 uppercase"
                      style={{ clipPath: 'polygon(0 0, 100% 0, 90% 100%, 0% 100%)', textShadow: '0 0 5px rgba(255,255,255,0.5)' }}>
-                    BREAKING
+                    LIVE STATS
                 </div>
 
                 {/* Ticker Content */}

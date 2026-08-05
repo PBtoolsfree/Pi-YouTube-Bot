@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
-import { Save, Plus, Trash2, ArrowLeft, MousePointer2 } from 'lucide-react'
+import { Save, Plus, Trash2, ArrowLeft, MousePointer2, Layers } from 'lucide-react'
 import { Button, Input } from '@/components/ui'
 
 const RESOLUTIONS = [
@@ -36,7 +36,7 @@ export default function OverlayEditor() {
     // Window resize to fit canvas
     useEffect(() => {
         const handleResize = () => {
-            const availableWidth = window.innerWidth - 300 - 80 // 80 for padding
+            const availableWidth = window.innerWidth - 320 - 80 // 320 for sidebar, 80 padding
             const availableHeight = window.innerHeight - 64 - 80
             
             const scaleX = availableWidth / resolution.w
@@ -114,6 +114,27 @@ export default function OverlayEditor() {
         setWidgets(widgets.map(w => w.id === id ? { ...w, ...newProps } : w))
     }
 
+    // Layer Ordering Functions
+    const moveWidgetUp = (e, index) => {
+        e.stopPropagation()
+        if (index >= widgets.length - 1) return
+        const newWidgets = [...widgets]
+        const temp = newWidgets[index]
+        newWidgets[index] = newWidgets[index + 1]
+        newWidgets[index + 1] = temp
+        setWidgets(newWidgets)
+    }
+
+    const moveWidgetDown = (e, index) => {
+        e.stopPropagation()
+        if (index <= 0) return
+        const newWidgets = [...widgets]
+        const temp = newWidgets[index]
+        newWidgets[index] = newWidgets[index - 1]
+        newWidgets[index - 1] = temp
+        setWidgets(newWidgets)
+    }
+
     const goBack = () => {
         window.location.href = '/?mode=obs'
     }
@@ -140,7 +161,7 @@ export default function OverlayEditor() {
     return (
         <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
             {/* Top Bar */}
-            <div className="h-16 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-10">
+            <div className="h-16 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-20">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="sm" onClick={goBack} className="text-zinc-400 hover:text-white">
                         <ArrowLeft className="w-4 h-4 mr-2" /> Back
@@ -163,7 +184,7 @@ export default function OverlayEditor() {
                     </select>
                 </div>
                 <div className="flex items-center gap-3">
-                    <Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
+                    <Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-900/50">
                         <Save className="w-4 h-4 mr-2" /> Save Overlay
                     </Button>
                 </div>
@@ -171,111 +192,164 @@ export default function OverlayEditor() {
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar */}
-                <div className="w-[300px] bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 z-10">
-                    <div className="p-4 border-b border-zinc-800">
-                        <h3 className="font-semibold text-sm mb-1">Add Widgets</h3>
-                        <p className="text-xs text-zinc-400">Click to add a widget to the canvas.</p>
+                <div className="w-[320px] bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 z-20 shadow-xl overflow-hidden">
+                    
+                    {/* Add Widgets */}
+                    <div className="p-4 border-b border-zinc-800 shrink-0">
+                        <h3 className="font-semibold text-sm mb-1 flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500"/> Add Widgets</h3>
                     </div>
-                    <div className="p-4 space-y-2 overflow-y-auto flex-1">
+                    <div className="p-3 grid grid-cols-2 gap-2 overflow-y-auto shrink-0 max-h-[30vh] custom-scrollbar">
                         {WIDGET_TYPES.map(wt => (
                             <div 
                                 key={wt.type}
                                 onClick={() => addWidget(wt)}
-                                className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg hover:border-emerald-500/50 hover:bg-emerald-500/10 cursor-pointer transition-colors flex items-center gap-3"
+                                className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg hover:border-emerald-500/50 hover:bg-emerald-500/10 cursor-pointer transition-colors flex flex-col justify-center items-center gap-1 text-center"
                             >
-                                <Plus className="w-4 h-4 text-emerald-500" />
-                                <div>
-                                    <div className="text-sm font-medium">{wt.label}</div>
-                                    <div className="text-[10px] text-zinc-500">{wt.defaultW}x{wt.defaultH}</div>
-                                </div>
+                                <div className="text-xs font-medium">{wt.label}</div>
+                                <div className="text-[9px] text-zinc-500">{wt.defaultW}x{wt.defaultH}</div>
                             </div>
                         ))}
                     </div>
 
-                    {/* Properties Panel */}
-                    {selectedWidget && (
-                        <div className="p-4 border-t border-zinc-800 bg-zinc-950 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
-                            <h3 className="font-semibold text-sm mb-4 text-emerald-400 flex items-center gap-2">
-                                <MousePointer2 className="w-4 h-4" /> Properties ({selectedWidget.type})
+                    {/* Layers Panel */}
+                    <div className="border-t border-b border-zinc-800 bg-zinc-900/50 flex flex-col min-h-[150px] flex-1">
+                        <div className="p-3 pb-2 flex justify-between items-center shrink-0">
+                            <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <Layers className="w-4 h-4 text-purple-400" /> Layers
                             </h3>
-                            
-                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">X Position</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedWidget.x} 
-                                        onChange={e => updateWidget(selectedWidget.id, { x: parseInt(e.target.value) || 0 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Y Position</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedWidget.y} 
-                                        onChange={e => updateWidget(selectedWidget.id, { y: parseInt(e.target.value) || 0 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Width (Resize)</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedWidget.width} 
-                                        onChange={e => updateWidget(selectedWidget.id, { width: parseInt(e.target.value) || 100 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Height (Resize)</label>
-                                    <Input 
-                                        type="number" 
-                                        value={selectedWidget.height} 
-                                        onChange={e => updateWidget(selectedWidget.id, { height: parseInt(e.target.value) || 100 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale/Zoom (%)</label>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="range" 
-                                            min="10" 
-                                            max="300" 
-                                            value={Math.round((selectedWidget.scale || 1) * 100)} 
-                                            onChange={e => updateWidget(selectedWidget.id, { scale: parseInt(e.target.value) / 100 })}
-                                            className="flex-1 accent-emerald-500"
-                                        />
-                                        <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.scale || 1) * 100)}%</span>
+                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Top to Bottom</span>
+                        </div>
+                        <div className="p-3 pt-0 space-y-1.5 overflow-y-auto custom-scrollbar flex-1">
+                            {/* Render layers in reverse so visual top is array end */}
+                            {[...widgets].reverse().map((w, reverseIndex) => {
+                                const i = widgets.length - 1 - reverseIndex
+                                const isSel = selectedWidgetId === w.id
+                                return (
+                                    <div 
+                                        key={w.id}
+                                        onClick={() => setSelectedWidgetId(w.id)}
+                                        className={`flex items-center justify-between p-2 rounded-md text-xs cursor-pointer border transition-all ${isSel ? 'border-purple-500/50 bg-purple-500/10 text-purple-300 shadow-inner' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 text-zinc-400'}`}
+                                    >
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <span className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 rounded">{i}</span>
+                                            <span className="truncate font-medium">{w.type}</span>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            <button 
+                                                onClick={(e) => moveWidgetUp(e, i)} 
+                                                disabled={i === widgets.length - 1} 
+                                                className="p-1 hover:bg-zinc-700 rounded text-zinc-300 disabled:opacity-20 transition-colors"
+                                                title="Bring Forward"
+                                            >▲</button>
+                                            <button 
+                                                onClick={(e) => moveWidgetDown(e, i)} 
+                                                disabled={i === 0} 
+                                                className="p-1 hover:bg-zinc-700 rounded text-zinc-300 disabled:opacity-20 transition-colors"
+                                                title="Send Backward"
+                                            >▼</button>
+                                            <div className="w-px h-4 bg-zinc-700 mx-0.5 my-auto"></div>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); removeWidget(w.id) }} 
+                                                className="p-1 hover:bg-rose-500/20 text-rose-400 rounded transition-colors"
+                                            >✕</button>
+                                        </div>
                                     </div>
+                                )
+                            })}
+                            {widgets.length === 0 && (
+                                <div className="text-xs text-zinc-500 text-center p-4 italic border border-dashed border-zinc-800 rounded-lg">
+                                    No widgets added to canvas
                                 </div>
-                                <div className="col-span-2">
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Opacity (%)</label>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="range" 
-                                            min="0" 
-                                            max="100" 
-                                            value={Math.round((selectedWidget.opacity ?? 1) * 100)} 
-                                            onChange={e => updateWidget(selectedWidget.id, { opacity: parseInt(e.target.value) / 100 })}
-                                            className="flex-1 accent-emerald-500"
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Properties Panel */}
+                    <div className="border-t border-zinc-800 bg-zinc-950 shrink-0 h-[260px] overflow-y-auto">
+                        {selectedWidget ? (
+                            <div className="p-4">
+                                <h3 className="font-semibold text-sm mb-4 text-emerald-400 flex items-center gap-2">
+                                    <MousePointer2 className="w-4 h-4" /> Properties ({selectedWidget.type})
+                                </h3>
+                                
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">X Position</label>
+                                        <Input 
+                                            type="number" 
+                                            value={selectedWidget.x} 
+                                            onChange={e => updateWidget(selectedWidget.id, { x: parseInt(e.target.value) || 0 })}
+                                            className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                         />
-                                        <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.opacity ?? 1) * 100)}%</span>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Y Position</label>
+                                        <Input 
+                                            type="number" 
+                                            value={selectedWidget.y} 
+                                            onChange={e => updateWidget(selectedWidget.id, { y: parseInt(e.target.value) || 0 })}
+                                            className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Width (Resize)</label>
+                                        <Input 
+                                            type="number" 
+                                            value={selectedWidget.width} 
+                                            onChange={e => updateWidget(selectedWidget.id, { width: parseInt(e.target.value) || 100 })}
+                                            className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Height (Resize)</label>
+                                        <Input 
+                                            type="number" 
+                                            value={selectedWidget.height} 
+                                            onChange={e => updateWidget(selectedWidget.id, { height: parseInt(e.target.value) || 100 })}
+                                            className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale/Zoom (%)</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="range" 
+                                                min="10" 
+                                                max="300" 
+                                                value={Math.round((selectedWidget.scale || 1) * 100)} 
+                                                onChange={e => updateWidget(selectedWidget.id, { scale: parseInt(e.target.value) / 100 })}
+                                                className="flex-1 accent-emerald-500"
+                                            />
+                                            <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.scale || 1) * 100)}%</span>
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Opacity (%)</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="range" 
+                                                min="0" 
+                                                max="100" 
+                                                value={Math.round((selectedWidget.opacity ?? 1) * 100)} 
+                                                onChange={e => updateWidget(selectedWidget.id, { opacity: parseInt(e.target.value) / 100 })}
+                                                className="flex-1 accent-emerald-500"
+                                            />
+                                            <span className="text-xs font-mono w-10 text-right">{Math.round((selectedWidget.opacity ?? 1) * 100)}%</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <Button variant="destructive" size="sm" className="w-full" onClick={() => removeWidget(selectedWidget.id)}>
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete Widget
-                            </Button>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-zinc-600 text-xs font-medium uppercase tracking-widest">
+                                Select a widget to edit
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Canvas Area */}
                 <div 
-                    className="flex-1 bg-zinc-950 relative overflow-auto flex items-center justify-center p-10 custom-scrollbar"
+                    className="flex-1 bg-zinc-950 relative overflow-auto flex items-center justify-center p-10 custom-scrollbar z-10"
                     onClick={() => setSelectedWidgetId(null)}
                 >
                     {/* SCALED WRAPPER to prevent massive scrollbars and keep centered */}
@@ -313,7 +387,8 @@ export default function OverlayEditor() {
                                 {resolution.w} × {resolution.h}
                             </div>
 
-                            {widgets.map(w => (
+                            {/* Widgets rendered in array order (natural z-index) */}
+                            {widgets.map((w, index) => (
                                 <DraggableWidget 
                                     key={w.id}
                                     widget={w}
@@ -322,6 +397,7 @@ export default function OverlayEditor() {
                                     onUpdate={(newProps) => updateWidget(w.id, newProps)}
                                     previewUrl={getWidgetPreviewUrl(w.type)}
                                     scale={scale}
+                                    baseZIndex={index} // Pass the array index as a base z-index so selected items pop up slightly
                                 />
                             ))}
                         </div>
@@ -332,7 +408,7 @@ export default function OverlayEditor() {
     )
 }
 
-function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, scale }) {
+function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, scale, baseZIndex }) {
     const [isDragging, setIsDragging] = useState(false)
     const [isResizing, setIsResizing] = useState(false)
     
@@ -399,6 +475,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
         }
     }, [isDragging, isResizing, scale, onUpdate])
 
+    // If selected, boost its z-index slightly above its natural layer position so resizing doesn't get occluded by the very next layer
+    const computedZIndex = baseZIndex * 10 + (isSelected ? 5 : 0)
+
     return (
         <div 
             style={{
@@ -410,13 +489,13 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 transform: `scale(${widget.scale || 1})`,
                 transformOrigin: 'top left',
                 opacity: widget.opacity ?? 1,
-                border: isSelected ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.2)',
-                backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.5)',
+                border: isSelected ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.2)', // Purple border for selection
+                backgroundColor: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'rgba(0,0,0,0.5)',
                 cursor: isDragging ? 'grabbing' : 'grab',
-                zIndex: isSelected ? 10 : 1
+                zIndex: computedZIndex
             }}
             onMouseDown={handleDragStart}
-            className="group"
+            className="group hover:!border-purple-400/50 transition-colors"
         >
             {/* The iframe needs pointer-events: none so it doesn't steal mouse events during drag */}
             <iframe 
@@ -431,14 +510,14 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                     className="absolute top-0 left-0 bg-zinc-900/90 text-xs font-mono text-zinc-300 px-2 py-1 select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap overflow-hidden"
                     style={{ transform: `scale(${1 / (widget.scale || 1)})`, transformOrigin: 'top left' }}
                 >
-                    {widget.type} [{widget.width}x{widget.height}]
+                    [{baseZIndex}] {widget.type}
                 </div>
             )}
 
             {/* Resize handle */}
             {isSelected && (
                 <div 
-                    className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg"
+                    className="absolute bottom-0 right-0 w-6 h-6 bg-purple-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg"
                     style={{ 
                         right: -2, 
                         bottom: -2,
