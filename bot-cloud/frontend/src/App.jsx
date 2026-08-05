@@ -22,6 +22,7 @@ import BossOverlay from './pages/BossOverlay'
 import CustomOverlay from './pages/CustomOverlay'
 import TickerOverlay from './pages/TickerOverlay'
 import QROverlay from './pages/QROverlay'
+import PokemonOverlay from './pages/PokemonOverlay'
 
 // Dashboard Pages (lazy loaded — only fetched when tab is opened)
 const OverlayEditor = lazy(() => import('./pages/OverlayEditor'))
@@ -213,6 +214,7 @@ function App() {
   const isCustomOverlay = window.location.pathname === '/overlay/custom' || window.location.search.includes('mode=custom')
   const isTickerOverlay = window.location.search.includes('mode=ticker') || window.location.pathname === '/overlay/ticker'
   const isQROverlay = window.location.search.includes('mode=qrcode') || window.location.pathname === '/overlay/qrcode'
+  const isPokemonOverlay = window.location.pathname === '/overlay/pokemon' || window.location.search.includes('mode=pokemon')
   const isOverlayEditor = window.location.pathname === '/overlay-editor'
 
   console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search, isSubOverlay })
@@ -240,6 +242,7 @@ function App() {
   if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
   if (isTickerOverlay) return <TickerOverlay />
   if (isQROverlay) return <QROverlay />
+  if (isPokemonOverlay) return <PokemonOverlay socketData={socketData} />
   if (isOverlayEditor) return <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center bg-zinc-950"><div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full" /></div>}><OverlayEditor /></Suspense>
 
   if (!config) return (

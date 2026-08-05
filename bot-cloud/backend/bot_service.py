@@ -57,7 +57,8 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
-        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip"
+        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
+        "catch", "battle", "accept"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -95,6 +96,9 @@ class BotService:
         self.gambling.bot = self
         self.boss_fight = BossFightService()
         self.boss_fight.bot = self
+        
+        from backend.services.pokemon_service import PokemonService
+        self.pokemon = PokemonService(self)
 
         # Meme Redeem Service
         self.redeem_svc = RedeemService()
@@ -1729,6 +1733,32 @@ class BotService:
                     await self._send_chat(f"@{author} transfer failed!")
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number for amount.")
+
+        elif cmd == "!catch":
+            if not getattr(self, "pokemon", None):
+                return
+            result = await self.pokemon.handle_catch(author)
+            await self._send_chat(result)
+            
+        elif cmd == "!battle":
+            if not getattr(self, "pokemon", None):
+                return
+            if len(args) < 2:
+                await self._send_chat(f"@{author} Usage: !battle @user <bet_amount>")
+                return
+            target = args[0]
+            try:
+                bet = int(args[1])
+                result = await self.pokemon.handle_battle_challenge(author, target, bet)
+                await self._send_chat(result)
+            except ValueError:
+                await self._send_chat(f"@{author} Invalid bet amount.")
+                
+        elif cmd == "!accept":
+            if not getattr(self, "pokemon", None):
+                return
+            result = await self.pokemon.handle_accept(author)
+            await self._send_chat(result)
 
         elif cmd == "!rob":
             if not args:

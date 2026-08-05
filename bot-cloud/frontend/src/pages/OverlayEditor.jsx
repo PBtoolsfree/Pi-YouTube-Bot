@@ -22,6 +22,7 @@ const WIDGET_TYPES = [
     { type: 'rotating_hub', label: 'Rotating Hub', defaultW: 400, defaultH: 400 },
     { type: 'boss', label: 'Boss Fight', defaultW: 500, defaultH: 600 },
     { type: 'giveaway_spin', label: 'Giveaway Spin', defaultW: 800, defaultH: 800 },
+    { type: 'pokemon', label: 'Pokemon Game', defaultW: 600, defaultH: 400 },
 ]
 
 export default function OverlayEditor() {
@@ -160,6 +161,7 @@ export default function OverlayEditor() {
             case 'rotating_hub': return `/?mode=rotating_hub`
             case 'boss': return `/?mode=boss`
             case 'giveaway_spin': return `/giveawayspin`
+            case 'pokemon': return `/overlay/pokemon`
             default: return `/?mode=${type}`
         }
     }

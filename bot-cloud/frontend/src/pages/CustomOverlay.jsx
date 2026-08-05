@@ -39,6 +39,7 @@ export default function CustomOverlay() {
             case 'rotating_hub': return `/?mode=rotating_hub`
             case 'boss': return `/?mode=boss`
             case 'giveaway_spin': return `/giveawayspin`
+            case 'pokemon': return `/overlay/pokemon`
             default: return `/?mode=${type}`
         }
     }
