@@ -809,6 +809,14 @@ async def start_boss(payload: Dict[str, Any]):
     
     return {"status": "success", "message": result["message"]}
 
+@app.post("/api/loyalty/spawn_pokemon")
+async def spawn_pokemon():
+    if not hasattr(bot, "pokemon"):
+        return {"success": False, "message": "Pokemon service not initialized"}
+    
+    await bot.pokemon.spawn_wild_pokemon()
+    return {"success": True, "message": "Wild Pokemon spawned!"}
+
 # --- MEME REDEEMS CRUD ---
 
 # --- GOALS CRUD ---

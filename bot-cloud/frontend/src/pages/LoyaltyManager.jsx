@@ -913,6 +913,23 @@ export default function LoyaltyManagerPage() {
                                 <ConfigField label="Duel Win Reward" value={loyaltyConfig.games?.pokemon?.duel_reward ?? 100}
                                     onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_reward: parseInt(v) || 0 } } }))} type="number" />
                             </div>
+
+                            <div className="pt-4 border-t border-zinc-800 flex justify-between items-center">
+                                <div className="text-xs text-zinc-400 max-w-sm">
+                                    <span className="font-semibold text-rose-400 block mb-1">Testing</span>
+                                    Use this to manually trigger a wild Pokémon spawn and test if your overlay works. Pokémon automatically spawn every 10-20 minutes when Game Enabled.
+                                </div>
+                                <Button className="h-9 px-6 bg-rose-600 hover:bg-rose-500 text-white font-bold" onClick={async () => {
+                                    try {
+                                        await axios.post('/api/loyalty/spawn_pokemon');
+                                        alert("Pokemon Spawn Triggered!");
+                                    } catch (e) {
+                                        alert("Error spawning pokemon: " + e.message);
+                                    }
+                                }}>
+                                    Test Spawn
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
 
