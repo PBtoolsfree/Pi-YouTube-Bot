@@ -20,6 +20,7 @@ import GiveawaySpinOverlay from './pages/GiveawaySpinOverlay'
 import RotatingWidgetOverlay from './pages/RotatingWidgetOverlay'
 import BossOverlay from './pages/BossOverlay'
 import CustomOverlay from './pages/CustomOverlay'
+import TickerOverlay from './pages/TickerOverlay'
 
 // Dashboard Pages (lazy loaded — only fetched when tab is opened)
 const OverlayEditor = lazy(() => import('./pages/OverlayEditor'))
@@ -202,6 +203,7 @@ function App() {
   const isRotatingWidget = window.location.pathname === '/overlay/rotating_hub' || window.location.search.includes('mode=rotating_hub')
   const isBossOverlay = window.location.pathname === '/overlay/boss' || window.location.search.includes('mode=boss')
   const isCustomOverlay = window.location.pathname === '/overlay/custom' || window.location.search.includes('mode=custom')
+  const isTickerOverlay = window.location.search.includes('mode=ticker') || window.location.pathname === '/overlay/ticker'
   const isOverlayEditor = window.location.pathname === '/overlay-editor'
 
   console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search, isSubOverlay })
@@ -227,6 +229,7 @@ function App() {
   if (isRotatingWidget) return <div className="bg-transparent h-screen w-screen overflow-hidden"><RotatingWidgetOverlay /></div>
   if (isBossOverlay) return <BossOverlay />
   if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
+  if (isTickerOverlay) return <TickerOverlay />
   if (isOverlayEditor) return <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center bg-zinc-950"><div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full" /></div>}><OverlayEditor /></Suspense>
 
   if (!config) return (

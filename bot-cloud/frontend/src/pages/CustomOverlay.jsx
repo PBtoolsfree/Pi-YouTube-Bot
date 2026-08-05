@@ -31,6 +31,8 @@ export default function CustomOverlay() {
             case 'sub_count': return `/?mode=sub_count`
             case 'transactions': return `/?mode=transactions`
             case 'top_viewers': return `/?mode=top_viewers`
+            case 'superchat': return `/?mode=superchat`
+            case 'ticker': return `/?mode=ticker`
             case 'hub': return `/?mode=hub`
             case 'goal': return `/overlay/goal`
             default: return `/?mode=${type}`

@@ -14,6 +14,8 @@ const WIDGET_TYPES = [
     { type: 'sub_count', label: 'Sub Count', defaultW: 400, defaultH: 200 },
     { type: 'transactions', label: 'Recent Donations', defaultW: 550, defaultH: 400 },
     { type: 'top_viewers', label: 'Top Viewers', defaultW: 550, defaultH: 400 },
+    { type: 'superchat', label: 'Superchat Overlay', defaultW: 500, defaultH: 200 },
+    { type: 'ticker', label: 'News Ticker (Gaming)', defaultW: 1920, defaultH: 60 },
     { type: 'hub', label: 'Stream Hub', defaultW: 1920, defaultH: 108 },
     { type: 'goal', label: 'Goal Widget', defaultW: 700, defaultH: 150 },
 ]
@@ -125,6 +127,8 @@ export default function OverlayEditor() {
             case 'sub_count': return `/?mode=sub_count`
             case 'transactions': return `/?mode=transactions`
             case 'top_viewers': return `/?mode=top_viewers`
+            case 'superchat': return `/?mode=superchat`
+            case 'ticker': return `/?mode=ticker`
             case 'hub': return `/?mode=hub`
             case 'goal': return `/overlay/goal`
             default: return `/?mode=${type}`
