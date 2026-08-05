@@ -3,18 +3,25 @@ import axios from 'axios'
 import { Save, Plus, Trash2, ArrowLeft, MousePointer2 } from 'lucide-react'
 import { Button, Input } from '@/components/ui'
 
+const RESOLUTIONS = [
+    { label: 'Standard 1080p (1920x1080)', w: 1920, h: 1080 },
+    { label: 'Vertical / Shorts (1080x1920)', w: 1080, h: 1920 },
+    { label: 'Standard 720p (1280x720)', w: 1280, h: 720 },
+]
+
 const WIDGET_TYPES = [
-    { type: 'chat', label: 'Chat Overlay', defaultW: 400, defaultH: 600 },
-    { type: 'sub_count', label: 'Sub Count', defaultW: 300, defaultH: 150 },
-    { type: 'transactions', label: 'Recent Donations', defaultW: 400, defaultH: 300 },
-    { type: 'top_viewers', label: 'Top Viewers', defaultW: 350, defaultH: 300 },
+    { type: 'chat', label: 'Chat Overlay', defaultW: 450, defaultH: 700 },
+    { type: 'sub_count', label: 'Sub Count', defaultW: 400, defaultH: 200 },
+    { type: 'transactions', label: 'Recent Donations', defaultW: 550, defaultH: 400 },
+    { type: 'top_viewers', label: 'Top Viewers', defaultW: 550, defaultH: 400 },
     { type: 'hub', label: 'Stream Hub', defaultW: 1920, defaultH: 108 },
-    { type: 'goal', label: 'Goal Widget', defaultW: 600, defaultH: 100 },
+    { type: 'goal', label: 'Goal Widget', defaultW: 700, defaultH: 150 },
 ]
 
 export default function OverlayEditor() {
     const [overlayId, setOverlayId] = useState(null)
     const [name, setName] = useState('My Custom Overlay')
+    const [resolution, setResolution] = useState(RESOLUTIONS[0])
     const [widgets, setWidgets] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -27,21 +34,18 @@ export default function OverlayEditor() {
     // Window resize to fit canvas
     useEffect(() => {
         const handleResize = () => {
-            if (canvasRef.current) {
-                const parent = canvasRef.current.parentElement
-                const availableWidth = window.innerWidth - 300 - 40 // 40 for padding
-                const availableHeight = window.innerHeight - 64 - 40
-                
-                const scaleX = availableWidth / 1920
-                const scaleY = availableHeight / 1080
-                
-                setScale(Math.min(scaleX, scaleY, 1)) // Don't scale up past 1x
-            }
+            const availableWidth = window.innerWidth - 300 - 80 // 80 for padding
+            const availableHeight = window.innerHeight - 64 - 80
+            
+            const scaleX = availableWidth / resolution.w
+            const scaleY = availableHeight / resolution.h
+            
+            setScale(Math.min(scaleX, scaleY, 1)) // Don't scale up past 1x
         }
         window.addEventListener('resize', handleResize)
         handleResize()
         return () => window.removeEventListener('resize', handleResize)
-    }, [])
+    }, [resolution])
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search)
@@ -58,6 +62,7 @@ export default function OverlayEditor() {
         try {
             const res = await axios.get(`${API_URL}/custom-overlays/${id}`)
             setName(res.data.name || 'Untitled')
+            if (res.data.resolution) setResolution(res.data.resolution)
             setWidgets(res.data.widgets || [])
             setLoading(false)
         } catch (e) {
@@ -68,13 +73,14 @@ export default function OverlayEditor() {
 
     const handleSave = async () => {
         try {
+            const payload = { name, resolution, widgets }
             if (overlayId) {
-                await axios.put(`${API_URL}/custom-overlays/${overlayId}`, { name, widgets })
+                await axios.put(`${API_URL}/custom-overlays/${overlayId}`, payload)
                 alert("Overlay saved successfully!")
             } else {
                 const res = await axios.post(`${API_URL}/custom-overlays`, { name })
                 const newId = res.data.id
-                await axios.put(`${API_URL}/custom-overlays/${newId}`, { name, widgets })
+                await axios.put(`${API_URL}/custom-overlays/${newId}`, payload)
                 window.location.href = `/overlay-editor?id=${newId}`
             }
         } catch (e) {
@@ -142,6 +148,15 @@ export default function OverlayEditor() {
                         className="bg-zinc-950 border-zinc-800 font-bold w-64 text-sm"
                         placeholder="Overlay Name"
                     />
+                    <select 
+                        value={JSON.stringify(resolution)} 
+                        onChange={e => setResolution(JSON.parse(e.target.value))}
+                        className="bg-zinc-950 border border-zinc-800 text-sm rounded-md px-3 py-2 text-zinc-300 outline-none focus:border-emerald-500"
+                    >
+                        {RESOLUTIONS.map(r => (
+                            <option key={r.label} value={JSON.stringify(r)}>{r.label}</option>
+                        ))}
+                    </select>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
@@ -200,25 +215,25 @@ export default function OverlayEditor() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Base Width</label>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Width (Resize)</label>
                                     <Input 
                                         type="number" 
                                         value={selectedWidget.width} 
                                         onChange={e => updateWidget(selectedWidget.id, { width: parseInt(e.target.value) || 100 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Base Height</label>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Height (Resize)</label>
                                     <Input 
                                         type="number" 
                                         value={selectedWidget.height} 
                                         onChange={e => updateWidget(selectedWidget.id, { height: parseInt(e.target.value) || 100 })}
-                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                        className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
                                     />
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale (%)</label>
+                                    <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale/Zoom (%)</label>
                                     <div className="flex gap-2">
                                         <input 
                                             type="range" 
@@ -256,48 +271,56 @@ export default function OverlayEditor() {
 
                 {/* Canvas Area */}
                 <div 
-                    className="flex-1 bg-zinc-950 relative overflow-auto flex items-center justify-center p-5 custom-scrollbar"
+                    className="flex-1 bg-zinc-950 relative overflow-auto flex items-center justify-center p-10 custom-scrollbar"
                     onClick={() => setSelectedWidgetId(null)}
                 >
-                    {/* The 1920x1080 container */}
+                    {/* SCALED WRAPPER to prevent massive scrollbars and keep centered */}
                     <div 
-                        ref={canvasRef}
                         style={{
-                            width: 1920,
-                            height: 1080,
-                            transform: `scale(${scale})`,
-                            transformOrigin: 'center center',
-                            backgroundColor: '#0a0a0a', // Darker background to contrast with border
-                            backgroundImage: 'linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b), linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b)',
-                            backgroundSize: '20px 20px',
-                            backgroundPosition: '0 0, 10px 10px',
-                            boxShadow: '0 0 0 4px #000, 0 25px 50px -12px rgba(0,0,0,0.5)',
+                            width: resolution.w * scale,
+                            height: resolution.h * scale,
                         }}
-                        className="relative overflow-hidden shrink-0 border border-zinc-700"
-                        onClick={e => e.stopPropagation()} // Prevent unselecting
+                        className="relative shrink-0"
                     >
-                        {/* Title Safe Area Guide */}
-                        <div className="absolute inset-0 pointer-events-none z-0 border-[4px] border-emerald-500/10"></div>
-                        <div className="absolute top-[5%] bottom-[5%] left-[5%] right-[5%] pointer-events-none z-0 border border-dashed border-zinc-500/30">
-                            <span className="absolute bottom-1 right-2 text-zinc-500/50 text-[10px] font-mono">SAFE ZONE (5%)</span>
-                        </div>
-                        
-                        {/* 1920x1080 watermark */}
-                        <div className="absolute top-4 left-4 pointer-events-none z-0 text-zinc-600/30 font-bold text-4xl select-none">
-                            1920 × 1080
-                        </div>
+                        {/* The actual Canvas */}
+                        <div 
+                            ref={canvasRef}
+                            style={{
+                                width: resolution.w,
+                                height: resolution.h,
+                                transform: `scale(${scale})`,
+                                transformOrigin: 'top left',
+                                backgroundColor: '#0a0a0a', 
+                                backgroundImage: 'linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b), linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b)',
+                                backgroundSize: '20px 20px',
+                                backgroundPosition: '0 0, 10px 10px',
+                                boxShadow: '0 0 0 4px #10b981, 0 25px 50px -12px rgba(0,0,0,0.5)',
+                            }}
+                            className="absolute top-0 left-0 overflow-hidden"
+                            onClick={e => e.stopPropagation()} // Prevent unselecting
+                        >
+                            {/* Title Safe Area Guide */}
+                            <div className="absolute top-[5%] bottom-[5%] left-[5%] right-[5%] pointer-events-none z-0 border border-dashed border-zinc-500/30">
+                                <span className="absolute bottom-1 right-2 text-zinc-500/50 text-[12px] font-bold tracking-widest">SAFE ZONE (5%)</span>
+                            </div>
+                            
+                            {/* Resolution watermark */}
+                            <div className="absolute top-6 left-6 pointer-events-none z-0 text-zinc-600/30 font-bold text-5xl select-none tracking-tighter">
+                                {resolution.w} × {resolution.h}
+                            </div>
 
-                        {widgets.map(w => (
-                            <DraggableWidget 
-                                key={w.id}
-                                widget={w}
-                                isSelected={selectedWidgetId === w.id}
-                                onSelect={() => setSelectedWidgetId(w.id)}
-                                onUpdate={(newProps) => updateWidget(w.id, newProps)}
-                                previewUrl={getWidgetPreviewUrl(w.type)}
-                                scale={scale}
-                            />
-                        ))}
+                            {widgets.map(w => (
+                                <DraggableWidget 
+                                    key={w.id}
+                                    widget={w}
+                                    isSelected={selectedWidgetId === w.id}
+                                    onSelect={() => setSelectedWidgetId(w.id)}
+                                    onUpdate={(newProps) => updateWidget(w.id, newProps)}
+                                    previewUrl={getWidgetPreviewUrl(w.type)}
+                                    scale={scale}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -310,7 +333,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
     const [isResizing, setIsResizing] = useState(false)
     
     // For drag/resize delta calculations
-    const startPos = useRef({ x: 0, y: 0, w: 0, scale: 1, mx: 0, my: 0 })
+    const startPos = useRef({ x: 0, y: 0, w: 0, h: 0, mx: 0, my: 0 })
 
     const handleDragStart = (e) => {
         e.stopPropagation()
@@ -330,7 +353,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
         setIsResizing(true)
         startPos.current = {
             w: widget.width,
-            scale: widget.scale || 1,
+            h: widget.height,
             mx: e.clientX,
             my: e.clientY
         }
@@ -347,14 +370,11 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 })
             } else if (isResizing) {
                 const dx = (e.clientX - startPos.current.mx) / scale
-                
-                // Calculate new scale based on drag distance
-                const originalDisplayWidth = startPos.current.w * startPos.current.scale
-                const newDisplayWidth = Math.max(50, originalDisplayWidth + dx)
-                const newScale = newDisplayWidth / startPos.current.w
+                const dy = (e.clientY - startPos.current.my) / scale
                 
                 onUpdate({
-                    scale: newScale
+                    width: Math.max(100, Math.round(startPos.current.w + dx)),
+                    height: Math.max(100, Math.round(startPos.current.h + dy))
                 })
             }
         }
@@ -407,14 +427,14 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                     className="absolute top-0 left-0 bg-zinc-900/90 text-xs font-mono text-zinc-300 px-2 py-1 select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap overflow-hidden"
                     style={{ transform: `scale(${1 / (widget.scale || 1)})`, transformOrigin: 'top left' }}
                 >
-                    {widget.type} [{widget.width}x{widget.height}] {widget.scale && widget.scale !== 1 ? `x${widget.scale.toFixed(2)}` : ''}
+                    {widget.type} [{widget.width}x{widget.height}]
                 </div>
             )}
 
             {/* Resize handle */}
             {isSelected && (
                 <div 
-                    className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 cursor-se-resize rounded-tl flex items-center justify-center text-white"
+                    className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg"
                     style={{ 
                         right: -2, 
                         bottom: -2,

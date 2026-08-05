@@ -37,8 +37,10 @@ export default function CustomOverlay() {
         }
     }
 
+    const res = overlay.resolution || { w: 1920, h: 1080 }
+
     return (
-        <div style={{ position: 'relative', width: '1920px', height: '1080px', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', width: `${res.w}px`, height: `${res.h}px`, overflow: 'hidden' }}>
             {overlay.widgets?.map(w => (
                 <iframe
                     key={w.id}
