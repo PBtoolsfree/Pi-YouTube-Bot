@@ -83,6 +83,13 @@ function App() {
   const wsRef = useRef(null)
 
   useEffect(() => {
+    // Make body transparent for overlay routes
+    if (window.location.search.includes('mode=') || window.location.pathname.startsWith('/overlay/') || window.location.pathname === '/giveawayspin') {
+      document.body.style.backgroundColor = 'transparent'
+      document.body.style.background = 'transparent'
+      document.body.classList.remove('bg-zinc-950')
+    }
+
     // If specific route, don't fetch config
     if (window.location.pathname === '/tip') return
 

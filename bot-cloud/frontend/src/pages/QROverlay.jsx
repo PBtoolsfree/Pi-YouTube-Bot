@@ -54,7 +54,7 @@ export default function QROverlay() {
                     style={{ background: 'conic-gradient(from 0deg, transparent 0%, #00f0ff 25%, #fff 40%, #00f0ff 55%, transparent 75%, #10b981 88%, transparent 100%)' }} />
 
                 {/* Inner content (QR Code) */}
-                <div className="relative bg-white rounded-[22px] overflow-hidden z-10 p-2 flex items-center justify-center w-[300px] h-[300px] md:w-[400px] md:h-[400px]">
+                <div className="relative bg-white rounded-[22px] overflow-hidden z-10 p-2 flex items-center justify-center w-[200px] h-[200px] sm:w-[250px] sm:h-[250px] md:w-[300px] md:h-[300px]">
                     {qrPath ? (
                         <img src={qrPath} alt="Donate QR" className="w-full h-full object-contain rounded-[18px]" />
                     ) : upiVpa ? (
