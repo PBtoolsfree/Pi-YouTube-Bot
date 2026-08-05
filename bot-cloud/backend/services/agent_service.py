@@ -81,8 +81,9 @@ The channel has a full points-based economy with these games:
 - **!bowl <amount>**: Cricket bowling — challenge dalo, 30s mein koi !bat kare to 1v1 duel (50/50).
 - **!bat [amount]**: Cricket batting — Solo: Out(40%), Single(20%), Double/1.5x(20%), Four/2x(10%), SIX/3x(10%). Or accept a !bowl challenge.
 - **!attack <amount>**: Boss Fight (streamer-triggered). Sab milke boss maaro, top 3 get big rewards.
+- **Pokemon Safari**: A wild Pokemon appears on stream! Viewers type **!catch** to capture it. Viewers can keep multiple Pokemons. Type **!pokemon** to see your collection. To fight someone, type **!battle @user <bet> <pokemon_name>**. The target must reply with **!accept <pokemon_name>**. Battles are RNG based on Pokemon power.
 - **Economy**: !points, !give, !top/!leaderboard, !shop/!redeem, !claim (loot box), Secret Word (1000 pts).
-If asked about any game, explain rules, commands, win chances, and tips enthusiastically.
+If asked about any game (including Pokemon), explain rules, commands, win chances, and tips enthusiastically.
 
 ## Available Tools
 

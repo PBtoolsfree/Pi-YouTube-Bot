@@ -97,10 +97,17 @@ class PokemonService:
         
         # Initialize user if not exists
         if user not in self.users_data:
-            self.users_data[user] = {"pokemon": None, "wins": 0, "losses": 0}
+            self.users_data[user] = {"pokemons": [], "wins": 0, "losses": 0}
             
-        old_pokemon = self.users_data[user].get("pokemon")
-        self.users_data[user]["pokemon"] = pokemon["name"]
+        user_data = self.users_data[user]
+        
+        # Backward compatibility conversion
+        if "pokemons" not in user_data:
+            user_data["pokemons"] = []
+            if user_data.get("pokemon"):
+                user_data["pokemons"].append(user_data["pokemon"])
+                
+        user_data["pokemons"].append(pokemon["name"])
         self.save_data()
         
         # Broadcast catch to overlays
@@ -112,39 +119,64 @@ class PokemonService:
                 "pokemon": pokemon
             })
         
-        if old_pokemon:
-            return f"🎉 @{user} caught the wild {pokemon['name']}! (Replaced their {old_pokemon})"
-        return f"🎉 @{user} caught their first Pokemon: {pokemon['name']}! Use '!battle @user <bet>' to fight others!"
+        return f"🎉 @{user} caught the wild {pokemon['name']}! You now have {len(user_data['pokemons'])} Pokemons! Type !pokemon to see them."
 
     async def handle_check_pokemon(self, user):
-        poke = self.get_user_pokemon(user)
-        if poke:
-            wins = self.users_data.get(user, {}).get("wins", 0)
-            losses = self.users_data.get(user, {}).get("losses", 0)
-            return f"@{user}, your active Pokemon is {poke['name']} (Power: {poke['power']}). Battles: {wins}W - {losses}L."
-        return f"@{user}, you don't have a Pokemon! Wait for a wild spawn and type !catch."
+        user_data = self.users_data.get(user, {})
+        pokemons = user_data.get("pokemons", [])
+        if not pokemons and user_data.get("pokemon"):
+            pokemons = [user_data["pokemon"]]
+            
+        if not pokemons:
+            return f"@{user}, you don't have any Pokemons! Wait for a wild spawn and type !catch."
+            
+        wins = user_data.get("wins", 0)
+        losses = user_data.get("losses", 0)
+        poke_list = ", ".join(pokemons)
+        return f"@{user}'s Pokemons ({wins}W-{losses}L): {poke_list}. Use !battle @user <bet> <pokemon_name> to fight!"
 
-
-    def get_user_pokemon(self, user):
+    def get_user_pokemon(self, user, pokemon_name=None):
         user_data = self.users_data.get(user)
-        if not user_data or not user_data.get("pokemon"):
+        if not user_data:
             return None
-        poke_name = user_data["pokemon"]
-        return next((p for p in POKEMON_LIST if p["name"] == poke_name), None)
+            
+        pokemons = user_data.get("pokemons", [])
+        if not pokemons and user_data.get("pokemon"):
+            pokemons = [user_data["pokemon"]]
+            
+        if not pokemons:
+            return None
+            
+        if pokemon_name:
+            poke_name = next((p for p in pokemons if p.lower() == pokemon_name.lower()), None)
+            if not poke_name:
+                return None
+        else:
+            if len(pokemons) == 1:
+                poke_name = pokemons[0]
+            else:
+                return None
+                
+        return next((p for p in POKEMON_LIST if p["name"].lower() == poke_name.lower()), None)
 
-    async def handle_battle_challenge(self, challenger, target, bet_amount):
+    async def handle_battle_challenge(self, challenger, target, bet_amount, pokemon_name=None):
         target = target.replace("@", "").strip()
         
         if challenger == target:
             return f"@{challenger}, you cannot battle yourself!"
             
-        challenger_poke = self.get_user_pokemon(challenger)
+        challenger_poke = self.get_user_pokemon(challenger, pokemon_name)
         if not challenger_poke:
-            return f"@{challenger}, you don't have a Pokemon! Wait for one to spawn and !catch it."
+            if pokemon_name:
+                return f"@{challenger}, you don't own a Pokemon named {pokemon_name}!"
+            else:
+                return f"@{challenger}, you have multiple Pokemons! Please specify: !battle @user <bet> <pokemon_name>"
             
-        target_poke = self.get_user_pokemon(target)
-        if not target_poke:
-            return f"@{challenger}, {target} doesn't have a Pokemon to battle!"
+        # Target's pokemon doesn't need to be specified by challenger.
+        # But we check if target has ANY pokemon
+        target_poke_test = self.users_data.get(target, {}).get("pokemons", [])
+        if not target_poke_test and not self.users_data.get(target, {}).get("pokemon"):
+            return f"@{challenger}, {target} doesn't have any Pokemons to battle!"
             
         try:
             bet_amount = int(bet_amount)
@@ -178,12 +210,13 @@ class PokemonService:
         self.pending_battles[challenger] = {
             "target": target,
             "bet": bet_amount,
-            "task": task
+            "task": task,
+            "challenger_poke": challenger_poke
         }
         
-        return f"⚔️ @{target}, {challenger} has challenged your {target_poke['name']} to a battle for {bet_amount} points! Type !accept to fight!"
+        return f"⚔️ @{target}, {challenger} challenged you using {challenger_poke['name']} for {bet_amount} points! Type !accept <pokemon_name> to fight!"
 
-    async def handle_accept(self, target):
+    async def handle_accept(self, target, pokemon_name=None):
         # Find who challenged this target
         challenger = None
         for ch, data in self.pending_battles.items():
@@ -206,8 +239,14 @@ class PokemonService:
         if challenger_bal < bet or target_bal < bet:
             return f"Battle cancelled! Someone doesn't have enough points for the {bet} bet."
             
-        challenger_poke = self.get_user_pokemon(challenger)
-        target_poke = self.get_user_pokemon(target)
+        target_poke = self.get_user_pokemon(target, pokemon_name)
+        if not target_poke:
+            if pokemon_name:
+                return f"@{target}, you don't own a Pokemon named {pokemon_name}!"
+            else:
+                return f"@{target}, you have multiple Pokemons! Please specify: !accept <pokemon_name>"
+                
+        challenger_poke = battle_data["challenger_poke"]
         
         # RNG Battle resolution
         # Slight advantage if power is higher

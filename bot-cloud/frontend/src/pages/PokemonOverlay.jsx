@@ -8,6 +8,7 @@ export default function PokemonOverlay() {
     const wsRef = useRef(null)
 
     useEffect(() => {
+        document.body.style.background = 'transparent'
         const connect = () => {
             const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
             const ws = new WebSocket(`${proto}://${window.location.host}/ws/logs`)
@@ -121,7 +122,7 @@ export default function PokemonOverlay() {
                             <span className="text-4xl">🏆</span>
                         </div>
                         <h2 className="text-cyan-400 font-black text-3xl uppercase tracking-widest text-center">
-                            {catchEvent.user} caught {catchEvent.pokemon.name}!
+                            @{catchEvent.user} caught {catchEvent.pokemon.name}!
                         </h2>
                         <img 
                             src={catchEvent.pokemon.sprite} 

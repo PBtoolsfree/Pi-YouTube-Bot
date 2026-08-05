@@ -1744,12 +1744,13 @@ class BotService:
             if not getattr(self, "pokemon", None):
                 return
             if len(args) < 2:
-                await self._send_chat(f"@{author} Usage: !battle @user <bet_amount>")
+                await self._send_chat(f"@{author} Usage: !battle @user <bet_amount> <pokemon_name>")
                 return
             target = args[0]
             try:
                 bet = int(args[1])
-                result = await self.pokemon.handle_battle_challenge(author, target, bet)
+                poke_name = " ".join(args[2:]) if len(args) > 2 else None
+                result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
                 await self._send_chat(result)
             except ValueError:
                 await self._send_chat(f"@{author} Invalid bet amount.")
@@ -1757,7 +1758,8 @@ class BotService:
         elif cmd == "!accept":
             if not getattr(self, "pokemon", None):
                 return
-            result = await self.pokemon.handle_accept(author)
+            poke_name = " ".join(args) if args else None
+            result = await self.pokemon.handle_accept(author, poke_name)
             await self._send_chat(result)
 
         elif cmd in ["!pokemon", "!pokemons"]:
