@@ -19,8 +19,10 @@ import GoalOverlay from './pages/GoalOverlay'
 import GiveawaySpinOverlay from './pages/GiveawaySpinOverlay'
 import RotatingWidgetOverlay from './pages/RotatingWidgetOverlay'
 import BossOverlay from './pages/BossOverlay'
+import CustomOverlay from './pages/CustomOverlay'
 
 // Dashboard Pages (lazy loaded — only fetched when tab is opened)
+const OverlayEditor = lazy(() => import('./pages/OverlayEditor'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const GoalsPage = lazy(() => import('./pages/Goals'))
 const Orchestrator = lazy(() => import('./pages/Orchestrator'))
@@ -199,6 +201,8 @@ function App() {
   const isGiveawaySpin = window.location.pathname === '/giveawayspin'
   const isRotatingWidget = window.location.pathname === '/overlay/rotating_hub' || window.location.search.includes('mode=rotating_hub')
   const isBossOverlay = window.location.pathname === '/overlay/boss' || window.location.search.includes('mode=boss')
+  const isCustomOverlay = window.location.pathname === '/overlay/custom' || window.location.search.includes('mode=custom')
+  const isOverlayEditor = window.location.pathname === '/overlay-editor'
 
   console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search, isSubOverlay })
 
@@ -222,6 +226,8 @@ function App() {
   if (isGiveawaySpin) return <div className="bg-transparent h-screen w-screen"><GiveawaySpinOverlay /></div>
   if (isRotatingWidget) return <div className="bg-transparent h-screen w-screen overflow-hidden"><RotatingWidgetOverlay /></div>
   if (isBossOverlay) return <BossOverlay />
+  if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
+  if (isOverlayEditor) return <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center bg-zinc-950"><div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full" /></div>}><OverlayEditor /></Suspense>
 
   if (!config) return (
     <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 text-white gap-4">

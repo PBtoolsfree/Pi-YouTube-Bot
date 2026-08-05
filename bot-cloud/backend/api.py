@@ -30,6 +30,7 @@ from .ai_service import AIEngine
 from .audio_service import AudioService
 from .config_manager import ConfigManager
 from .services.redeem_service import RedeemService
+from .services.custom_overlay_service import CustomOverlayService
 from fastapi.responses import JSONResponse
 import re
 
@@ -304,6 +305,13 @@ active_pi_websockets: List[WebSocket] = []
 class ConfigUpdate(BaseModel):
     config: Dict[str, Any]
 
+class CustomOverlayCreate(BaseModel):
+    name: str
+
+class CustomOverlayUpdate(BaseModel):
+    name: Optional[str] = None
+    widgets: Optional[list] = None
+
 class SpeakRequest(BaseModel):
     text: str
     channel: str = "public"
@@ -347,6 +355,37 @@ async def broadcast_log(data: dict):
 @app.get("/api/logs/history")
 async def get_log_history():
     return list(log_history)
+
+# --- CUSTOM OVERLAYS ---
+
+@app.get("/api/custom-overlays")
+async def get_custom_overlays():
+    return CustomOverlayService.get_all()
+
+@app.get("/api/custom-overlays/{overlay_id}")
+async def get_custom_overlay(overlay_id: str):
+    overlay = CustomOverlayService.get_by_id(overlay_id)
+    if not overlay:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return overlay
+
+@app.post("/api/custom-overlays")
+async def create_custom_overlay(payload: CustomOverlayCreate):
+    return CustomOverlayService.create(payload.name)
+
+@app.put("/api/custom-overlays/{overlay_id}")
+async def update_custom_overlay(overlay_id: str, payload: CustomOverlayUpdate):
+    overlay = CustomOverlayService.update(overlay_id, payload.dict(exclude_unset=True))
+    if not overlay:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return overlay
+
+@app.delete("/api/custom-overlays/{overlay_id}")
+async def delete_custom_overlay(overlay_id: str):
+    success = CustomOverlayService.delete(overlay_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return {"success": True}
 
 async def broadcast_to_pi_clients(event: dict):
     if not active_pi_websockets:

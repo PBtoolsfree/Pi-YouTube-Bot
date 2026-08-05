@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
 import { Copy, Check, Monitor, Volume2, Info, Settings } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Button, Input } from '@/components/ui'
 
@@ -7,10 +8,18 @@ import { copyToClipboard as secureCopy } from '@/lib/utils'
 export default function OBSPage({ config, onSave }) {
     const [copiedMap, setCopiedMap] = useState({})
 
-    // Config values
     const audioCfg = config?.audio || {}
     const gamingPcIp = audioCfg.gaming_pc_ip || '127.0.0.1'
     const [localIp, setLocalIp] = useState(gamingPcIp)
+    const [customOverlays, setCustomOverlays] = useState([])
+    const API_URL = import.meta.env?.VITE_API_URL || "/api"
+
+    useEffect(() => {
+        // Fetch custom overlays
+        axios.get(`${API_URL}/custom-overlays`)
+            .then(res => setCustomOverlays(res.data))
+            .catch(err => console.error("Failed to load custom overlays", err))
+    }, [])
 
     // Derived URLs - Use hostname instead of hardcoded localhost
     const host = window.location.host
@@ -79,6 +88,49 @@ export default function OBSPage({ config, onSave }) {
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2">
+
+                    {/* Custom Overlays Section */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
+                        <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Monitor className="h-4 w-4 text-emerald-400" /> Custom Overlays
+                            </CardTitle>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 h-8" onClick={() => window.open('/overlay-editor', '_blank')}>
+                                + Create New Overlay
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                            <p className="text-xs text-zinc-400">
+                                Build composite overlays by dragging and dropping widgets onto a 1920x1080 canvas.
+                            </p>
+                            <div className="space-y-3">
+                                {customOverlays.length > 0 ? (
+                                    customOverlays.map(overlay => {
+                                        const url = `http://${host}/overlay/custom?id=${overlay.id}`
+                                        return (
+                                            <div key={overlay.id} className="flex gap-2 items-center bg-zinc-950 p-2.5 rounded border border-zinc-800">
+                                                <div className="flex-1 font-mono text-xs truncate text-zinc-300 select-all">
+                                                    <span className="text-zinc-500 mr-2 uppercase block text-[10px] mb-1 font-bold">{overlay.name}</span>
+                                                    {url}
+                                                </div>
+                                                <Button size="sm" variant="outline" className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => window.open(`/overlay-editor?id=${overlay.id}`, '_blank')}>
+                                                    Edit
+                                                </Button>
+                                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(url, `custom_${overlay.id}`)}>
+                                                    {copiedMap[`custom_${overlay.id}`] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                                                </Button>
+                                            </div>
+                                        )
+                                    })
+                                ) : (
+                                    <div className="bg-zinc-950 p-4 rounded border border-zinc-800/50 text-center flex flex-col items-center justify-center space-y-1">
+                                        <p className="text-xs text-zinc-400 font-medium tracking-wide">No Custom Overlays</p>
+                                        <p className="text-[10px] text-zinc-500">Create one to get started.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     {/* Chat Overlay Card */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
