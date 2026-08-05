@@ -23,8 +23,9 @@ export default function OBSPage({ config, onSave }) {
 
     // Derived URLs - Use hostname instead of hardcoded localhost
     const host = window.location.host
+    const origin = window.location.origin
 
-    const chatOverlayUrl = `http://${host}/?mode=chat`
+    const chatOverlayUrl = `${origin}/?mode=chat`
 
 
     // Audio URLs use the Gaming PC IP and dynamic ports
@@ -106,7 +107,7 @@ export default function OBSPage({ config, onSave }) {
                             <div className="space-y-3">
                                 {customOverlays.length > 0 ? (
                                     customOverlays.map(overlay => {
-                                        const url = `http://${host}/overlay/custom?id=${overlay.id}`
+                                        const url = `${origin}/overlay/custom?id=${overlay.id}`
                                         return (
                                             <div key={overlay.id} className="flex gap-2 items-center bg-zinc-950 p-2.5 rounded border border-zinc-800">
                                                 <div className="flex-1 font-mono text-xs truncate text-zinc-300 select-all">
@@ -167,9 +168,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/?mode=sub_count`}
+                                    {`${origin}/?mode=sub_count`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/?mode=sub_count`, 'sub_count')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/?mode=sub_count`, 'sub_count')}>
                                     {copiedMap['sub_count'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -189,9 +190,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/?mode=transactions`}
+                                    {`${origin}/?mode=transactions`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/?mode=transactions`, 'tx')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/?mode=transactions`, 'tx')}>
                                     {copiedMap['tx'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -211,9 +212,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/?mode=top_viewers`}
+                                    {`${origin}/?mode=top_viewers`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/?mode=top_viewers`, 'top_viewers')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/?mode=top_viewers`, 'top_viewers')}>
                                     {copiedMap['top_viewers'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -233,9 +234,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/?mode=hub`}
+                                    {`${origin}/?mode=hub`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/?mode=hub`, 'hub')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/?mode=hub`, 'hub')}>
                                     {copiedMap['hub'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -255,9 +256,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/overlay/rotating_hub`}
+                                    {`${origin}/overlay/rotating_hub`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/overlay/rotating_hub`, 'rotating_hub')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/overlay/rotating_hub`, 'rotating_hub')}>
                                     {copiedMap['rotating_hub'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -277,9 +278,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/overlay/boss`}
+                                    {`${origin}/overlay/boss`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/overlay/boss`, 'boss')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/overlay/boss`, 'boss')}>
                                     {copiedMap['boss'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -299,9 +300,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/overlay/game`}
+                                    {`${origin}/overlay/game`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/overlay/game`, 'game')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/overlay/game`, 'game')}>
                                     {copiedMap['game'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -321,9 +322,9 @@ export default function OBSPage({ config, onSave }) {
                             </p>
                             <div className="flex gap-2">
                                 <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
-                                    {`http://${host}/giveawayspin`}
+                                    {`${origin}/giveawayspin`}
                                 </div>
-                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`http://${host}/giveawayspin`, 'giveawayspin')}>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/giveawayspin`, 'giveawayspin')}>
                                     {copiedMap['giveawayspin'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                                 </Button>
                             </div>
@@ -346,7 +347,7 @@ export default function OBSPage({ config, onSave }) {
                                 <div className="space-y-3">
                                     {config.goals.active_goals && config.goals.active_goals.length > 0 ? (
                                         config.goals.active_goals.map(goal => {
-                                            const url = `http://${host}/overlay/goal?id=${goal.id}`
+                                            const url = `${origin}/overlay/goal?id=${goal.id}`
                                             return (
                                                 <div key={goal.id} className="flex gap-2">
                                                     <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">

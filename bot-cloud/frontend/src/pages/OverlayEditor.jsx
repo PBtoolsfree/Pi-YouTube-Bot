@@ -113,15 +113,14 @@ export default function OverlayEditor() {
     if (error) return <div className="flex items-center justify-center h-screen bg-zinc-950 text-red-500">{error}</div>
 
     const getWidgetPreviewUrl = (type) => {
-        const host = window.location.host
         switch (type) {
-            case 'chat': return `http://${host}/?mode=chat`
-            case 'sub_count': return `http://${host}/?mode=sub_count`
-            case 'transactions': return `http://${host}/?mode=transactions`
-            case 'top_viewers': return `http://${host}/?mode=top_viewers`
-            case 'hub': return `http://${host}/?mode=hub`
-            case 'goal': return `http://${host}/overlay/goal`
-            default: return `http://${host}/?mode=${type}`
+            case 'chat': return `/?mode=chat`
+            case 'sub_count': return `/?mode=sub_count`
+            case 'transactions': return `/?mode=transactions`
+            case 'top_viewers': return `/?mode=top_viewers`
+            case 'hub': return `/?mode=hub`
+            case 'goal': return `/overlay/goal`
+            default: return `/?mode=${type}`
         }
     }
 
