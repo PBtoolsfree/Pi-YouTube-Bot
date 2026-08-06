@@ -29,7 +29,7 @@ echo "3. Building Local Frontend..."
 if [ -d "bot-local/frontend" ]; then
     cd bot-local/frontend
     npm install --silent
-    export NODE_OPTIONS=--max_old_space_size=512
+    export NODE_OPTIONS=--max_old_space_size=2048
     npm run build
     cd "$PROJECT_DIR"
 else

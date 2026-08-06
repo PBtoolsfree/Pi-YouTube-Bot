@@ -27,7 +27,7 @@ echo "3. Building Cloud Frontend..."
 if [ -d "bot-cloud/frontend" ]; then
     cd bot-cloud/frontend
     npm install --silent
-    export NODE_OPTIONS=--max_old_space_size=512
+    export NODE_OPTIONS=--max_old_space_size=2048
     npm run build
     cd "$PROJECT_DIR"
 else
