@@ -35,20 +35,24 @@ class AIHandler:
 
     async def process_ai(self, author, prompt, config, viewer_service, audio_service, log_ui_cb, send_chat_cb, trigger_action_cb=None, force_ai=False, live_context=None):
         try:
-            cooldowns = config.get("cooldowns", {})
+            ai_triggers = config.get("moderation", {}).get("ai_triggers", {})
+            old_cooldowns = config.get("cooldowns", {})
+            global_cd = ai_triggers.get("global_cooldown", old_cooldowns.get("global", 15))
+            user_cd = ai_triggers.get("user_cooldown", old_cooldowns.get("user", 60))
+            
             now = time.time()
             
             if not force_ai:
                 # Global Cooldown
-                if now - self.last_ai_time < cooldowns.get("global", 15):
+                if now - self.last_ai_time < global_cd:
                     logger.info("Global Cooldown Active - Skipping AI")
                     return None
 
                 # User Cooldown
-                if now - self.user_last_ai.get(author, 0) < cooldowns.get("user", 60):
+                if now - self.user_last_ai.get(author, 0) < user_cd:
                     logger.info(f"User Cooldown Active for {author} - Skipping AI")
                     if now - self.last_warning_time.get(author, 0) > 30:
-                        warn_msg = cooldowns.get("warning_message", "Slow down!")
+                        warn_msg = old_cooldowns.get("warning_message", "Slow down!")
                         await send_chat_cb(f"@{author} {warn_msg}")
                         self.last_warning_time[author] = now
                     return None
@@ -237,19 +241,20 @@ IMPORTANT: Jab koi viewer game ke baare mein puche, to ENTHUSIASTICALLY aur DETA
     def check_cooldowns_for_api(self, user, config, force_ai=False):
         """Used by the HTTP /chat endpoint which needs immediate return values."""
         now = time.time()
-        cooldowns = config.get("cooldowns", {})
+        ai_triggers = config.get("moderation", {}).get("ai_triggers", {})
+        old_cooldowns = config.get("cooldowns", {})
         
         if force_ai:
             return True, None
 
-        global_cd = cooldowns.get("global", 15)
+        global_cd = ai_triggers.get("global_cooldown", old_cooldowns.get("global", 15))
         if now - self.last_ai_time < global_cd:
             return False, "global_cooldown"
         
-        user_cd = cooldowns.get("user", 60)
+        user_cd = ai_triggers.get("user_cooldown", old_cooldowns.get("user", 60))
         if now - self.user_last_ai.get(user, 0) < user_cd:
             if now - self.last_warning_time.get(user, 0) > 10:
-                warning_msg = cooldowns.get("warning_message", "")
+                warning_msg = old_cooldowns.get("warning_message", "")
                 self.last_warning_time[user] = now
                 return False, warning_msg
             return False, ""

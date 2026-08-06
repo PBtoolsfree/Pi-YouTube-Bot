@@ -274,6 +274,33 @@ export default function ModerationPage({ config, onSave }) {
                                     ))}
                                 </div>
                             </div>
+
+                            <div className="pt-4 border-t border-zinc-800 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-medium text-zinc-300">Global Cooldown</div>
+                                        <div className="text-[10px] text-zinc-500">Wait time for everyone</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="number" min="0" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
+                                            value={localConfig.moderation?.ai_triggers?.global_cooldown ?? 15}
+                                            onChange={(e) => updateNested('moderation.ai_triggers.global_cooldown', parseInt(e.target.value))} />
+                                        <span className="text-[10px] text-zinc-500 w-6">sec</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-medium text-zinc-300">User Cooldown</div>
+                                        <div className="text-[10px] text-zinc-500">Wait time per user</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Input type="number" min="0" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
+                                            value={localConfig.moderation?.ai_triggers?.user_cooldown ?? 60}
+                                            onChange={(e) => updateNested('moderation.ai_triggers.user_cooldown', parseInt(e.target.value))} />
+                                        <span className="text-[10px] text-zinc-500 w-6">sec</span>
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
