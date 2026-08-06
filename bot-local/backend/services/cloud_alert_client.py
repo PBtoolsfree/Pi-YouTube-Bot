@@ -225,6 +225,14 @@ class CloudAlertClientService:
             if msg:
                 asyncio.create_task(self.bot._send_chat(msg))
 
+        elif etype in ["POKEMON_EVENT", "goal_start", "goal_update", "goal_achieved", "goal_ended", "giveaway_update", "meme_redeem", "meme_expired"]:
+            if hasattr(self.bot, "broadcast_func") and self.bot.broadcast_func:
+                asyncio.create_task(self.bot.broadcast_func(event))
+
+        elif event.get("event") == "AGENT_ACTION":
+            if hasattr(self.bot, "broadcast_func") and self.bot.broadcast_func:
+                asyncio.create_task(self.bot.broadcast_func(event))
+
         elif etype == "play_tts":
             text = event.get("text")
             channel = event.get("channel", "public")

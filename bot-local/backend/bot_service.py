@@ -297,6 +297,10 @@ class BotService:
 
         # Start ViewerService background tasks (auto-save loop)
         await self.viewers.start()
+        
+        # Start PokemonService task
+        if hasattr(self, "pokemon") and self.pokemon:
+            self.pokemon.start()
             
         logger.info("Bot Service Started")
         # Auto-Connect Sheets (blocking start to ensure data safety)

@@ -328,8 +328,14 @@ async def broadcast_log(data: dict):
     if data.get("type") == "log":
         log_history.append(data)
 
-    if os.environ.get("RUN_MODE") == "cloud" and data.get("type") in ["play_tts", "log", "tts_event"]:
-        if bot and getattr(bot, "pi_clients", None):
+    if os.environ.get("RUN_MODE") == "cloud":
+        allowed_pi_types = [
+            "play_tts", "log", "tts_event", "POKEMON_EVENT", 
+            "goal_start", "goal_update", "goal_achieved", "goal_ended", 
+            "giveaway_update", "meme_redeem", "meme_expired"
+        ]
+        should_broadcast = data.get("type") in allowed_pi_types or data.get("event") == "AGENT_ACTION"
+        if should_broadcast and bot and getattr(bot, "pi_clients", None):
             asyncio.create_task(bot.pi_clients.broadcast(data))
     
     to_remove = []

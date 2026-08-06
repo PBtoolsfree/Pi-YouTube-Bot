@@ -31,7 +31,11 @@ class PokemonService:
         self.load_data()
         
         # Start background task to spawn pokemons periodically
-        self.spawn_task = asyncio.create_task(self._spawn_loop())
+        self.spawn_task = None
+        
+    def start(self):
+        if not self.spawn_task:
+            self.spawn_task = asyncio.create_task(self._spawn_loop())
         
     def load_data(self):
         try:
