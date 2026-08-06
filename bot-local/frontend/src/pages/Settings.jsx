@@ -761,42 +761,7 @@ export default function SettingsPage({ config, onSave }) {
                             </Card>
                         )}
 
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Discord Integration</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Bot Token</label>
-                                        <Input
-                                            type="password"
-                                            value={localConfig.discord_integration?.bot_token || ''}
-                                            onChange={(e) => updateNested('discord_integration.bot_token', e.target.value)}
-                                            className="bg-zinc-950 border-zinc-700 h-9"
-                                            placeholder="MTExMjIzMzM0NDQ1NTU..."
-                                        />
-                                        <p className="text-[10px] text-zinc-500">
-                                            Your Discord application bot token. Ensure your bot is added to your target servers.
-                                        </p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Channel IDs (Comma-Separated)</label>
-                                        <Input
-                                            value={localConfig.discord_integration?.channel_ids ?? localConfig.discord_integration?.channel_id ?? ''}
-                                            onChange={(e) => {
-                                                updateNested('discord_integration.channel_ids', e.target.value);
-                                            }}
-                                            className="bg-zinc-950 border-zinc-700 h-9"
-                                            placeholder="1507640240393683045, 987654321098765"
-                                        />
-                                        <p className="text-[10px] text-zinc-500">
-                                            Target text channel IDs where the Discord Bot has permissions to post.
-                                        </p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+
 
                         {!localConfig?.is_cloud && (
                             <>
