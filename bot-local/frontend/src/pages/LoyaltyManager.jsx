@@ -562,6 +562,24 @@ export default function LoyaltyManagerPage() {
                                             <p className="text-[11px] text-zinc-400">Fight the live Boss using your points! Top 3 dealers share a massive pool.</p>
                                         </div>
                                     </div>
+                                    {/* Pokemon Safari */}
+                                    <div className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 to-black p-[1px] rounded-xl transition-all duration-300 hover:shadow-[0_0_15px_-3px_rgba(244,63,94,0.2)]">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
+                                            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!catch</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!battle [@user] &lt;amt&gt;</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!accept</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!showpokemon &lt;name&gt;</div>
+                                            </div>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Catch wild Pokémon and use them to duel others!</p>
+                                            <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
+                                                <li>When a Pokémon appears, type <code>!catch</code> to capture it.</li>
+                                                <li>Type <code>!battle &lt;amount&gt;</code> to challenge randomly, or tag someone.</li>
+                                                <li>Type <code>!showpokemon &lt;name&gt;</code> to flex your Pokemon on stream!</li>
+                                            </ul>
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

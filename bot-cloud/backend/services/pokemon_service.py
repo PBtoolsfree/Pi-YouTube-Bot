@@ -163,7 +163,29 @@ class PokemonService:
                 
         return next((p for p in POKEMON_LIST if p["name"].lower() == poke_name.lower()), None)
 
+    async def handle_show_pokemon(self, user, pokemon_name):
+        pokemon = self.get_user_pokemon(user, pokemon_name)
+        if not pokemon:
+            return f"@{user}, you don't own a Pokemon named {pokemon_name}!"
+            
+        if self.bot.broadcast_func:
+            await self.bot.broadcast_func({
+                "type": "POKEMON_EVENT",
+                "action": "show",
+                "user": user,
+                "pokemon": pokemon
+            })
+        return f"✨ @{user} is showing off their {pokemon['name']} on stream!"
+
     async def handle_battle_challenge(self, challenger, target, bet_amount, pokemon_name=None):
+        if target == "random":
+            valid_targets = [u for u, data in self.users_data.items() if u != challenger and (data.get("pokemons") or data.get("pokemon"))]
+            if not valid_targets:
+                return f"@{challenger}, nobody else has a Pokemon to battle right now!"
+            active_chatters = getattr(self.bot, "session_chatters", {})
+            active_valid = [u for u in valid_targets if u in active_chatters]
+            target = random.choice(active_valid) if active_valid else random.choice(valid_targets)
+            
         target = target.replace("@", "").strip()
         
         if challenger == target:

@@ -58,7 +58,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
-        "catch", "battle", "accept", "pokemon", "pokemons"
+        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -1747,17 +1747,37 @@ class BotService:
         elif cmd == "!battle":
             if not getattr(self, "pokemon", None):
                 return
-            if len(args) < 2:
-                await self._send_chat(f"@{author} Usage: !battle @user <bet_amount> <pokemon_name>")
-                return
-            target = args[0]
-            try:
-                bet = int(args[1])
-                poke_name = " ".join(args[2:]) if len(args) > 2 else None
-                result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                await self._send_chat(result)
-            except ValueError:
-                await self._send_chat(f"@{author} Invalid bet amount.")
+            if len(args) == 2 and args[0].isdigit():
+                # Omitted target: !battle <bet> <pokemon>
+                target = "random"
+                try:
+                    bet = int(args[0])
+                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
+                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
+                    await self._send_chat(result)
+                except ValueError:
+                    await self._send_chat(f"@{author} Invalid bet amount.")
+            elif len(args) > 2 and args[0].isdigit():
+                target = "random"
+                try:
+                    bet = int(args[0])
+                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
+                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
+                    await self._send_chat(result)
+                except ValueError:
+                    await self._send_chat(f"@{author} Invalid bet amount.")
+            elif len(args) >= 2:
+                # Specified target: !battle @user <bet> <pokemon>
+                target = args[0]
+                try:
+                    bet = int(args[1])
+                    poke_name = " ".join(args[2:]) if len(args) > 2 else None
+                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
+                    await self._send_chat(result)
+                except ValueError:
+                    await self._send_chat(f"@{author} Invalid bet amount.")
+            else:
+                await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> <pokemon_name>")
                 
         elif cmd == "!accept":
             if not getattr(self, "pokemon", None):
@@ -1771,6 +1791,17 @@ class BotService:
                 return
             result = await self.pokemon.handle_check_pokemon(author)
             await self._send_chat(result)
+
+        elif cmd == "!showpokemon":
+            if not getattr(self, "pokemon", None):
+                return
+            if not args:
+                await self._send_chat(f"@{author} Usage: !showpokemon <pokemon_name>")
+                return
+            poke_name = " ".join(args)
+            result = await self.pokemon.handle_show_pokemon(author, poke_name)
+            if result:
+                await self._send_chat(result)
 
         elif cmd == "!rob":
             if not args:

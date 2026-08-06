@@ -63,6 +63,21 @@ export default function PokemonOverlay() {
                             setBattleData(null)
                         }, 10000)
                     }
+                    else if (action === 'show') {
+                        setSpawnedPokemon({
+                            name: socketData.pokemon.name,
+                            sprite: socketData.pokemon.sprite,
+                            isShow: true,
+                            user: socketData.user
+                        })
+                        setCatchEvent(null)
+                        setBattleData(null)
+                        
+                        // Hide show graphic after 8 seconds
+                        setTimeout(() => {
+                            setSpawnedPokemon(null)
+                        }, 8000)
+                    }
                 } catch (e) {
                     console.error("WebSocket message parse error", e)
                 }
@@ -88,25 +103,27 @@ export default function PokemonOverlay() {
         <div className="w-screen h-screen overflow-hidden bg-transparent pointer-events-none relative flex flex-col items-center justify-end pb-20 font-sans">
             
             <AnimatePresence>
-                {/* 1. Wild Pokemon Spawn */}
+                {/* 1. Wild Pokemon Spawn & Show */}
                 {spawnedPokemon && !catchEvent && !battleData && (
                     <motion.div
                         initial={{ y: 200, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ scale: 0, opacity: 0 }}
-                        className="bg-zinc-900/90 border-2 border-emerald-500 rounded-3xl p-6 flex flex-col items-center shadow-[0_0_50px_rgba(16,185,129,0.3)] backdrop-blur-md"
+                        className={`border-2 rounded-3xl p-6 flex flex-col items-center backdrop-blur-md ${spawnedPokemon.isShow ? 'bg-zinc-900/95 border-fuchsia-500 shadow-[0_0_50px_rgba(217,70,239,0.4)]' : 'bg-zinc-900/90 border-emerald-500 shadow-[0_0_50px_rgba(16,185,129,0.3)]'}`}
                     >
-                        <h2 className="text-emerald-400 font-black text-2xl uppercase tracking-widest mb-2 animate-pulse">
-                            Wild {spawnedPokemon.name} appeared!
+                        <h2 className={`font-black text-2xl uppercase tracking-widest mb-2 animate-pulse ${spawnedPokemon.isShow ? 'text-fuchsia-400' : 'text-emerald-400'}`}>
+                            {spawnedPokemon.isShow ? `@${spawnedPokemon.user} is showing off their ${spawnedPokemon.name}!` : `Wild ${spawnedPokemon.name} appeared!`}
                         </h2>
                         <img 
                             src={spawnedPokemon.sprite} 
                             alt={spawnedPokemon.name} 
                             className="w-48 h-48 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" 
                         />
-                        <p className="text-zinc-300 font-bold text-lg mt-4 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800">
-                            Type <span className="text-emerald-400">!catch</span> to capture
-                        </p>
+                        {!spawnedPokemon.isShow && (
+                            <p className="text-zinc-300 font-bold text-lg mt-4 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800">
+                                Type <span className="text-emerald-400">!catch</span> to capture
+                            </p>
+                        )}
                     </motion.div>
                 )}
 
