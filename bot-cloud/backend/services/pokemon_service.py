@@ -125,7 +125,7 @@ class PokemonService:
             await asyncio.sleep(10) # check every 10 seconds
             
             config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
-            pokemon_config = config.get("games", {}).get("pokemon", {})
+            pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
             
             if not pokemon_config.get("game_enabled", False):
                 target_time = 0 # reset target time when disabled
