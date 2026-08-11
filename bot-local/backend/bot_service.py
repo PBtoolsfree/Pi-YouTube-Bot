@@ -1314,7 +1314,8 @@ class BotService:
             self.session_stats["total_commands"] = int(self.session_stats.get("total_commands", 0)) + 1
 
         now = time.time()
-        is_muted = self.moderation.is_user_muted(author)
+        is_muted = self.moderation.is_user_muted(author) if hasattr(self, "moderation") else False
+
 
         config = self.load_config()
         mod_cfg = config.get("moderation", {})
@@ -1337,7 +1338,7 @@ class BotService:
             return None
         
         # 2. Moderation Filters
-        if mod_cfg.get("enabled", True):
+        if hasattr(self, "moderation") and mod_cfg.get("enabled", True):
             if author not in self.mod_locks:
                 self.mod_locks[author] = asyncio.Lock()
                 # Cap mod_locks dict at 500 entries to prevent memory leak safely
