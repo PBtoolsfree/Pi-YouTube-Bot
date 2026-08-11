@@ -1556,8 +1556,7 @@ class BotService:
         await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id}, is_forwarded=is_forwarded)
         
         if self.audio and not message.strip().startswith(("!", "/")):
-            if not is_forwarded:
-                await self.audio.speak(f"{author} says: {message}", "secret")
+            await self.audio.speak(f"{author} says: {message}", "secret")
 
         if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
             if not is_forwarded:

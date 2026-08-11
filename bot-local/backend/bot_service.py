@@ -1408,10 +1408,13 @@ class BotService:
 
         await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
         
-        if self.audio and not message.strip().startswith(("!", "/")):
-            await self.audio.speak(f"{author} says: {message}", "secret")
+        is_cloud_connected = self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud"
 
-        if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
+        if self.audio and not message.strip().startswith(("!", "/")):
+            if not is_cloud_connected:
+                await self.audio.speak(f"{author} says: {message}", "secret")
+
+        if is_cloud_connected:
             if not is_forwarded:
                 self._spawn_task(self.cloud_alert_client.send_event({
                     "type": "sync_chat_message",
