@@ -992,12 +992,33 @@ class BotService:
                 # ... existing message handling ...
                 msg_data = data.get("data", {})
                 
-                author = msg_data.get("user", {}).get("name") or msg_data.get("userName") or msg_data.get("user")
-                message = msg_data.get("message") or msg_data.get("msg") or msg_data.get("text")
-                msg_id = msg_data.get("msgId") or msg_data.get("eventId")
+                # In newer Streamer.bot versions, the message details are nested inside data["message"]
+                inner_msg = msg_data.get("message", {}) if isinstance(msg_data.get("message"), dict) else {}
+                
+                author = (
+                    inner_msg.get("user", {}).get("name") or
+                    msg_data.get("user", {}).get("name") or 
+                    msg_data.get("userName") or 
+                    msg_data.get("user")
+                )
+                
+                message = (
+                    inner_msg.get("message") or
+                    (msg_data.get("message") if isinstance(msg_data.get("message"), str) else None) or 
+                    msg_data.get("msg") or 
+                    msg_data.get("text")
+                )
+                
+                msg_id = (
+                    inner_msg.get("eventId") or
+                    inner_msg.get("internalId") or
+                    msg_data.get("msgId") or 
+                    msg_data.get("eventId")
+                )
                 
                 # ENHANCED ID EXTRACTION: Try all known fields for YouTube Channel ID
                 user_id = (
+                    inner_msg.get("user", {}).get("id") or
                     msg_data.get("user", {}).get("id") or 
                     msg_data.get("userId") or 
                     msg_data.get("channelId") or
