@@ -52,8 +52,8 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
-        "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
-        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon"
+        "attack", "top", "leaderboard", "shop", "game",
+        "dice", "roll", "tts"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -84,20 +84,6 @@ class BotService:
         # Sub-Services
         self.viewers = ViewerService()
         self.viewers.bot = self
-        self.moderation = ModerationService(sb_ws_getter=lambda: self.sb_ws, config_loader=self.load_config)
-        self.gambling = GambleService(self.audio)
-        self.gambling.bot = self
-        self.boss_fight = BossFightService()
-        self.boss_fight.bot = self
-
-        from backend.services.pokemon_service import PokemonService
-        self.pokemon = PokemonService(self)
-
-        # Meme Redeem Service
-        self.redeem_svc = RedeemService()
-        
-        # Native API Services
-        self.youtube_api = YouTubeService(config_loader=self.load_config)
         
         # Tunnel Service (Native)
         if tunnel_available:
@@ -105,22 +91,11 @@ class BotService:
         else:
             self.tunnel = None
 
-        # Email Verification Service
-        if email_available:
-            self.email = EmailService(self.load_config)
-            self.email_status = "Unknown" # Connected | Disconnected | Error
-        else:
-            self.email = None
-            self.email_status = "Disabled (Service not installed)"
-
         # Cloud Alert Client Service (outbound connection for Pi to receive cloud alerts)
         if cloud_alert_available:
             self.cloud_alert_client = CloudAlertClientService(self)
         else:
             self.cloud_alert_client = None
-        
-        # Google Sheets Service
-        self.sheets = GoogleSheetsService(self.load_config)
 
         # Global Locks (moved from service to orchestrator if shared, but mod is per author)
         self.mod_locks = {} # {username: Lock}
@@ -297,18 +272,8 @@ class BotService:
 
         # Start ViewerService background tasks (auto-save loop)
         await self.viewers.start()
-        
-        # Start PokemonService task
-        if hasattr(self, "pokemon") and self.pokemon:
-            self.pokemon.start()
             
         logger.info("Bot Service Started")
-        # Auto-Connect Sheets (blocking start to ensure data safety)
-        try:
-             logger.info("Auto-connecting to Google Sheets...")
-             await self.sheets.connect()
-        except Exception as e:
-             logger.error(f"Sheet Auto-Connect Failed: {e}")
 
         if os.environ.get("RUN_MODE") == "cloud":
             logger.info("Running in Cloud Mode. Starting Heavy Lifting Services (AI, YouTube, Goals).")
@@ -330,7 +295,6 @@ class BotService:
             self._spawn_task(self.tunnel.start())
         if self.cloud_alert_client:
             await self.cloud_alert_client.start()
-        self._spawn_managed_loop("email_monitor", self._email_monitor_loop)
 
     async def _auto_message_loop(self):
         """Sends scheduled auto-messages at configured intervals."""
@@ -1528,71 +1492,6 @@ class BotService:
             except ValueError:
                 await self._send_chat(f"@{author} Please enter a valid number for amount.")
 
-        elif cmd == "!catch":
-            if not getattr(self, "pokemon", None):
-                return
-            result = await self.pokemon.handle_catch(author)
-            await self._send_chat(result)
-            
-        elif cmd == "!battle":
-            if not getattr(self, "pokemon", None):
-                return
-            if len(args) == 2 and args[0].isdigit():
-                # Omitted target: !battle <bet> <pokemon>
-                target = "random"
-                try:
-                    bet = int(args[0])
-                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
-            elif len(args) > 2 and args[0].isdigit():
-                target = "random"
-                try:
-                    bet = int(args[0])
-                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
-            elif len(args) >= 2:
-                # Specified target: !battle @user <bet> <pokemon>
-                target = args[0]
-                try:
-                    bet = int(args[1])
-                    poke_name = " ".join(args[2:]) if len(args) > 2 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
-            else:
-                await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> <pokemon_name>")
-                
-        elif cmd == "!accept":
-            if not getattr(self, "pokemon", None):
-                return
-            poke_name = " ".join(args) if args else None
-            result = await self.pokemon.handle_accept(author, poke_name)
-            await self._send_chat(result)
-
-        elif cmd in ["!pokemon", "!pokemons"]:
-            if not getattr(self, "pokemon", None):
-                return
-            result = await self.pokemon.handle_check_pokemon(author)
-            await self._send_chat(result)
-
-        elif cmd == "!showpokemon":
-            if not getattr(self, "pokemon", None):
-                return
-            if not args:
-                await self._send_chat(f"@{author} Usage: !showpokemon <pokemon_name>")
-                return
-            poke_name = " ".join(args)
-            result = await self.pokemon.handle_show_pokemon(author, poke_name)
-            if result:
-                await self._send_chat(result)
-
         elif cmd == "!rob":
             if not args:
                 await self._send_chat(f"@{author} Usage: !rob <username>")
@@ -2268,8 +2167,7 @@ class BotService:
                 return "This giveaway is for Members Only."
                 
             # 2. Check if already entered
-            from backend.services.giveaway_service import GiveawayService
-            status = GiveawayService.add_participant(author)
+            status = {"ok": False, "error": "Giveaways are handled by the cloud bot."}
             if not status['ok']:
                 return status['error']
             

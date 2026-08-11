@@ -58,7 +58,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
-        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon"
+        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon", "show"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -372,9 +372,10 @@ class BotService:
         # Start ViewerService background tasks (auto-save loop)
         await self.viewers.start()
         
-        # Start PokemonService task
-        if hasattr(self, "pokemon") and self.pokemon:
-            self.pokemon.start()
+        # Start PokemonService task (ONLY in cloud)
+        if os.environ.get("RUN_MODE") == "cloud":
+            if hasattr(self, "pokemon") and self.pokemon:
+                self.pokemon.start()
             
         logger.info("Bot Service Started")
         # Auto-Connect Sheets (blocking start to ensure data safety)
@@ -1796,12 +1797,26 @@ class BotService:
             if not getattr(self, "pokemon", None):
                 return
             if not args:
-                await self._send_chat(f"@{author} Usage: !showpokemon <pokemon_name>")
-                return
-            poke_name = " ".join(args)
-            result = await self.pokemon.handle_show_pokemon(author, poke_name)
-            if result:
+                result = await self.pokemon.handle_check_pokemon(author)
                 await self._send_chat(result)
+            else:
+                poke_name = " ".join(args)
+                result = await self.pokemon.handle_show_pokemon(author, poke_name)
+                if result:
+                    await self._send_chat(result)
+                    
+        elif cmd == "!show":
+            if args and args[0].lower() == "pokemon":
+                if not getattr(self, "pokemon", None):
+                    return
+                if len(args) == 1:
+                    result = await self.pokemon.handle_check_pokemon(author)
+                    await self._send_chat(result)
+                else:
+                    poke_name = " ".join(args[1:])
+                    result = await self.pokemon.handle_show_pokemon(author, poke_name)
+                    if result:
+                        await self._send_chat(result)
 
         elif cmd == "!rob":
             if not args:

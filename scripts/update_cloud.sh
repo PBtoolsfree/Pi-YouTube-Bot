@@ -12,8 +12,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo "1. Pulling latest code from GitHub..."
-git pull origin master || git pull || true
-
+git fetch origin master
+git reset --hard origin/master
+git clean -fd
 echo "2. Installing Python dependencies..."
 cd bot-cloud
 if [ -d ".venv" ]; then

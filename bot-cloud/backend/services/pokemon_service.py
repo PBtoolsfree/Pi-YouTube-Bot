@@ -5,19 +5,42 @@ import json
 import time
 import asyncio
 
-# A small list of starter pokemons. We can expand this later.
-POKEMON_LIST = [
-    {"name": "Pikachu", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/25.gif", "power": 10},
-    {"name": "Charizard", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/6.gif", "power": 15},
-    {"name": "Mewtwo", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/150.gif", "power": 20},
-    {"name": "Gengar", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/94.gif", "power": 14},
-    {"name": "Lucario", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/448.gif", "power": 13},
-    {"name": "Bulbasaur", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/1.gif", "power": 8},
-    {"name": "Squirtle", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/7.gif", "power": 8},
-    {"name": "Snorlax", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/143.gif", "power": 12},
-    {"name": "Dragonite", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/149.gif", "power": 16},
-    {"name": "Eevee", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/133.gif", "power": 7},
-]
+# We will load the list of pokemons dynamically from a JSON file.
+POKEMON_LIST_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pokemon_list.json")
+POKEMON_LIST = []
+
+def load_pokemon_list():
+    global POKEMON_LIST
+    if os.path.exists(POKEMON_LIST_FILE):
+        try:
+            with open(POKEMON_LIST_FILE, "r") as f:
+                POKEMON_LIST = json.load(f)
+        except Exception as e:
+            logging.error(f"Failed to load pokemon list JSON: {e}")
+            
+    if not POKEMON_LIST:
+        # Default starter pokemons
+        POKEMON_LIST = [
+            {"name": "Pikachu", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/25.gif", "power": 10},
+            {"name": "Charizard", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/6.gif", "power": 15},
+            {"name": "Mewtwo", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/150.gif", "power": 20},
+            {"name": "Gengar", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/94.gif", "power": 14},
+            {"name": "Lucario", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/448.gif", "power": 13},
+            {"name": "Bulbasaur", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/1.gif", "power": 8},
+            {"name": "Squirtle", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/7.gif", "power": 8},
+            {"name": "Snorlax", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/143.gif", "power": 12},
+            {"name": "Dragonite", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/149.gif", "power": 16},
+            {"name": "Eevee", "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/133.gif", "power": 7},
+        ]
+        # Save default list to JSON for user to edit later
+        os.makedirs(os.path.dirname(POKEMON_LIST_FILE), exist_ok=True)
+        try:
+            with open(POKEMON_LIST_FILE, "w") as f:
+                json.dump(POKEMON_LIST, f, indent=4)
+        except Exception as e:
+            logging.error(f"Failed to create pokemon list JSON: {e}")
+
+load_pokemon_list()
 
 class PokemonService:
     def __init__(self, bot):
@@ -54,19 +77,35 @@ class PokemonService:
             self.logger.error(f"Failed to save pokemon data: {e}")
 
     async def _spawn_loop(self):
+        target_time = 0
         while True:
+            await asyncio.sleep(10) # check every 10 seconds
+            
             config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
             pokemon_config = config.get("games", {}).get("pokemon", {})
+            
+            if not pokemon_config.get("game_enabled", False):
+                target_time = 0 # reset target time when disabled
+                continue
+                
             interval_min = pokemon_config.get("spawn_interval", 15)
             
             # Convert minutes to seconds and add some variance (+/- 10%)
             base_delay = interval_min * 60
             variance = int(base_delay * 0.1)
-            delay = base_delay + random.randint(-variance, variance)
-            if delay < 60: delay = 60 # minimum 1 minute
             
-            await asyncio.sleep(delay)
-            await self.spawn_wild_pokemon()
+            if target_time == 0:
+                delay = base_delay + random.randint(-variance, variance)
+                if delay < 60: delay = 60
+                target_time = time.time() + delay
+                
+            if time.time() >= target_time:
+                await self.spawn_wild_pokemon()
+                
+                # set next spawn time
+                delay = base_delay + random.randint(-variance, variance)
+                if delay < 60: delay = 60
+                target_time = time.time() + delay
 
     async def spawn_wild_pokemon(self, force=False):
         if self.active_wild_pokemon is not None and not force:

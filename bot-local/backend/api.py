@@ -28,7 +28,6 @@ import httpx
 from .bot_service import BotService
 from .audio_service import AudioService
 from .config_manager import ConfigManager
-from .services.redeem_service import RedeemService
 from fastapi.responses import JSONResponse
 import re
 
