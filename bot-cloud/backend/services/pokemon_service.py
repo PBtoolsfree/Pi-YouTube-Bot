@@ -131,14 +131,17 @@ class PokemonService:
                 target_time = 0 # reset target time when disabled
                 continue
                 
-            interval_min = pokemon_config.get("spawn_interval", 15)
+            try:
+                interval_min = int(pokemon_config.get("spawn_interval", 15))
+            except (ValueError, TypeError):
+                interval_min = 15
             
             # Convert minutes to seconds and add some variance (+/- 10%)
             base_delay = interval_min * 60
             variance = int(base_delay * 0.1)
             
-            if target_time == 0:
-                delay = base_delay + random.randint(-variance, variance)
+            if target_time == 0 or (target_time - time.time()) > (base_delay + variance):
+                delay = base_delay + random.randint(-variance, variance) if variance > 0 else base_delay
                 if delay < 60: delay = 60
                 target_time = time.time() + delay
                 
@@ -146,7 +149,7 @@ class PokemonService:
                 await self.spawn_wild_pokemon()
                 
                 # set next spawn time
-                delay = base_delay + random.randint(-variance, variance)
+                delay = base_delay + random.randint(-variance, variance) if variance > 0 else base_delay
                 if delay < 60: delay = 60
                 target_time = time.time() + delay
 

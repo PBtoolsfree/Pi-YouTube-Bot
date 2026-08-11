@@ -771,7 +771,7 @@ export default function TipPageSettings() {
                                         max="120"
                                         className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-zinc-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-sm"
                                         value={localTipConfig.rotating_widget_interval || 15}
-                                        onChange={(e) => setLocalTipConfig({ ...localTipConfig, rotating_widget_interval: parseInt(e.target.value) || 15 })}
+                                        onChange={(e) => setLocalTipConfig({ ...localTipConfig, rotating_widget_interval: e.target.value === '' ? '' : Number(e.target.value) })}
                                     />
                                 </div>
                             </div>

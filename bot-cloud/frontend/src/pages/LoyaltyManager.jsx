@@ -883,9 +883,9 @@ export default function LoyaltyManagerPage() {
                                         onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, enabled: val } } }))} />
                                 </div>
                                 <ConfigField label="Gamble Base Win (%)" value={loyaltyConfig.games?.gamble?.win_chance ?? 50}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, win_chance: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, gamble: { ...c.games?.gamble, win_chance: v === '' ? '' : Number(v) } } }))} type="number" />
                                 <ConfigField label="Rob Base Win (%)" value={loyaltyConfig.games?.rob?.win_chance ?? 40}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, win_chance: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, rob: { ...c.games?.rob, win_chance: v === '' ? '' : Number(v) } } }))} type="number" />
                             </div>
                         </CardContent>
                     </Card>
@@ -957,15 +957,15 @@ export default function LoyaltyManagerPage() {
                                         onCheckedChange={val => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, cries: val } } }))} />
                                 </div>
                                 <ConfigField label="Catch Success Rate (%)" value={loyaltyConfig.games?.pokemon?.catch_rate ?? 50}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_rate: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_rate: v === '' ? '' : Number(v) } } }))} type="number" />
                                 <ConfigField label="Catch Cost (Points)" value={loyaltyConfig.games?.pokemon?.catch_cost ?? 10}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_cost: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, catch_cost: v === '' ? '' : Number(v) } } }))} type="number" />
                                 <ConfigField label="Duel Entry Cost" value={loyaltyConfig.games?.pokemon?.duel_cost ?? 50}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_cost: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_cost: v === '' ? '' : Number(v) } } }))} type="number" />
                                 <ConfigField label="Duel Win Reward" value={loyaltyConfig.games?.pokemon?.duel_reward ?? 100}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_reward: parseInt(v) || 0 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, duel_reward: v === '' ? '' : Number(v) } } }))} type="number" />
                                 <ConfigField label="Spawn Interval (Minutes)" value={loyaltyConfig.games?.pokemon?.spawn_interval ?? 15}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, spawn_interval: parseInt(v) || 15 } } }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, spawn_interval: v === '' ? '' : Number(v) } } }))} type="number" />
                             </div>
 
                             <div className="pt-4 border-t border-zinc-800 flex justify-between items-center">
@@ -1161,9 +1161,9 @@ export default function LoyaltyManagerPage() {
                         <CardContent className="p-4 space-y-4">
                             <div className="grid md:grid-cols-4 gap-4">
                                 <ConfigField label="Points Per Message" value={loyaltyConfig.points_per_message ?? 10}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_message: parseInt(v) || 0 }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_message: v === '' ? '' : Number(v) }))} type="number" />
                                 <ConfigField label="Daily Return Bonus" value={loyaltyConfig.bonus_daily_return ?? 50}
-                                    onChange={v => setLoyaltyConfig(c => ({ ...c, bonus_daily_return: parseInt(v) || 0 }))} type="number" />
+                                    onChange={v => setLoyaltyConfig(c => ({ ...c, bonus_daily_return: v === '' ? '' : Number(v) }))} type="number" />
                                 <ConfigField label="Streak Multiplier" value={loyaltyConfig.bonus_streak_multiplier ?? 1.5}
                                     onChange={v => setLoyaltyConfig(c => ({ ...c, bonus_streak_multiplier: parseFloat(v) || 1 }))} type="number" step="0.1" />
                             </div>
@@ -1180,15 +1180,15 @@ export default function LoyaltyManagerPage() {
                                     <ConfigField label="Pts per Sticker (₹1)" value={loyaltyConfig.points_per_supersticker_rupee ?? 0}
                                         onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_supersticker_rupee: parseFloat(v) || 0 }))} type="number" step="0.1" />
                                     <ConfigField label="Pts per Member L1" value={loyaltyConfig.points_per_membership_l1 ?? 0}
-                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l1: parseInt(v) || 0 }))} type="number" />
+                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l1: v === '' ? '' : Number(v) }))} type="number" />
                                     <ConfigField label="Pts per Member L2" value={loyaltyConfig.points_per_membership_l2 ?? 0}
-                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l2: parseInt(v) || 0 }))} type="number" />
+                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l2: v === '' ? '' : Number(v) }))} type="number" />
                                     <ConfigField label="Pts per Member L3" value={loyaltyConfig.points_per_membership_l3 ?? 0}
-                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l3: parseInt(v) || 0 }))} type="number" />
+                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l3: v === '' ? '' : Number(v) }))} type="number" />
                                     <ConfigField label="Pts per Member L4" value={loyaltyConfig.points_per_membership_l4 ?? 0}
-                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l4: parseInt(v) || 0 }))} type="number" />
+                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_membership_l4: v === '' ? '' : Number(v) }))} type="number" />
                                     <ConfigField label="Pts per Membership Gift" value={loyaltyConfig.points_per_gifted_membership ?? 0}
-                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_gifted_membership: parseInt(v) || 0 }))} type="number" />
+                                        onChange={v => setLoyaltyConfig(c => ({ ...c, points_per_gifted_membership: v === '' ? '' : Number(v) }))} type="number" />
                                 </div>
                             </div>
                         </CardContent>
