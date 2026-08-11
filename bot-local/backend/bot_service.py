@@ -20,10 +20,6 @@ except ImportError:
     pass
 
 from backend.services.viewer_service import ViewerService
-from backend.services.moderation_service import ModerationService
-from backend.config_manager import ConfigManager
-from backend.services.loyalty_games import GambleService, BossFightService
-from backend.services.sheets_service import GoogleSheetsService
 
 try:
     from backend.services.tunnel_service import TunnelService
@@ -32,19 +28,11 @@ except ImportError:
     tunnel_available = False
 
 try:
-    from backend.services.email_service import EmailService
-    email_available = True
-except ImportError:
-    email_available = False
-
-try:
     from backend.services.cloud_alert_client import CloudAlertClientService
     cloud_alert_available = True
 except ImportError:
     cloud_alert_available = False
 
-from backend.services.redeem_service import RedeemService
-from backend.services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
 

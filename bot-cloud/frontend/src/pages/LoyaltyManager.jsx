@@ -30,6 +30,11 @@ export default function LoyaltyManagerPage() {
     const [gamblingStats, setGamblingStats] = useState(null)
     const [gamblingHistory, setGamblingHistory] = useState([])
 
+    const [pokemons, setPokemons] = useState([])
+    const [pokemonSearch, setPokemonSearch] = useState("")
+    const [showPokemonModal, setShowPokemonModal] = useState(false)
+    const [newPokemon, setNewPokemon] = useState({ name: "", power: 10, sprite: "" })
+
     const wsRef = useRef(null)
 
     const showToast = (msg, type = 'success') => {
@@ -37,9 +42,53 @@ export default function LoyaltyManagerPage() {
         setTimeout(() => setToast(null), 3000)
     }
 
+    const fetchPokemons = async () => {
+        try {
+            const res = await axios.get('/api/loyalty/pokemons')
+            setPokemons(res.data)
+        } catch (e) {
+            console.error("Pokemon fetch error", e)
+        }
+    }
+
+    const handleAddPokemon = async () => {
+        if (!newPokemon.name || !newPokemon.sprite) {
+            showToast("Name and Sprite URL are required", 'error')
+            return
+        }
+        try {
+            const res = await axios.post('/api/loyalty/pokemons', newPokemon)
+            if (res.data.success) {
+                showToast(res.data.message)
+                setShowPokemonModal(false)
+                setNewPokemon({ name: "", power: 10, sprite: "" })
+                fetchPokemons()
+            } else {
+                showToast(res.data.message, 'error')
+            }
+        } catch (e) {
+            showToast("Failed to add Pokemon", 'error')
+        }
+    }
+
+    const handleDeletePokemon = async (name) => {
+        if (!confirm(`Delete ${name}?`)) return
+        try {
+            const res = await axios.delete(`/api/loyalty/pokemons/${encodeURIComponent(name)}`)
+            if (res.data.success) {
+                showToast(res.data.message)
+                fetchPokemons()
+            } else {
+                showToast(res.data.message, 'error')
+            }
+        } catch (e) {
+            showToast("Failed to delete Pokemon", 'error')
+        }
+    }
+
     const fetchAll = async () => {
         try {
-            const [vRes, lbRes, stRes, gbRes, slRes] = await Promise.all([
+            const [vRes, lbRes, stRes, gbRes] = await Promise.all([
                 axios.get('/api/viewers'),
                 axios.get('/api/loyalty/leaderboard'),
                 axios.get('/api/loyalty/stats'),
@@ -69,6 +118,7 @@ export default function LoyaltyManagerPage() {
     useEffect(() => {
         fetchAll()
         fetchConfig()
+        fetchPokemons()
         
         // ── WEBSOCKET FOR LIVE UPDATES ──
         const connectWebSocket = () => {
@@ -937,6 +987,83 @@ export default function LoyaltyManagerPage() {
                         </CardContent>
                     </Card>
 
+                    {/* Custom Pokemon Dex UI */}
+                    <Card className="bg-zinc-900 border-zinc-800">
+                        <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <span className="text-emerald-400">📖</span> Custom Pokédex
+                            </CardTitle>
+                            <Button size="sm" onClick={() => setShowPokemonModal(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white h-8 text-xs px-3">
+                                <Plus className="h-4 w-4 mr-1" /> Add Custom Pokémon
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <div className="p-4 border-b border-zinc-800/50 flex gap-4 items-center bg-zinc-900/50">
+                                <div className="relative flex-1 max-w-md">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                                    <Input
+                                        placeholder="Search Pokédex by name..."
+                                        className="pl-9 h-9 bg-zinc-950 border-zinc-800 text-sm focus-visible:ring-emerald-500"
+                                        value={pokemonSearch}
+                                        onChange={e => setPokemonSearch(e.target.value)}
+                                    />
+                                </div>
+                                <div className="text-xs font-medium text-zinc-500 bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800">
+                                    Total: {pokemons.length} Pokémon
+                                </div>
+                            </div>
+                            
+                            <div className="max-h-[400px] overflow-y-auto custom-scrollbar bg-zinc-950/30">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-zinc-400 uppercase bg-zinc-950/80 sticky top-0 z-10 backdrop-blur-sm border-b border-zinc-800">
+                                        <tr>
+                                            <th className="px-6 py-3 font-medium">Sprite</th>
+                                            <th className="px-6 py-3 font-medium">Name</th>
+                                            <th className="px-6 py-3 font-medium text-center">Power</th>
+                                            <th className="px-6 py-3 font-medium text-center">Type</th>
+                                            <th className="px-6 py-3 font-medium text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-800/50">
+                                        {pokemons.filter(p => p.name.toLowerCase().includes(pokemonSearch.toLowerCase())).slice(0, 50).map((p, i) => (
+                                            <tr key={i} className="hover:bg-zinc-800/20 transition-colors group">
+                                                <td className="px-6 py-2">
+                                                    <div className="h-12 w-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center p-1 overflow-hidden relative group-hover:border-emerald-500/30 transition-colors">
+                                                        <img src={p.sprite} alt={p.name} className="max-h-full max-w-full object-contain filter drop-shadow-md" onError={(e) => e.target.style.display = 'none'} />
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 font-medium text-zinc-200">{p.name}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs font-bold text-emerald-400">
+                                                        <Zap className="h-3 w-3" /> {p.power}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {p.is_custom ? (
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">Custom</span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-800/30 border border-zinc-800 px-2 py-0.5 rounded">Default</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {p.is_custom && (
+                                                        <Button variant="ghost" size="icon" onClick={() => handleDeletePokemon(p.name)}
+                                                            className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {pokemons.filter(p => p.name.toLowerCase().includes(pokemonSearch.toLowerCase())).length === 0 && (
+                                    <div className="text-center py-12 text-zinc-500 text-sm">No Pokémon found matching "{pokemonSearch}"</div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Save Button */}
                     <div className="flex justify-end">
                         <Button onClick={saveConfig} disabled={saving}
@@ -1392,6 +1519,70 @@ function LoansTab({ config, setConfig, viewers, saveConfig }) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Custom Pokemon Modal */}
+            {showPokemonModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <Card className="bg-zinc-950 border-zinc-800 w-full max-w-md shadow-2xl relative">
+                        <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-lg" />
+                        <CardHeader className="pb-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle className="text-xl text-zinc-100 flex items-center gap-2">
+                                        <Plus className="h-5 w-5 text-emerald-400" /> Custom Pokémon
+                                    </CardTitle>
+                                    <div className="text-sm text-zinc-400 mt-1">Add a new Pokémon to your Pokédex</div>
+                                </div>
+                                <button onClick={() => setShowPokemonModal(false)} className="text-zinc-500 hover:text-zinc-300">
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-zinc-300">Pokémon Name</label>
+                                <Input 
+                                    placeholder="e.g. Gigachad" 
+                                    value={newPokemon.name}
+                                    onChange={e => setNewPokemon({...newPokemon, name: e.target.value})}
+                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-zinc-300">Base Power (1 - 100)</label>
+                                <Input 
+                                    type="number"
+                                    placeholder="10"
+                                    value={newPokemon.power}
+                                    onChange={e => setNewPokemon({...newPokemon, power: parseInt(e.target.value) || 0})}
+                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-zinc-300">Sprite Image URL</label>
+                                <Input 
+                                    placeholder="https://example.com/image.gif" 
+                                    value={newPokemon.sprite}
+                                    onChange={e => setNewPokemon({...newPokemon, sprite: e.target.value})}
+                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                />
+                                <div className="text-xs text-zinc-500 mt-1">GIFs or PNGs with transparent backgrounds look best.</div>
+                            </div>
+                            
+                            {newPokemon.sprite && (
+                                <div className="mt-4 p-4 rounded-lg bg-zinc-900 border border-zinc-800 flex justify-center items-center h-32 relative overflow-hidden">
+                                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500 via-zinc-900 to-transparent"></div>
+                                    <img src={newPokemon.sprite} className="max-h-24 max-w-full object-contain filter drop-shadow-lg z-10" alt="Preview" onError={(e) => e.target.style.display = 'none'} />
+                                </div>
+                            )}
+
+                            <Button onClick={handleAddPokemon} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white mt-4 h-10">
+                                Save Pokémon
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     )
 }

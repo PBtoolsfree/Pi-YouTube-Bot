@@ -68,6 +68,41 @@ class PokemonService:
                     self.users_data = json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load pokemon data: {e}")
+
+    def get_all_pokemons(self):
+        return POKEMON_LIST
+    
+    def add_custom_pokemon(self, data):
+        new_poke = {
+            "name": data.get("name", "Unknown").strip(),
+            "sprite": data.get("sprite", "").strip(),
+            "power": int(data.get("power", 10)),
+            "is_custom": True
+        }
+        # Prevent duplicates
+        for p in POKEMON_LIST:
+            if p.get("name", "").lower() == new_poke["name"].lower():
+                return False, "A Pokémon with this name already exists!"
+                
+        POKEMON_LIST.append(new_poke)
+        self._save_pokemon_list()
+        return True, "Pokémon added successfully!"
+        
+    def delete_custom_pokemon(self, name):
+        global POKEMON_LIST
+        initial_len = len(POKEMON_LIST)
+        POKEMON_LIST = [p for p in POKEMON_LIST if p.get("name", "").lower() != name.lower()]
+        if len(POKEMON_LIST) < initial_len:
+            self._save_pokemon_list()
+            return True, "Pokémon deleted successfully!"
+        return False, "Pokémon not found!"
+        
+    def _save_pokemon_list(self):
+        try:
+            with open(POKEMON_LIST_FILE, "w") as f:
+                json.dump(POKEMON_LIST, f, indent=4)
+        except Exception as e:
+            self.logger.error(f"Failed to save pokemon list: {e}")
             
     def save_data(self):
         try:

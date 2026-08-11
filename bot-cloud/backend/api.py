@@ -823,6 +823,26 @@ async def spawn_pokemon():
     await bot.pokemon.spawn_wild_pokemon(force=True)
     return {"success": True, "message": "Wild Pokemon spawned!"}
 
+@app.get("/api/loyalty/pokemons")
+async def get_pokemons():
+    if not hasattr(bot, "pokemon"):
+        return {"success": False, "message": "Pokemon service not initialized"}
+    return bot.pokemon.get_all_pokemons()
+
+@app.post("/api/loyalty/pokemons")
+async def add_pokemon(data: dict = Body(...)):
+    if not hasattr(bot, "pokemon"):
+        return {"success": False, "message": "Pokemon service not initialized"}
+    success, msg = bot.pokemon.add_custom_pokemon(data)
+    return {"success": success, "message": msg}
+
+@app.delete("/api/loyalty/pokemons/{name}")
+async def delete_pokemon(name: str):
+    if not hasattr(bot, "pokemon"):
+        return {"success": False, "message": "Pokemon service not initialized"}
+    success, msg = bot.pokemon.delete_custom_pokemon(name)
+    return {"success": success, "message": msg}
+
 # --- MEME REDEEMS CRUD ---
 
 # --- GOALS CRUD ---
