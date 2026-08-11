@@ -1046,12 +1046,21 @@ export default function LoyaltyManagerPage() {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    {p.is_custom && (
-                                                        <Button variant="ghost" size="icon" onClick={() => handleDeletePokemon(p.name)}
-                                                            className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10">
-                                                            <Trash2 className="h-4 w-4" />
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button variant="ghost" size="icon" onClick={() => {
+                                                            setNewPokemon({ name: p.name, power: p.power, sprite: p.sprite })
+                                                            setShowPokemonModal(true)
+                                                        }}
+                                                            className="h-8 w-8 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10">
+                                                            <Edit2 className="h-4 w-4" />
                                                         </Button>
-                                                    )}
+                                                        {p.is_custom && (
+                                                            <Button variant="ghost" size="icon" onClick={() => handleDeletePokemon(p.name)}
+                                                                className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1072,6 +1081,70 @@ export default function LoyaltyManagerPage() {
                             {saving ? 'Saving...' : 'Save Configuration'}
                         </Button>
                     </div>
+
+                    {/* Custom Pokemon Modal */}
+                    {showPokemonModal && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <Card className="bg-zinc-950 border-zinc-800 w-full max-w-md shadow-2xl relative">
+                                <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-lg" />
+                                <CardHeader className="pb-4">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <CardTitle className="text-xl text-zinc-100 flex items-center gap-2">
+                                                <Plus className="h-5 w-5 text-emerald-400" /> Add / Edit Pokémon
+                                            </CardTitle>
+                                            <div className="text-sm text-zinc-400 mt-1">Add a new or edit an existing Pokémon</div>
+                                        </div>
+                                        <button onClick={() => setShowPokemonModal(false)} className="text-zinc-500 hover:text-zinc-300">
+                                            <X className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-zinc-300">Pokémon Name</label>
+                                        <Input 
+                                            placeholder="e.g. Gigachad" 
+                                            value={newPokemon.name}
+                                            onChange={e => setNewPokemon({...newPokemon, name: e.target.value})}
+                                            className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-zinc-300">Base Power (1 - 100)</label>
+                                        <Input 
+                                            type="number"
+                                            placeholder="10"
+                                            value={newPokemon.power}
+                                            onChange={e => setNewPokemon({...newPokemon, power: parseInt(e.target.value) || 0})}
+                                            className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-zinc-300">Sprite Image URL</label>
+                                        <Input 
+                                            placeholder="https://example.com/image.gif" 
+                                            value={newPokemon.sprite}
+                                            onChange={e => setNewPokemon({...newPokemon, sprite: e.target.value})}
+                                            className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
+                                        />
+                                        <div className="text-xs text-zinc-500 mt-1">GIFs or PNGs with transparent backgrounds look best.</div>
+                                    </div>
+                                    
+                                    {newPokemon.sprite && (
+                                        <div className="mt-4 p-4 rounded-lg bg-zinc-900 border border-zinc-800 flex justify-center items-center h-32 relative overflow-hidden">
+                                            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500 via-zinc-900 to-transparent"></div>
+                                            <img src={newPokemon.sprite} className="max-h-24 max-w-full object-contain filter drop-shadow-lg z-10" alt="Preview" onError={(e) => e.target.style.display = 'none'} />
+                                        </div>
+                                    )}
+
+                                    <Button onClick={handleAddPokemon} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white mt-4 h-10">
+                                        Save Pokémon
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1520,69 +1593,6 @@ function LoansTab({ config, setConfig, viewers, saveConfig }) {
                 </Card>
             </div>
 
-            {/* Custom Pokemon Modal */}
-            {showPokemonModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <Card className="bg-zinc-950 border-zinc-800 w-full max-w-md shadow-2xl relative">
-                        <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-lg" />
-                        <CardHeader className="pb-4">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <CardTitle className="text-xl text-zinc-100 flex items-center gap-2">
-                                        <Plus className="h-5 w-5 text-emerald-400" /> Custom Pokémon
-                                    </CardTitle>
-                                    <div className="text-sm text-zinc-400 mt-1">Add a new Pokémon to your Pokédex</div>
-                                </div>
-                                <button onClick={() => setShowPokemonModal(false)} className="text-zinc-500 hover:text-zinc-300">
-                                    <X className="h-5 w-5" />
-                                </button>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-zinc-300">Pokémon Name</label>
-                                <Input 
-                                    placeholder="e.g. Gigachad" 
-                                    value={newPokemon.name}
-                                    onChange={e => setNewPokemon({...newPokemon, name: e.target.value})}
-                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-zinc-300">Base Power (1 - 100)</label>
-                                <Input 
-                                    type="number"
-                                    placeholder="10"
-                                    value={newPokemon.power}
-                                    onChange={e => setNewPokemon({...newPokemon, power: parseInt(e.target.value) || 0})}
-                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-zinc-300">Sprite Image URL</label>
-                                <Input 
-                                    placeholder="https://example.com/image.gif" 
-                                    value={newPokemon.sprite}
-                                    onChange={e => setNewPokemon({...newPokemon, sprite: e.target.value})}
-                                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-emerald-500"
-                                />
-                                <div className="text-xs text-zinc-500 mt-1">GIFs or PNGs with transparent backgrounds look best.</div>
-                            </div>
-                            
-                            {newPokemon.sprite && (
-                                <div className="mt-4 p-4 rounded-lg bg-zinc-900 border border-zinc-800 flex justify-center items-center h-32 relative overflow-hidden">
-                                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500 via-zinc-900 to-transparent"></div>
-                                    <img src={newPokemon.sprite} className="max-h-24 max-w-full object-contain filter drop-shadow-lg z-10" alt="Preview" onError={(e) => e.target.style.display = 'none'} />
-                                </div>
-                            )}
-
-                            <Button onClick={handleAddPokemon} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white mt-4 h-10">
-                                Save Pokémon
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
         </div>
     )
 }

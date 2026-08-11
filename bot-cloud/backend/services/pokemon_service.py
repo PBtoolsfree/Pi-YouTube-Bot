@@ -79,14 +79,22 @@ class PokemonService:
             "power": int(data.get("power", 10)),
             "is_custom": True
         }
-        # Prevent duplicates
+        
+        # Check if exists and update it, else append
+        exists = False
         for p in POKEMON_LIST:
             if p.get("name", "").lower() == new_poke["name"].lower():
-                return False, "A Pokémon with this name already exists!"
+                p["sprite"] = new_poke["sprite"]
+                p["power"] = new_poke["power"]
+                p["is_custom"] = True
+                exists = True
+                break
                 
-        POKEMON_LIST.append(new_poke)
+        if not exists:
+            POKEMON_LIST.append(new_poke)
+            
         self._save_pokemon_list()
-        return True, "Pokémon added successfully!"
+        return True, "Pokémon saved successfully!"
         
     def delete_custom_pokemon(self, name):
         global POKEMON_LIST

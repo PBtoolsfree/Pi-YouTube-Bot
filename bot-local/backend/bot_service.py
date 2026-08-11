@@ -1498,15 +1498,7 @@ class BotService:
             await self._send_chat(result["message"])
 
         elif cmd == "!buy":
-            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
-                return
-            if not args:
-                await self._send_chat(f"@{author} Usage: !buy <item_name>. Use !shop to see available rewards.")
-                return
-            
-            # Map !buy to !redeem
-            redeem_name = " ".join(args)
-            await self._handle_redeem_cmd(author, redeem_name, chat_obj)
+            return
 
         elif cmd == "!gamble":
             if not args:
@@ -1599,24 +1591,13 @@ class BotService:
             await self._send_chat(msg)
 
         elif cmd == "!shop":
-            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
-                return
-            await self._handle_memes_cmd(author)
+            return
 
         elif cmd == "!redeem":
-            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
-                return
-            if not args:
-                await self._handle_memes_cmd(author)
-                return
-            
-            redeem_name = " ".join(args)
-            await self._handle_redeem_cmd(author, redeem_name, chat_obj)
+            return
 
         elif cmd == "!memes" or cmd == "!rewards":
-            if getattr(self, "cloud_alert_client", None) and getattr(self.cloud_alert_client, "is_running", False):
-                return
-            await self._handle_memes_cmd(author)
+            return
 
 
 
@@ -1755,55 +1736,10 @@ class BotService:
             await self._send_chat("💨 The Loot Box disappeared because nobody claimed it in time!")
 
     async def _handle_memes_cmd(self, author):
-        available = [r for r in self.redeem_svc.redeems if r.get("enabled")]
-        if not available:
-            await self._send_chat(f"@{author} No rewards available right now!")
-        else:
-            names = [f"{r['name']} ({r['cost']} Points)" for r in available]
-            chunk = []
-            for name in names:
-                if len(", ".join(chunk + [name])) > 150:
-                    await self._send_chat(f"🛒 REWARDS: {', '.join(chunk)}")
-                    chunk = [name]
-                else:
-                    chunk.append(name)
-            if chunk:
-                await self._send_chat(f"🛒 REWARDS: {', '.join(chunk)} — Use !redeem <name>")
+        pass
 
     async def _handle_redeem_cmd(self, author, redeem_name, chat_obj=None):
-        reward = self.redeem_svc.get_by_name(redeem_name)
-        if not reward:
-            await self._send_chat(f"@{author} Unknown reward '{redeem_name}'. Use !shop to see list.")
-            return
-        
-        result = await self.redeem_svc.trigger(
-            reward["id"],
-            author,
-            viewer_service=self.viewers,
-            sb_ws=self.sb_ws,
-            broadcast_func=self.broadcast_func,
-        )
-        if result["ok"]:
-            reward_obj = result.get("reward", reward)
-            reward_type = reward_obj.get("type", "obs")
-            
-            # Execute native rewards
-            if reward_type != "obs":
-                error_msg = await self._apply_api_reward(author, reward_type, reward_obj, chat_obj)
-                if error_msg:
-                    self.viewers.add_points(author, reward_obj["cost"])
-                    self.redeem_svc._cooldowns.pop(reward["id"], None) # Clear cooldown
-                    await self._send_chat(f"@{author} {error_msg} (Refunded {reward_obj['cost']} Points)")
-                    return
-                
-            if "custom_message" in result and result["custom_message"]:
-                await self._send_chat(result["custom_message"])
-            else:
-                await self._send_chat(f"🎉 {author} redeemed {reward_obj['name']}! 🔥")
-                
-            await self._log_ui("REWARD", f"{author} redeemed {reward_obj['name']} for {reward_obj['cost']} Points")
-        else:
-            await self._send_chat(f"@{author} {result['error']}")
+        pass
 
     async def handle_sb_chat(self, user, message, force_ai=False, payload=None):
         channel_id = None
