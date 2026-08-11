@@ -1537,10 +1537,11 @@ class BotService:
                     self.viewers._save_viewers()
                 return 1
 
-        await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
+        await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id}, is_forwarded=is_forwarded)
         
         if self.audio and not message.strip().startswith(("!", "/")):
-            await self.audio.speak(f"{author} says: {message}", "secret")
+            if not is_forwarded:
+                await self.audio.speak(f"{author} says: {message}", "secret")
 
         if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
             if not is_forwarded:
@@ -2707,20 +2708,23 @@ class BotService:
                     "history": history[:200]
                 })
 
-    async def _log_ui(self, type, message, author=None, meta=None):
+    async def _log_ui(self, type, message, author=None, meta=None, is_forwarded=False):
         # Always coerce message to string to prevent frontend crashes
         # (e.g. if an object is accidentally passed instead of a string)
         if not isinstance(message, str):
             message = str(message)
         if callable(self.broadcast_func):
-            await self.broadcast_func({
+            payload = {
                 "type": "log",
                 "timestamp": time.time(),
                 "category": type,
                 "message": message,
                 "author": author,
                 "meta": meta
-            })
+            }
+            if is_forwarded:
+                payload["is_forwarded"] = True
+            await self.broadcast_func(payload)
 
     async def _fire_sb_alert(self, title, message, author, type="General", action_name="Bot Alerts", extra_data=None):
         """Unified Helper to trigger actions in Streamer.bot"""
