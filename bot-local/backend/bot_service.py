@@ -889,11 +889,20 @@ class BotService:
                 # In newer Streamer.bot versions, the message details are nested inside data["message"]
                 inner_msg = msg_data.get("message", {}) if isinstance(msg_data.get("message"), dict) else {}
                 
+                # CRASH-SAFE EXTRACTION
+                raw_user = inner_msg.get("user") or msg_data.get("user")
+                name_from_user = None
+
+                if isinstance(raw_user, dict):
+                    name_from_user = raw_user.get("name") or raw_user.get("displayName")
+                elif isinstance(raw_user, str):
+                    name_from_user = raw_user
+
                 author = (
-                    inner_msg.get("user", {}).get("name") or
-                    msg_data.get("user", {}).get("name") or 
-                    msg_data.get("userName") or 
-                    msg_data.get("user")
+                    name_from_user or
+                    msg_data.get("userName") or
+                    msg_data.get("username") or
+                    "Unknown"
                 )
                 
                 message = (
