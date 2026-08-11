@@ -1926,7 +1926,15 @@ class BotService:
                             if "is not currently live" in err_str:
                                 return {"error": "Channel is not currently live."}
                             if "Sign in to confirm" in err_str:
-                                return {"error": "Bot verification blocked this request. Stream must be live to use API fallback."}
+                                logger.warning("yt-dlp blocked by YouTube. Attempting automatic update...")
+                                update_res = subprocess.run([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"], capture_output=True, text=True, check=False, timeout=45)
+                                if update_res.returncode == 0:
+                                    logger.info("yt-dlp updated successfully. Retrying clip extraction...")
+                                    res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--no-playlist", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False, timeout=20)
+                                    if res.returncode == 0:
+                                        return json.loads(res.stdout)
+                                    err_str = res.stderr.strip()
+                                return {"error": "Bot verification blocked this request. yt-dlp update failed or didn't resolve the issue."}
                             return {"error": err_str or "Unknown error"}
                         except Exception as e:
                             return {"error": str(e)}
@@ -2510,6 +2518,19 @@ class BotService:
                 logger.info("Local Pi reported Streamer.bot is CONNECTED")
             else:
                 logger.warning("Local Pi reported Streamer.bot is DISCONNECTED")
+                
+        elif etype == "stream_disconnected":
+            import time
+            self._last_disconnect = time.time()
+            logger.warning("Stream disconnected! Tracking buffering downtime.")
+            
+        elif etype == "stream_reconnected":
+            import time
+            if hasattr(self, "_last_disconnect") and self._last_disconnect > 0:
+                downtime = time.time() - self._last_disconnect
+                self._total_downtime = getattr(self, "_total_downtime", 0) + downtime
+                self._last_disconnect = 0
+                logger.info(f"Stream reconnected! Added {downtime:.2f}s of buffering. Total downtime: {self._total_downtime:.2f}s")
             
         elif etype == "sb_event":
             sb_data = event.get("data")
@@ -2524,7 +2545,8 @@ class BotService:
             
             import time
             current_time = int(time.time())
-            elapsed_seconds = max(0, current_time - start_timestamp)
+            total_downtime = int(getattr(self, "_total_downtime", 0))
+            elapsed_seconds = max(0, current_time - start_timestamp - total_downtime)
             clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
             
             timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
@@ -2547,6 +2569,8 @@ class BotService:
             # Discord Integration
             config = self.load_config()
             dc_cfg = config.get("discord_integration", {})
+            if not dc_cfg:
+                dc_cfg = config.get("discord", {})
             bot_token = dc_cfg.get("bot_token")
             channel_ids_str = dc_cfg.get("channel_ids") or dc_cfg.get("channel_id")
             

@@ -763,6 +763,7 @@ class BotService:
                                 "type": "streamerbot_status", 
                                 "connected": True
                             }))
+                            asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_reconnected"}))
                             
                         subscribe_msg: Dict[str, Any] = {
                             "request": "Subscribe",
@@ -829,6 +830,7 @@ class BotService:
                              "type": "streamerbot_status", 
                              "connected": False
                          }))
+                         asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_disconnected"}))
 
             except Exception as e:
                 self.sb_ws = None
@@ -845,6 +847,7 @@ class BotService:
                         "type": "streamerbot_status", 
                         "connected": False
                     }))
+                    asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_disconnected"}))
                     
                 await asyncio.sleep(5)
 
