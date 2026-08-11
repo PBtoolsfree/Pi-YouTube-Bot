@@ -63,6 +63,8 @@ class BotService:
         self.dynamic_engagement_task: Optional[asyncio.Task] = None
         self._background_tasks = set()
         
+        self.email_status = "Disabled"
+        
         # Health Tracking for Background Workers
         self.worker_health: Dict[str, Any] = {}
 
