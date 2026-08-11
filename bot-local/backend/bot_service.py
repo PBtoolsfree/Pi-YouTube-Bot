@@ -1248,28 +1248,32 @@ class BotService:
         content_hash = f"{author}:{message}"
         now = time.time()
         
-        if (msg_id and msg_id in self.message_dedup_cache) and not force_ai:
-            logger.info(f"Duplicate Message Ignored (msg_id): {msg_id}")
-            return None
+        if not hasattr(self, "_dedup_lock"):
+            self._dedup_lock = asyncio.Lock()
             
-        if not hasattr(self, "_content_dedup_dict"):
-            self._content_dedup_dict = {}
-            
-        # Clean up cache if it gets too large
-        if len(self._content_dedup_dict) > 500:
-            cutoff = now - 30
-            self._content_dedup_dict = {k: v for k, v in self._content_dedup_dict.items() if v > cutoff}
-            
-        last_seen = self._content_dedup_dict.get(content_hash, 0)
-        # Reduce window to 1.5s to catch dual-pipeline duplicates but allow fast human spam
-        if now - last_seen < 1.5 and not force_ai:
-            logger.info(f"Duplicate Message Ignored (content): {content_hash}")
-            return None
-            
-        self._content_dedup_dict[content_hash] = now
-            
-        if msg_id:
-            self.message_dedup_cache.append(msg_id)
+        async with self._dedup_lock:
+            if (msg_id and msg_id in self.message_dedup_cache) and not force_ai:
+                logger.info(f"Duplicate Message Ignored (msg_id): {msg_id}")
+                return None
+                
+            if not hasattr(self, "_content_dedup_dict"):
+                self._content_dedup_dict = {}
+                
+            # Clean up cache if it gets too large
+            if len(self._content_dedup_dict) > 500:
+                cutoff = now - 30
+                self._content_dedup_dict = {k: v for k, v in self._content_dedup_dict.items() if v > cutoff}
+                
+            last_seen = self._content_dedup_dict.get(content_hash, 0)
+            # Reduce window to 1.5s to catch dual-pipeline duplicates but allow fast human spam
+            if now - last_seen < 1.5 and not force_ai:
+                logger.info(f"Duplicate Message Ignored (content): {content_hash}")
+                return None
+                
+            self._content_dedup_dict[content_hash] = now
+                
+            if msg_id:
+                self.message_dedup_cache.append(msg_id)
 
         # GOALS LOGIC - REWARD WINDOW
         try:
