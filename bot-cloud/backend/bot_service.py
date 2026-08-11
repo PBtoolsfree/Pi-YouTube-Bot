@@ -1020,7 +1020,8 @@ class BotService:
                     inner_msg.get("eventId") or
                     inner_msg.get("internalId") or
                     msg_data.get("msgId") or 
-                    msg_data.get("eventId")
+                    msg_data.get("eventId") or
+                    msg_data.get("id")
                 )
                 
                 # ENHANCED ID EXTRACTION: Try all known fields for YouTube Channel ID
