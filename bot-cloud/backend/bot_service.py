@@ -1529,11 +1529,10 @@ class BotService:
                     self.viewers._save_viewers()
                 return 1
 
-        if not is_forwarded:
-            await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
-            
-            if self.audio and not message.strip().startswith(("!", "/")):
-                await self.audio.speak(f"{author} says: {message}", "secret")
+        await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id})
+        
+        if self.audio and not message.strip().startswith(("!", "/")):
+            await self.audio.speak(f"{author} says: {message}", "secret")
 
         if self.cloud_alert_client and self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud":
             if not is_forwarded:
@@ -1615,7 +1614,7 @@ class BotService:
             cmd_name = parts[0].lower().strip()
             
             # Cloud only commands that should be processed even if forwarded from local Pi
-            cloud_only_commands = {"loan", "payloan", "shop", "redeem", "buy", "memes", "rewards"}
+            cloud_only_commands = {"loan", "payloan", "shop", "redeem", "buy", "memes", "rewards", "clip"}
             
             if is_valid_command(cmd_name, config):
                 if not is_forwarded or cmd_name in cloud_only_commands:

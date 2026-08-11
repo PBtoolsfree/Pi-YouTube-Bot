@@ -868,6 +868,8 @@ class BotService:
         # Log every event we receive from SB so we can diagnose missing chat messages
         if source or etype:
             logger.info(f"[SB Event] Source: {source} | Type: {etype} | Keys: {list(data.keys())}")
+            if etype in ["Message", "YouTubeMessage"]:
+                logger.info(f"[SB Message Raw] {json.dumps(data)}")
         
         is_msg = etype in ["Message", "YouTubeMessage"]
         is_alert = etype in [
