@@ -443,8 +443,8 @@ class AudioService:
         audio_cfg = cfg.get("audio", {})
         return {
             "queues": {
-                "public": list(self.queues["public"]),
-                "secret": list(self.queues["secret"]),
+                "public": [{k: v for k, v in item.items() if k != "gen_task"} for item in self.queues["public"]],
+                "secret": [{k: v for k, v in item.items() if k != "gen_task"} for item in self.queues["secret"]],
             },
             "paused": self.paused,
             "queue_paused": self.queue_paused,

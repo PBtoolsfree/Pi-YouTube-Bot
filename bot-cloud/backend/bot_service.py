@@ -1527,21 +1527,22 @@ class BotService:
                     msg = f"🚫 @{author} You have been timed out for {dur_str} (Broken {max_warnings} rules in {warning_window}s). Reason: {reason}"
                     await self._send_chat(msg)
                     
-                    if os.environ.get("RUN_MODE") == "cloud" and callable(getattr(self, "broadcast_func", None)):
-                        payload = {
-                            "request": "DoAction",
-                            "action": {"name": "PiBot Timeout"},
-                            "args": {
-                                "user": channel_id or author,
-                                "userName": author,
-                                "duration": duration
-                            },
-                            "id": "PiBotTimeout"
-                        }
-                        asyncio.create_task(self.broadcast_func({
-                            "type": "trigger_sb_raw",
-                            "payload": json.dumps(payload)
-                        }))
+                    if os.environ.get("RUN_MODE") == "cloud":
+                        if getattr(self, "pi_clients", None):
+                            payload = {
+                                "request": "DoAction",
+                                "action": {"name": "PiBot Timeout"},
+                                "args": {
+                                    "user": channel_id or author,
+                                    "userName": author,
+                                    "duration": duration
+                                },
+                                "id": "PiBotTimeout"
+                            }
+                            asyncio.create_task(self.pi_clients.broadcast({
+                                "type": "trigger_sb_raw",
+                                "payload": json.dumps(payload)
+                            }))
                     else:
                         await self.moderation.trigger_timeout(author, duration, channel_id=channel_id)
                         
