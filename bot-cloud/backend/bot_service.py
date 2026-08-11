@@ -894,11 +894,9 @@ class BotService:
                             "request": "Subscribe",
                             "id": "PiBotSubs",
                             "events": {
-                                "YouTube": ["Message", "YouTubeMessage", "SuperChat", "SuperSticker", "NewSubscriber", "Member", "GiftSub", "*"],
-                                "youTube": ["*"],
-                                "Youtube": ["*"],
-                                "general": ["Custom", "Alert", "*"],
-                                "Twitch": ["ChatMessage", "RewardRedemption", "*"]
+                                "YouTube": ["YouTubeMessage", "SuperChat", "SuperSticker", "NewSubscriber", "Member", "GiftSub"],
+                                "general": ["Custom", "Alert"],
+                                "Twitch": ["ChatMessage", "RewardRedemption"]
                             }
                         }
                         await ws.send(json.dumps(subscribe_msg))
