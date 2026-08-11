@@ -288,7 +288,6 @@ app.add_middleware(
 # --- SINGLETONS ---
 audio = AudioService()
 bot = BotService(audio=audio)
-redeem_svc = bot.redeem_svc
 active_websockets: List[WebSocket] = []
 active_pi_websockets: List[WebSocket] = []
 

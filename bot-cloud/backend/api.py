@@ -830,7 +830,7 @@ async def get_pokemons():
     return bot.pokemon.get_all_pokemons()
 
 @app.post("/api/loyalty/pokemons")
-async def add_pokemon(data: dict = Body(...)):
+async def add_pokemon(data: dict):
     if not hasattr(bot, "pokemon"):
         return {"success": False, "message": "Pokemon service not initialized"}
     success, msg = bot.pokemon.add_custom_pokemon(data)
