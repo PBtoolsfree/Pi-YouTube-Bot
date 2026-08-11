@@ -20,6 +20,7 @@ except ImportError:
     pass
 
 from backend.services.viewer_service import ViewerService
+from backend.config_manager import ConfigManager
 
 try:
     from backend.services.tunnel_service import TunnelService
