@@ -1638,16 +1638,12 @@ class BotService:
             parts = remaining.split(" ")
             cmd_name = parts[0].lower().strip()
             
-            # Cloud only commands that should be processed even if forwarded from local Pi
-            cloud_only_commands = {"loan", "payloan", "shop", "redeem", "buy", "memes", "rewards", "clip"}
-            
             if is_valid_command(cmd_name, config):
-                if not is_forwarded or cmd_name in cloud_only_commands:
-                    normalized_message = "!" + cmd_name
-                    if len(parts) > 1:
-                        normalized_message += " " + " ".join(parts[1:])
-                    await self._handle_command(author, normalized_message, chat_obj)
-                    is_command_run = True
+                normalized_message = "!" + cmd_name
+                if len(parts) > 1:
+                    normalized_message += " " + " ".join(parts[1:])
+                await self._handle_command(author, normalized_message, chat_obj)
+                is_command_run = True
 
         if is_command_run:
             pass

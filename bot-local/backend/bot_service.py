@@ -1427,6 +1427,7 @@ class BotService:
                     "is_forwarded": True,
                     "force_ai": force_ai
                 }))
+                return None
 
         # Secret Word Check (Dynamic Event)
         if getattr(self, "_secret_word_active", False) and self._secret_word and self._secret_word.lower() in message.lower():
