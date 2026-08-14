@@ -1889,6 +1889,49 @@ class BotService:
 
         elif cmd == "!clip":
             config = self.load_config()
+            
+            # --- START NEW CLIP SETTINGS LOGIC ---
+            clip_settings = config.get("clip_settings", {})
+            is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
+            is_subscriber = getattr(chat_obj.author, 'is_subscriber', False) if chat_obj else False
+            
+            # Determine role and tier settings
+            role_key = "everyone"
+            if is_sponsor:
+                role_key = "member"
+            elif is_subscriber:
+                role_key = "subscriber"
+                
+            tier_config = clip_settings.get(role_key, {})
+            # Defaults
+            is_enabled = tier_config.get("enabled", True)
+            cost = int(tier_config.get("point_cost", 0))
+            daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else (5 if role_key == "subscriber" else 10)))
+            
+            if not is_enabled:
+                await self._send_chat(f"@{author} The clip command is not enabled for your tier.")
+                return
+                
+            # Check Daily Limit
+            import datetime
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            v = self.viewers.viewers.get(author, {})
+            clip_stats = v.get("clip_stats", {"date": today, "count": 0})
+            if clip_stats.get("date") != today:
+                clip_stats = {"date": today, "count": 0}
+                
+            if clip_stats["count"] >= daily_limit:
+                 await self._send_chat(f"@{author} You have reached your daily limit of {daily_limit} clips!")
+                 return
+                 
+            # Check Points
+            if cost > 0:
+                total_pts = self.viewers.get_total_points(author)
+                if total_pts < cost:
+                    await self._send_chat(f"@{author} You need {cost} points to create a clip. You have {total_pts}.")
+                    return
+            # --- END NEW CLIP SETTINGS LOGIC ---
+
             channel_id = config.get("youtube", {}).get("channel_id")
             
             video_id_arg = None
@@ -2000,6 +2043,16 @@ class BotService:
                         "title": metadata.get("title", "Live Stream"),
                         "thumbnail": metadata.get("thumbnail")
                     })
+                    
+                    # Deduct points and increment daily stats
+                    if cost > 0:
+                        self.viewers.deduct_points(author, cost)
+                    
+                    if author not in self.viewers.viewers:
+                        self.viewers.viewers[author] = {"points": 0, "count": 0}
+                    clip_stats["count"] += 1
+                    self.viewers.viewers[author]["clip_stats"] = clip_stats
+                    
                 else:
                     await self._send_chat(f"@{author} Could not get live stream start time. Is the stream live?")
             except Exception as e:
