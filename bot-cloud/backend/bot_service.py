@@ -1915,7 +1915,7 @@ class BotService:
             daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else 10))
             
             if not is_enabled:
-                await self._send_chat(f"@{author} ⚠️ Please Subscribe to use this command! Want to clip even more? Become a Channel Member! 💎")
+                await self._send_chat(f"@{author} ⚠️ Ye command abhi sirf Members ke liye hai! 💎 Become a Channel Member to use !clip!")
                 return
                 
             # Check Daily Limit
