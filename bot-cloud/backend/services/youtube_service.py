@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import json
 import asyncio
 from datetime import datetime, timezone, timedelta
@@ -319,8 +319,10 @@ class YouTubeService:
                 
             snippet = items[0].get("snippet", {})
             return {
+                "id": items[0].get("id"),
                 "title": snippet.get("title", ""),
-                "description": snippet.get("description", "")
+                "description": snippet.get("description", ""),
+                "actualStartTime": snippet.get("actualStartTime")
             }
         except Exception as e:
             logger.error(f"Live Stream Context Error: {e}")
