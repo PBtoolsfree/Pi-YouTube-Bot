@@ -1895,6 +1895,10 @@ class BotService:
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
             is_subscriber = getattr(chat_obj.author, 'is_subscriber', False) if chat_obj else False
             
+            # Grant member status to broadcaster/admins (GOD rank)
+            if self.viewers.viewers.get(author, {}).get("rank") == "GOD":
+                is_sponsor = True
+                
             # Determine role and tier settings
             role_key = "everyone"
             if is_sponsor:
@@ -1909,7 +1913,7 @@ class BotService:
             daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else (5 if role_key == "subscriber" else 10)))
             
             if not is_enabled:
-                await self._send_chat(f"@{author} The clip command is not enabled for your tier.")
+                await self._send_chat(f"@{author} ⚠️ Please Subscribe to use this command! Want to clip even more? Become a Channel Member! 💎")
                 return
                 
             # Check Daily Limit
