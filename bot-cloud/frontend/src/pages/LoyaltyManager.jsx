@@ -218,7 +218,6 @@ export default function LoyaltyManagerPage() {
     }
 
     const handleForgiveLoan = async (name) => {
-        if (!window.confirm(`Are you sure you want to forgive/delete ${name}'s entire loan debt? This cannot be undone.`)) return
         try {
             await axios.delete(`/api/loyalty/borrowers/${encodeURIComponent(name)}`)
             showToast(`${name}'s loan has been forgiven`)
