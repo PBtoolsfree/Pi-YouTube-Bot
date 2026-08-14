@@ -549,6 +549,26 @@ class ViewerService:
         self._notify_viewer_update(author, "pay_loan")
         return {"success": True, "message": f"Successfully paid {int(actual_paid)} points towards your loan.", "actual_paid": int(actual_paid)}
 
+    def forgive_loan(self, author):
+        """Forgive/delete a viewer's loan entirely."""
+        if self._should_bypass_db():
+            self._forward_to_cloud("forgive_loan", author=author)
+            return {"success": True, "message": "Forwarded to cloud."}
+            
+        v = self.get_viewer(author)
+        v["loan_principal"] = 0
+        v["loan_interest"] = 0
+        v["loan_fines"] = 0
+        v["loan_balance"] = 0
+        v["loan_due_date"] = 0
+        v["loan_plan_id"] = None
+        
+        self.mark_dirty()
+        self._save_single_viewer(author, v)
+        self._notify_viewer_update(author, "forgive_loan")
+        return {"success": True, "message": f"Loan forgiven for {author}."}
+
+
     def set_points(self, author, amount):
         """Set a viewer's points to an exact value."""
         if self._should_bypass_db():

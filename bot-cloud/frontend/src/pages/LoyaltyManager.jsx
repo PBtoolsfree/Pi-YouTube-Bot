@@ -217,6 +217,17 @@ export default function LoyaltyManagerPage() {
         }
     }
 
+    const handleForgiveLoan = async (name) => {
+        if (!confirm(`Are you sure you want to forgive/delete ${name}'s entire loan debt? This cannot be undone.`)) return
+        try {
+            await axios.delete(`/api/loyalty/borrowers/${encodeURIComponent(name)}`)
+            showToast(`${name}'s loan has been forgiven`)
+            fetchAll()
+        } catch (e) {
+            showToast(e.response?.data?.detail || 'Failed to forgive loan', 'error')
+        }
+    }
+
     const saveConfig = async () => {
         setSaving(true)
         try {
@@ -1574,6 +1585,7 @@ function LoansTab({ config, setConfig, viewers, saveConfig }) {
                                         <th className="px-4 py-3 text-right">Principal</th>
                                         <th className="px-4 py-3 text-right">Fines+Int</th>
                                         <th className="px-4 py-3 text-right">Total Debt</th>
+                                        <th className="px-4 py-3 text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-800">
@@ -1583,9 +1595,20 @@ function LoansTab({ config, setConfig, viewers, saveConfig }) {
                                             <td className="px-4 py-3 text-right text-zinc-400">{(v.loan_principal || 0).toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right text-rose-400">+{( (v.loan_interest || 0) + (v.loan_fines || 0) ).toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right font-bold text-rose-500">{((v.loan_principal || 0) + (v.loan_interest || 0) + (v.loan_fines || 0)).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    onClick={() => handleForgiveLoan(v.name)}
+                                                    className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                                                    title="Forgive Loan"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </td>
                                         </tr>
                                     ))}
-                                    {borrowers.length === 0 && <tr><td colSpan="4" className="text-center text-zinc-500 py-8 italic">No active loans.</td></tr>}
+                                    {borrowers.length === 0 && <tr><td colSpan="5" className="text-center text-zinc-500 py-8 italic">No active loans.</td></tr>}
                                 </tbody>
                             </table>
                         </div>

@@ -727,6 +727,13 @@ async def delete_viewer(name: str):
         raise HTTPException(404, "Viewer not found")
     return {"status": "deleted"}
 
+@app.delete("/api/loyalty/borrowers/{name}")
+async def forgive_loan(name: str):
+    res = bot.viewers.forgive_loan(name)
+    if not res.get("success"):
+        raise HTTPException(400, res.get("message"))
+    return {"status": "forgiven"}
+
 @app.post("/api/viewers/{name}/reset")
 async def reset_viewer(name: str):
     if not bot.viewers.reset_viewer(name):
