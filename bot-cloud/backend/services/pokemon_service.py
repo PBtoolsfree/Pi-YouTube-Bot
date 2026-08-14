@@ -127,7 +127,7 @@ class PokemonService:
             config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
             pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
             
-            if not pokemon_config.get("game_enabled", False):
+            if not pokemon_config.get("enabled", True):
                 target_time = 0 # reset target time when disabled
                 continue
                 

@@ -2351,16 +2351,13 @@ class BotService:
         if not available:
             await self._send_chat(f"@{author} No rewards available right now!")
         else:
-            names = [f"{r['name']} ({r['cost']} Points)" for r in available]
-            chunk = []
+            names = [f"{i+1}. {r['name']} ({r['cost']} pts)" for i, r in enumerate(available)]
+            await self._send_chat(f"🛒 @{author}, Available Rewards in Shop:")
+            await asyncio.sleep(1.5)
             for name in names:
-                if len(", ".join(chunk + [name])) > 150:
-                    await self._send_chat(f"🛒 REWARDS: {', '.join(chunk)}")
-                    chunk = [name]
-                else:
-                    chunk.append(name)
-            if chunk:
-                await self._send_chat(f"🛒 REWARDS: {', '.join(chunk)} — Use !redeem <name>")
+                await self._send_chat(f"🔸 {name}")
+                await asyncio.sleep(1)
+            await self._send_chat(f"@{author} Use !redeem <name> to buy an item!")
 
     async def _handle_redeem_cmd(self, author, redeem_name, chat_obj=None):
         reward = self.redeem_svc.get_by_name(redeem_name)
