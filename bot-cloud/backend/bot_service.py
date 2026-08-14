@@ -1895,10 +1895,6 @@ class BotService:
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
             is_subscriber = getattr(chat_obj.author, 'is_subscriber', False) if chat_obj else False
             
-            # Grant member status to broadcaster/admins (GOD rank)
-            if self.viewers.viewers.get(author, {}).get("rank") == "GOD":
-                is_sponsor = True
-                
             # Determine role and tier settings
             role_key = "everyone"
             if is_sponsor:
