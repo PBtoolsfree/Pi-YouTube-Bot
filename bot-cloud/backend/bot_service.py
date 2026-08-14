@@ -2624,9 +2624,8 @@ class BotService:
                     ],
                     "footer": {"text": "Pi YouTube Bot - Auto Clipper"}
                 }
-                thumbnail = event.get("thumbnail")
-                if thumbnail:
-                    embed["thumbnail"] = {"url": thumbnail}
+                # Use the large image field for Discord instead of a small thumbnail
+                embed["image"] = {"url": f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"}
                     
                 payload = {"embeds": [embed]}
                 
