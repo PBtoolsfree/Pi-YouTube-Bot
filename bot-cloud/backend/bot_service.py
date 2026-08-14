@@ -1166,6 +1166,14 @@ class BotService:
 
                 # SUBSCRIBER COUNT UPDATE (REAL-TIME INCREMENT)
                 if display_type in ["NewSubscriber", "NewSponsor"]:
+                    # Persist subscriber status in viewers memory
+                    if author:
+                        if author not in self.viewers.viewers:
+                            self.viewers.viewers[author] = {"points": 0, "count": 0}
+                        self.viewers.viewers[author]["is_subscriber"] = True
+                        if display_type == "NewSponsor":
+                            self.viewers.viewers[author]["is_sponsor"] = True
+
                     # Increment immediately
                     self.subscriber_count += 1
                     
@@ -1895,6 +1903,12 @@ class BotService:
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
             is_subscriber = getattr(chat_obj.author, 'is_subscriber', False) if chat_obj else False
             
+            # Fallback to persisted memory if Streamer.bot didn't flag them in this chat message
+            if not is_sponsor and self.viewers.viewers.get(author, {}).get("is_sponsor"):
+                is_sponsor = True
+            if not is_subscriber and self.viewers.viewers.get(author, {}).get("is_subscriber"):
+                is_subscriber = True
+                
             # Determine role and tier settings
             role_key = "everyone"
             if is_sponsor:
