@@ -1166,13 +1166,11 @@ class BotService:
 
                 # SUBSCRIBER COUNT UPDATE (REAL-TIME INCREMENT)
                 if display_type in ["NewSubscriber", "NewSponsor"]:
-                    # Persist subscriber status in viewers memory
-                    if author:
+                    # Persist sponsor status in viewers memory
+                    if author and display_type == "NewSponsor":
                         if author not in self.viewers.viewers:
                             self.viewers.viewers[author] = {"points": 0, "count": 0}
-                        self.viewers.viewers[author]["is_subscriber"] = True
-                        if display_type == "NewSponsor":
-                            self.viewers.viewers[author]["is_sponsor"] = True
+                        self.viewers.viewers[author]["is_sponsor"] = True
 
                     # Increment immediately
                     self.subscriber_count += 1
@@ -1901,26 +1899,20 @@ class BotService:
             # --- START NEW CLIP SETTINGS LOGIC ---
             clip_settings = config.get("clip_settings", {})
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
-            is_subscriber = getattr(chat_obj.author, 'is_subscriber', False) if chat_obj else False
-            
             # Fallback to persisted memory if Streamer.bot didn't flag them in this chat message
             if not is_sponsor and self.viewers.viewers.get(author, {}).get("is_sponsor"):
                 is_sponsor = True
-            if not is_subscriber and self.viewers.viewers.get(author, {}).get("is_subscriber"):
-                is_subscriber = True
                 
             # Determine role and tier settings
             role_key = "everyone"
             if is_sponsor:
                 role_key = "member"
-            elif is_subscriber:
-                role_key = "subscriber"
                 
             tier_config = clip_settings.get(role_key, {})
             # Defaults
             is_enabled = tier_config.get("enabled", True)
             cost = int(tier_config.get("point_cost", 0))
-            daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else (5 if role_key == "subscriber" else 10)))
+            daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else 10))
             
             if not is_enabled:
                 await self._send_chat(f"@{author} ⚠️ Please Subscribe to use this command! Want to clip even more? Become a Channel Member! 💎")

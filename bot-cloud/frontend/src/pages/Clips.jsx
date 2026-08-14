@@ -11,7 +11,6 @@ export default function ClipsPage() {
     
     const [settings, setSettings] = useState({
         everyone: { enabled: true, daily_limit: 3, point_cost: 50 },
-        subscriber: { enabled: true, daily_limit: 5, point_cost: 20 },
         member: { enabled: true, daily_limit: 10, point_cost: 0 }
     })
     const [saving, setSaving] = useState(false)
@@ -210,8 +209,8 @@ export default function ClipsPage() {
                         </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {['everyone', 'subscriber', 'member'].map((tier) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {['everyone', 'member'].map((tier) => (
                             <Card key={tier} className="bg-zinc-900 border-zinc-800">
                                 <CardHeader className="bg-zinc-950/50 border-b border-zinc-800 pb-4">
                                     <div className="flex justify-between items-center">
