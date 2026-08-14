@@ -72,7 +72,7 @@ export default function LoyaltyManagerPage() {
     }
 
     const handleDeletePokemon = async (name) => {
-        if (!confirm(`Delete ${name}?`)) return
+        if (!window.confirm(`Delete ${name}?`)) return
         try {
             const res = await axios.delete(`/api/loyalty/pokemons/${encodeURIComponent(name)}`)
             if (res.data.success) {
@@ -196,7 +196,7 @@ export default function LoyaltyManagerPage() {
     }
 
     const handleDeleteViewer = async (name) => {
-        if (!confirm(`Remove ${name} from the database?`)) return
+        if (!window.confirm(`Remove ${name} from the database?`)) return
         try {
             await axios.delete(`/api/viewers/${encodeURIComponent(name)}`)
             showToast(`${name} removed`)
@@ -207,7 +207,7 @@ export default function LoyaltyManagerPage() {
     }
 
     const handleResetViewer = async (name) => {
-        if (!confirm(`Reset ${name}'s points and streak to 0?`)) return
+        if (!window.confirm(`Reset ${name}'s points and streak to 0?`)) return
         try {
             await axios.post(`/api/viewers/${encodeURIComponent(name)}/reset`)
             showToast(`${name} reset`)
@@ -218,7 +218,7 @@ export default function LoyaltyManagerPage() {
     }
 
     const handleForgiveLoan = async (name) => {
-        if (!confirm(`Are you sure you want to forgive/delete ${name}'s entire loan debt? This cannot be undone.`)) return
+        if (!window.confirm(`Are you sure you want to forgive/delete ${name}'s entire loan debt? This cannot be undone.`)) return
         try {
             await axios.delete(`/api/loyalty/borrowers/${encodeURIComponent(name)}`)
             showToast(`${name}'s loan has been forgiven`)
