@@ -742,7 +742,7 @@ export default function LoyaltyManagerPage() {
 
             {/* ═══════════════ LOANS ═══════════════ */}
             {activeTab === 'loans' && (
-                <LoansTab config={loyaltyConfig} setConfig={setLoyaltyConfig} viewers={viewerList} saveConfig={saveConfig} />
+                <LoansTab config={loyaltyConfig} setConfig={setLoyaltyConfig} viewers={viewerList} saveConfig={saveConfig} handleForgiveLoan={handleForgiveLoan} />
             )}
 
             {/* ═══════════════ MANAGE VIEWERS ═══════════════ */}
@@ -1416,7 +1416,7 @@ function StatBox({ title, value, icon, subtext }) {
     )
 }
 
-function LoansTab({ config, setConfig, viewers, saveConfig }) {
+function LoansTab({ config, setConfig, viewers, saveConfig, handleForgiveLoan }) {
     const plans = config?.loan_plans || []
     const [expandedIdx, setExpandedIdx] = React.useState(null)
 
