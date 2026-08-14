@@ -47,10 +47,13 @@ export default function ClipsPage() {
     const saveSettings = async () => {
         setSaving(true)
         try {
-            await axios.post(`${API_URL}/config`, { clip_settings: settings })
+            const res = await axios.get(`${API_URL}/config`)
+            const currentConfig = res.data
+            currentConfig.clip_settings = settings
+            await axios.post(`${API_URL}/config`, { config: currentConfig })
             alert("Settings saved successfully!")
         } catch (e) {
-            alert("Failed to save settings: " + e.message)
+            alert("Failed to save settings: " + (e.response?.data?.detail || e.message))
         } finally {
             setSaving(false)
         }
