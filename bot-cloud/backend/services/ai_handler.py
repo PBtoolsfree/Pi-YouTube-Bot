@@ -91,7 +91,7 @@ class AIHandler:
             system_prompt = config.get("ai_topology", {}).get("system_prompt", "You are a helpful, hype moderator bot for a YouTube live stream. Your name is Pi Bot.")
             
             msg_lower = prompt.lower()
-            if any(kw in msg_lower for kw in ["point", "rank", "rob", "give", "gamble", "slot", "game", "coin", "score", "level", "bowl", "bat", "cricket", "boss", "attack", "bet", "gambling", "shop", "redeem", "loot", "claim", "secret"]):
+            if any(kw in msg_lower for kw in ["point", "rank", "rob", "give", "gamble", "slot", "game", "coin", "score", "level", "bowl", "bat", "cricket", "boss", "attack", "bet", "gambling", "shop", "redeem", "loot", "claim", "secret", "clip", "catch", "battle", "pokemon"]):
                 loyalty_cfg = config.get("loyalty", {})
                 ranks_list = loyalty_cfg.get("ranks", viewer_service.ranks if hasattr(viewer_service, 'ranks') else [])
                 if ranks_list:
@@ -140,6 +140,20 @@ class AIHandler:
 - Streamer boss spawn karta hai (e.g., Thanos). Sab milke attack karte hain apne points laga ke.
 - Boss ki HP 0 hone pe Top 3 attackers ko reward pool milta hai. Baaki sab ko 50 pts participation reward.
 - Ye streamer-triggered event hai, randomly nahi aata.
+
+**7. !catch** — Pokemon Pakdo!
+- Jab bhi stream par wild Pokemon spawn ho, jaldi se `!catch` type karo!
+- Jo pehle pakdega usko points milenge aur wo Pokemon uski team me add ho jayega! 
+
+**8. !battle <amount>** — Pokemon Battle ⚔️
+- Dusre viewers ke sath Pokemon battle karo! Ex: `!battle 500`
+- Koi bhi aur viewer `!battle` type karke challenge accept kar sakta hai.
+- Jiska Pokemon strong hoga wo jeetega aur points milega!
+
+**9. !clip** — Stream ka Clip Banao! 🎥
+- Agar stream me kuch epic moment hua, to chat me `!clip` type karo!
+- Bot immediately last kuch seconds ka video clip nikal dega jise aap save kar sakte ho.
+- Iska point cost aur daily limit hota hai (Members ke liye jyada limit aur kam cost hoti hai!)
 
 ### 🏦 Bank & Economy Commands:
 - `!loan` — Check available loan plans from the Pi Bank.
