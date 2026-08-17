@@ -317,7 +317,7 @@ function ChromaVideo() {
     }, [])
 
     return (
-        <div className="absolute inset-0 w-[1920px] h-[1080px] pointer-events-none" style={{ zIndex: 110 }}>
+        <div className="absolute inset-0 w-[1920px] h-[1080px] pointer-events-none" style={{ zIndex: 80 }}>
             <canvas ref={canvasRef} width="1920" height="1080" className="w-full h-full" />
             <video ref={videoRef} src="/assets/overlay.mp4" loop muted autoPlay playsInline crossOrigin="anonymous" style={{ display: 'none' }} />
         </div>
