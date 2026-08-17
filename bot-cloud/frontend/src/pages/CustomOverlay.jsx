@@ -58,6 +58,7 @@ export default function CustomOverlay() {
                     transform: `scale(${w.scale || 1})`,
                     transformOrigin: 'top left',
                     opacity: w.opacity ?? 1,
+                    clipPath: `inset(${w.cropTop || 0}px ${w.cropRight || 0}px ${w.cropBottom || 0}px ${w.cropLeft || 0}px)`,
                     border: 'none',
                     backgroundColor: w.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent',
                     backdropFilter: w.hasBackground ? 'blur(10px)' : 'none',

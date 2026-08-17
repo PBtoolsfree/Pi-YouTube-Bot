@@ -362,6 +362,48 @@ export default function OverlayEditor() {
                                         />
                                     </div>
                                     
+                                    <div className="col-span-2 mt-2 pt-2 border-t border-zinc-800">
+                                        <label className="text-[10px] text-zinc-500 uppercase font-bold mb-2 block">Crop (Pixels)</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="text-[9px] text-zinc-600 block mb-1">Top</label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={selectedWidget.cropTop || 0} 
+                                                    onChange={e => updateWidget(selectedWidget.id, { cropTop: parseInt(e.target.value) || 0 })}
+                                                    className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] text-zinc-600 block mb-1">Bottom</label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={selectedWidget.cropBottom || 0} 
+                                                    onChange={e => updateWidget(selectedWidget.id, { cropBottom: parseInt(e.target.value) || 0 })}
+                                                    className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] text-zinc-600 block mb-1">Left</label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={selectedWidget.cropLeft || 0} 
+                                                    onChange={e => updateWidget(selectedWidget.id, { cropLeft: parseInt(e.target.value) || 0 })}
+                                                    className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] text-zinc-600 block mb-1">Right</label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={selectedWidget.cropRight || 0} 
+                                                    onChange={e => updateWidget(selectedWidget.id, { cropRight: parseInt(e.target.value) || 0 })}
+                                                    className="h-8 bg-zinc-900 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     {selectedWidget.type === 'custom_media' && (
                                         <div className="col-span-2 mt-2 p-3 bg-zinc-900 rounded-lg border border-zinc-800">
                                             <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Media URL</label>
@@ -560,26 +602,28 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             onMouseDown={handleDragStart}
             className="group hover:!border-purple-400/50 transition-colors"
         >
-            {/* Custom Media or iFrame */}
-            {widget.type === 'custom_media' ? (
-                widget.url?.match(/\.(mp4|webm)$/i) ? (
-                    <video src={widget.url} autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
-                ) : widget.url?.startsWith('data:image') || widget.url?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
-                    <img src={widget.url} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+            <div style={{ width: '100%', height: '100%', clipPath: `inset(${widget.cropTop || 0}px ${widget.cropRight || 0}px ${widget.cropBottom || 0}px ${widget.cropLeft || 0}px)` }}>
+                {/* Custom Media or iFrame */}
+                {widget.type === 'custom_media' ? (
+                    widget.url?.match(/\.(mp4|webm)$/i) ? (
+                        <video src={widget.url} autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    ) : widget.url?.startsWith('data:image') || widget.url?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
+                        <img src={widget.url} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                    ) : (
+                        <iframe 
+                            src={widget.url || 'about:blank'}
+                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                            title="Preview"
+                        />
+                    )
                 ) : (
                     <iframe 
-                        src={widget.url || 'about:blank'}
+                        src={previewUrl}
                         style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
                         title="Preview"
                     />
-                )
-            ) : (
-                <iframe 
-                    src={previewUrl}
-                    style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-                    title="Preview"
-                />
-            )}
+                )}
+            </div>
             
             {/* Label overlay */}
             {(isSelected || true) && (
