@@ -12,9 +12,18 @@ function safeFixed(value, digits = 1, fallback = "0") {
 }
 
 const LANGUAGES = [
-    { id: 'en-IN', name: 'English (India)', voices: ['en-IN-PrabhatNeural', 'en-IN-NeerjaNeural'] },
-    { id: 'hi-IN', name: 'Hindi', voices: ['hi-IN-SwaraNeural', 'hi-IN-MadhurNeural'] },
-    { id: 'bn-IN', name: 'Bengali', voices: ['bn-IN-BashkarNeural', 'bn-IN-TanishaaNeural'] }
+    { id: 'en-IN', name: 'English (India)', voices: [
+        { id: 'en-IN-PrabhatNeural', label: 'en-IN-PrabhatNeural (Male)' },
+        { id: 'en-IN-NeerjaNeural', label: 'en-IN-NeerjaNeural (Female)' }
+    ] },
+    { id: 'hi-IN', name: 'Hindi', voices: [
+        { id: 'hi-IN-SwaraNeural', label: 'hi-IN-SwaraNeural (Female)' },
+        { id: 'hi-IN-MadhurNeural', label: 'hi-IN-MadhurNeural (Male)' }
+    ] },
+    { id: 'bn-IN', name: 'Bengali', voices: [
+        { id: 'bn-IN-BashkarNeural', label: 'bn-IN-BashkarNeural (Male)' },
+        { id: 'bn-IN-TanishaaNeural', label: 'bn-IN-TanishaaNeural (Female)' }
+    ] }
 ]
 
 const HEALTH_CONFIG = {
@@ -294,7 +303,7 @@ export default function AudioEnginePage() {
                                 {LANGUAGES.map(l => (
                                     <button
                                         key={l.id}
-                                        onClick={() => { setSelectedLang(l.id); setSelectedVoice(l.voices[0]); setHasChanges(true); }}
+                                        onClick={() => { setSelectedLang(l.id); setSelectedVoice(l.voices[0].id); setHasChanges(true); }}
                                         className={cn(
                                             "px-3 py-1.5 rounded text-xs font-medium transition-colors border",
                                             selectedLang === l.id
@@ -316,8 +325,8 @@ export default function AudioEnginePage() {
                                     onChange={(e) => { setSelectedVoice(e.target.value); setHasChanges(true); }}
                                 >
                                     {LANGUAGES.find(l => l.id === selectedLang)?.voices.map(v => (
-                                        <option key={v} value={v} className="bg-zinc-900 text-zinc-300">
-                                            {v}
+                                        <option key={v.id} value={v.id} className="bg-zinc-900 text-zinc-300">
+                                            {v.label}
                                         </option>
                                     ))}
                                 </select>
@@ -488,7 +497,7 @@ export default function AudioEnginePage() {
                                         >
                                             <option value="">-- Select Voice --</option>
                                             {LANGUAGES.flatMap(l => l.voices).map(v => (
-                                                <option key={v} value={v}>{v}</option>
+                                                <option key={v.id} value={v.id}>{v.label}</option>
                                             ))}
                                         </select>
                                     </div>
