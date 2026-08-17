@@ -512,62 +512,66 @@ export default function OverlayEditor() {
 }
 
 function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, scale, baseZIndex }) {
-    const [isDragging, setIsDragging] = useState(false)
-    const [isResizing, setIsResizing] = useState(false)
+    const [activeAction, setActiveAction] = useState(null)
     
-    // For drag/resize delta calculations
-    const startPos = useRef({ x: 0, y: 0, w: 0, h: 0, mx: 0, my: 0 })
+    // For drag/resize/crop delta calculations
+    const startPos = useRef({ x: 0, y: 0, w: 0, h: 0, mx: 0, my: 0, cropT: 0, cropR: 0, cropB: 0, cropL: 0 })
 
-    const handleDragStart = (e) => {
+    const handleActionStart = (e, action) => {
         e.stopPropagation()
         onSelect()
-        setIsDragging(true)
+        setActiveAction(action)
         startPos.current = {
             x: widget.x,
             y: widget.y,
-            mx: e.clientX,
-            my: e.clientY
-        }
-    }
-
-    const handleResizeStart = (e) => {
-        e.stopPropagation()
-        onSelect()
-        setIsResizing(true)
-        startPos.current = {
             w: widget.width,
             h: widget.height,
             mx: e.clientX,
-            my: e.clientY
+            my: e.clientY,
+            cropT: widget.cropTop || 0,
+            cropR: widget.cropRight || 0,
+            cropB: widget.cropBottom || 0,
+            cropL: widget.cropLeft || 0
         }
     }
 
     useEffect(() => {
         const handleMouseMove = (e) => {
-            if (isDragging) {
-                const dx = (e.clientX - startPos.current.mx) / scale
-                const dy = (e.clientY - startPos.current.my) / scale
+            if (!activeAction) return
+            
+            const dx = (e.clientX - startPos.current.mx) / scale
+            const dy = (e.clientY - startPos.current.my) / scale
+            
+            if (activeAction === 'drag') {
                 onUpdate({
                     x: Math.round(startPos.current.x + dx),
                     y: Math.round(startPos.current.y + dy)
                 })
-            } else if (isResizing) {
-                const dx = (e.clientX - startPos.current.mx) / scale
-                const dy = (e.clientY - startPos.current.my) / scale
-                
+            } else if (activeAction === 'resize') {
                 onUpdate({
                     width: Math.max(100, Math.round(startPos.current.w + dx)),
                     height: Math.max(100, Math.round(startPos.current.h + dy))
                 })
+            } else if (activeAction === 'cropTop') {
+                const maxCrop = startPos.current.h - startPos.current.cropB - 20
+                onUpdate({ cropTop: Math.max(0, Math.min(maxCrop, Math.round(startPos.current.cropT + dy))) })
+            } else if (activeAction === 'cropBottom') {
+                const maxCrop = startPos.current.h - startPos.current.cropT - 20
+                onUpdate({ cropBottom: Math.max(0, Math.min(maxCrop, Math.round(startPos.current.cropB - dy))) })
+            } else if (activeAction === 'cropLeft') {
+                const maxCrop = startPos.current.w - startPos.current.cropR - 20
+                onUpdate({ cropLeft: Math.max(0, Math.min(maxCrop, Math.round(startPos.current.cropL + dx))) })
+            } else if (activeAction === 'cropRight') {
+                const maxCrop = startPos.current.w - startPos.current.cropL - 20
+                onUpdate({ cropRight: Math.max(0, Math.min(maxCrop, Math.round(startPos.current.cropR - dx))) })
             }
         }
 
         const handleMouseUp = () => {
-            setIsDragging(false)
-            setIsResizing(false)
+            setActiveAction(null)
         }
 
-        if (isDragging || isResizing) {
+        if (activeAction) {
             window.addEventListener('mousemove', handleMouseMove)
             window.addEventListener('mouseup', handleMouseUp)
         }
@@ -576,7 +580,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             window.removeEventListener('mousemove', handleMouseMove)
             window.removeEventListener('mouseup', handleMouseUp)
         }
-    }, [isDragging, isResizing, scale, onUpdate])
+    }, [activeAction, scale, onUpdate])
 
     // If selected, boost its z-index slightly above its natural layer position so resizing doesn't get occluded by the very next layer
     const computedZIndex = baseZIndex * 10 + (isSelected ? 5 : 0)
@@ -596,10 +600,10 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 backgroundColor: isSelected ? 'rgba(168, 85, 247, 0.1)' : (widget.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent'),
                 backdropFilter: widget.hasBackground ? 'blur(10px)' : 'none',
                 borderRadius: widget.hasBackground ? '16px' : '0px',
-                cursor: isDragging ? 'grabbing' : 'grab',
+                cursor: activeAction === 'drag' ? 'grabbing' : 'grab',
                 zIndex: computedZIndex
             }}
-            onMouseDown={handleDragStart}
+            onMouseDown={(e) => handleActionStart(e, 'drag')}
             className="group hover:!border-purple-400/50 transition-colors"
         >
             <div style={{ width: '100%', height: '100%', clipPath: `inset(${widget.cropTop || 0}px ${widget.cropRight || 0}px ${widget.cropBottom || 0}px ${widget.cropLeft || 0}px)` }}>
@@ -638,17 +642,63 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             {/* Resize handle */}
             {isSelected && (
                 <div 
-                    className="absolute bottom-0 right-0 w-6 h-6 bg-purple-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg"
+                    className="absolute bottom-0 right-0 w-6 h-6 bg-purple-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg z-50"
                     style={{ 
                         right: -2, 
                         bottom: -2,
                         transform: `scale(${1 / (widget.scale || 1)})`,
                         transformOrigin: 'bottom right'
                     }}
-                    onMouseDown={handleResizeStart}
+                    onMouseDown={(e) => handleActionStart(e, 'resize')}
                 >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v6h-6M3 9V3h6M21 3l-7 7M3 21l7-7"/></svg>
                 </div>
+            )}
+
+            {/* Crop handles */}
+            {isSelected && (
+                <>
+                    {/* Top Crop */}
+                    <div 
+                        className="absolute left-1/2 w-8 h-3 bg-emerald-500 cursor-ns-resize shadow-md z-40 rounded-full"
+                        style={{ 
+                            top: widget.cropTop || 0,
+                            transform: `translate(-50%, -50%) scale(${1 / (widget.scale || 1)})`,
+                        }}
+                        onMouseDown={(e) => handleActionStart(e, 'cropTop')}
+                        title="Crop Top"
+                    />
+                    {/* Bottom Crop */}
+                    <div 
+                        className="absolute left-1/2 w-8 h-3 bg-emerald-500 cursor-ns-resize shadow-md z-40 rounded-full"
+                        style={{ 
+                            bottom: widget.cropBottom || 0,
+                            transform: `translate(-50%, 50%) scale(${1 / (widget.scale || 1)})`,
+                        }}
+                        onMouseDown={(e) => handleActionStart(e, 'cropBottom')}
+                        title="Crop Bottom"
+                    />
+                    {/* Left Crop */}
+                    <div 
+                        className="absolute top-1/2 w-3 h-8 bg-emerald-500 cursor-ew-resize shadow-md z-40 rounded-full"
+                        style={{ 
+                            left: widget.cropLeft || 0,
+                            transform: `translate(-50%, -50%) scale(${1 / (widget.scale || 1)})`,
+                        }}
+                        onMouseDown={(e) => handleActionStart(e, 'cropLeft')}
+                        title="Crop Left"
+                    />
+                    {/* Right Crop */}
+                    <div 
+                        className="absolute top-1/2 w-3 h-8 bg-emerald-500 cursor-ew-resize shadow-md z-40 rounded-full"
+                        style={{ 
+                            right: widget.cropRight || 0,
+                            transform: `translate(50%, -50%) scale(${1 / (widget.scale || 1)})`,
+                        }}
+                        onMouseDown={(e) => handleActionStart(e, 'cropRight')}
+                        title="Crop Right"
+                    />
+                </>
             )}
         </div>
     )
