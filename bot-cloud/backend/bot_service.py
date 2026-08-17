@@ -1083,6 +1083,8 @@ class BotService:
                     or msg_data.get("userName")
                     or msg_data.get("username")
                     or msg_data.get("user")
+                    or msg_data.get("name")
+                    or msg_data.get("author")
                     or "Someone (Fallback)"
                 )
                 
