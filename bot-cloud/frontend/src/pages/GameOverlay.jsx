@@ -148,7 +148,7 @@ export default function GameOverlay() {
                     <div className="shrink-0" style={{ width: 480 }} />
 
                     {/* Data strip */}
-                    <div className="flex-1 flex items-stretch gap-6 h-full px-6 overflow-hidden" style={{ paddingRight: 20 }}>
+                    <div className="flex-1 flex items-stretch gap-6 h-full px-6 overflow-hidden" style={{ paddingRight: 350 }}>
 
                         {/* 💰 TOP DONATIONS */}
                         <div className="flex items-center gap-4 shrink-0">
@@ -218,7 +218,7 @@ export default function GameOverlay() {
                                 style={{ color: 'var(--gamer-green)', textShadow: '0 0 8px rgba(0,255,136,0.5)' }}>
                                 💬 Chat
                             </span>
-                            <div className="flex flex-col justify-center gap-1.5 py-1 overflow-hidden flex-1" style={{ maxHeight: 90 }}>
+                            <div className="flex flex-col justify-end gap-1.5 py-1 overflow-hidden flex-1" style={{ maxHeight: 90 }}>
                                 <AnimatePresence mode="popLayout">
                                     {chatMessages.slice(-3).map(msg => (
                                         <ChatBubble key={msg.id} msg={msg} />
@@ -317,7 +317,7 @@ function ChromaVideo() {
     }, [])
 
     return (
-        <div className="absolute inset-0 w-[1920px] h-[1080px] pointer-events-none" style={{ zIndex: 80 }}>
+        <div className="absolute inset-0 w-[1920px] h-[1080px] pointer-events-none" style={{ zIndex: 110 }}>
             <canvas ref={canvasRef} width="1920" height="1080" className="w-full h-full" />
             <video ref={videoRef} src="/assets/overlay.mp4" loop muted autoPlay playsInline crossOrigin="anonymous" style={{ display: 'none' }} />
         </div>
@@ -398,19 +398,19 @@ function ChatBubble({ msg }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-            className="flex items-center gap-2 px-3 py-1 rounded-full whitespace-nowrap max-w-full"
+            className="flex items-start gap-2 px-3 py-1.5 rounded-2xl max-w-full"
             style={{
                 background: 'rgba(10, 10, 20, 0.6)',
                 border: '1px solid rgba(255,255,255,0.08)',
                 backdropFilter: 'blur(8px)',
             }}
         >
-            <span className="text-[11px] font-black uppercase tracking-wide leading-tight"
+            <span className="text-[11px] font-black uppercase tracking-wide leading-tight shrink-0 mt-0.5"
                 style={{ color: nameColor, textShadow: `0 0 6px ${nameColor}40` }}>
                 {msg.author}
             </span>
-            <span className="text-[12px] text-white/90 truncate leading-tight"
-                style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+            <span className="text-[12px] text-white/90 leading-tight break-words"
+                style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)', wordBreak: 'break-word' }}>
                 {msg.text}
             </span>
         </motion.div>
