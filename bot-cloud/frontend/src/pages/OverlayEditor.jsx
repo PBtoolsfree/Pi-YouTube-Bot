@@ -23,6 +23,8 @@ const WIDGET_TYPES = [
     { type: 'boss', label: 'Boss Fight', defaultW: 500, defaultH: 600 },
     { type: 'giveaway_spin', label: 'Giveaway Spin', defaultW: 800, defaultH: 800 },
     { type: 'pokemon', label: 'Pokemon Game', defaultW: 600, defaultH: 400 },
+    { type: 'game', label: 'Game Overlay', defaultW: 1920, defaultH: 1080 },
+    { type: 'custom_media', label: 'Custom Media/Web', defaultW: 600, defaultH: 400 },
 ]
 
 export default function OverlayEditor() {
@@ -359,6 +361,43 @@ export default function OverlayEditor() {
                                             className="w-4 h-4 accent-emerald-500 rounded bg-zinc-800 border-zinc-700 cursor-pointer"
                                         />
                                     </div>
+                                    
+                                    {selectedWidget.type === 'custom_media' && (
+                                        <div className="col-span-2 mt-2 p-3 bg-zinc-900 rounded-lg border border-zinc-800">
+                                            <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Media URL</label>
+                                            <Input 
+                                                type="text" 
+                                                value={selectedWidget.url || ''} 
+                                                onChange={e => updateWidget(selectedWidget.id, { url: e.target.value })}
+                                                placeholder="https://... or choose local file"
+                                                className="w-full bg-zinc-950 border-zinc-800 text-xs mb-2"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="file" 
+                                                    id="localMediaUpload"
+                                                    accept="image/*,video/webm" 
+                                                    className="hidden"
+                                                    onChange={e => {
+                                                        const file = e.target.files[0]
+                                                        if (file) {
+                                                            const reader = new FileReader()
+                                                            reader.onload = (ev) => {
+                                                                updateWidget(selectedWidget.id, { url: ev.target.result })
+                                                            }
+                                                            reader.readAsDataURL(file)
+                                                        }
+                                                    }}
+                                                />
+                                                <Button 
+                                                    onClick={() => document.getElementById('localMediaUpload').click()}
+                                                    className="w-full bg-purple-600 hover:bg-purple-500 text-xs py-1"
+                                                >
+                                                    Upload Local File (Image)
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -521,12 +560,26 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             onMouseDown={handleDragStart}
             className="group hover:!border-purple-400/50 transition-colors"
         >
-            {/* The iframe needs pointer-events: none so it doesn't steal mouse events during drag */}
-            <iframe 
-                src={previewUrl}
-                style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-                title="Preview"
-            />
+            {/* Custom Media or iFrame */}
+            {widget.type === 'custom_media' ? (
+                widget.url?.match(/\.(mp4|webm)$/i) ? (
+                    <video src={widget.url} autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                ) : widget.url?.startsWith('data:image') || widget.url?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
+                    <img src={widget.url} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                ) : (
+                    <iframe 
+                        src={widget.url || 'about:blank'}
+                        style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                        title="Preview"
+                    />
+                )
+            ) : (
+                <iframe 
+                    src={previewUrl}
+                    style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                    title="Preview"
+                />
+            )}
             
             {/* Label overlay */}
             {(isSelected || true) && (

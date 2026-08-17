@@ -48,28 +48,43 @@ export default function CustomOverlay() {
 
     return (
         <div style={{ position: 'relative', width: `${res.w}px`, height: `${res.h}px`, overflow: 'hidden' }}>
-            {overlay.widgets?.map((w, index) => (
-                <iframe
-                    key={w.id}
-                    src={getWidgetUrl(w.type)}
-                    style={{
-                        position: 'absolute',
-                        left: `${w.x}px`,
-                        top: `${w.y}px`,
-                        width: `${w.width}px`,
-                        height: `${w.height}px`,
-                        transform: `scale(${w.scale || 1})`,
-                        transformOrigin: 'top left',
-                        opacity: w.opacity ?? 1,
-                        border: 'none',
-                        backgroundColor: w.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent',
-                        backdropFilter: w.hasBackground ? 'blur(10px)' : 'none',
-                        borderRadius: w.hasBackground ? '16px' : '0px',
-                        zIndex: index
-                    }}
-                    title={w.type}
-                />
-            ))}
+            {overlay.widgets?.map((w, index) => {
+                const commonStyle = {
+                    position: 'absolute',
+                    left: `${w.x}px`,
+                    top: `${w.y}px`,
+                    width: `${w.width}px`,
+                    height: `${w.height}px`,
+                    transform: `scale(${w.scale || 1})`,
+                    transformOrigin: 'top left',
+                    opacity: w.opacity ?? 1,
+                    border: 'none',
+                    backgroundColor: w.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent',
+                    backdropFilter: w.hasBackground ? 'blur(10px)' : 'none',
+                    borderRadius: w.hasBackground ? '16px' : '0px',
+                    zIndex: index
+                }
+
+                if (w.type === 'custom_media') {
+                    const isVideo = w.url?.match(/\.(mp4|webm)$/i)
+                    if (isVideo) {
+                        return <video key={w.id} src={w.url} autoPlay loop muted style={{ ...commonStyle, objectFit: 'contain' }} />
+                    } else if (w.url?.startsWith('data:image') || w.url?.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+                        return <img key={w.id} src={w.url} style={{ ...commonStyle, objectFit: 'contain' }} />
+                    } else {
+                        return <iframe key={w.id} src={w.url || 'about:blank'} style={commonStyle} title={w.type} />
+                    }
+                }
+
+                return (
+                    <iframe
+                        key={w.id}
+                        src={getWidgetUrl(w.type)}
+                        style={commonStyle}
+                        title={w.type}
+                    />
+                )
+            })}
         </div>
     )
 }
