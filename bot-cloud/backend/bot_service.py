@@ -2296,6 +2296,13 @@ class BotService:
                 if self.is_sb_connected:
                     context = await self.youtube_api.get_live_stream_context()
                     if context:
+                        # Reset downtime tracking if this is a new stream
+                        if getattr(self, "_last_seen_stream_id", None) != context["id"]:
+                            self._last_seen_stream_id = context["id"]
+                            self._total_downtime = 0
+                            self._last_disconnect = 0
+                            logger.info(f"New stream detected! Resetting total_downtime. (ID: {context['id']})")
+                            
                         self._live_context = context
                         logger.info(f"Updated Live Context: {context['title']}")
                 else:
@@ -2644,8 +2651,16 @@ class BotService:
             
             import time
             current_time = int(time.time())
+            stream_duration = current_time - start_timestamp
             total_downtime = int(getattr(self, "_total_downtime", 0))
-            elapsed_seconds = max(0, current_time - start_timestamp - total_downtime)
+            
+            # Prevent overnight Streamer.bot disconnects from corrupting clip times
+            if total_downtime > stream_duration:
+                logger.warning(f"Clip downtime ({total_downtime}s) exceeds stream duration ({stream_duration}s). Resetting downtime.")
+                self._total_downtime = 0
+                total_downtime = 0
+                
+            elapsed_seconds = max(0, stream_duration - total_downtime)
             clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
             
             timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
