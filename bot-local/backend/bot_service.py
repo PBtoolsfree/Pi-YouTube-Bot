@@ -29,6 +29,12 @@ except ImportError:
     tunnel_available = False
 
 try:
+    from backend.services.email_service import EmailVerificationService
+    email_available = True
+except ImportError:
+    email_available = False
+
+try:
     from backend.services.cloud_alert_client import CloudAlertClientService
     cloud_alert_available = True
 except ImportError:
