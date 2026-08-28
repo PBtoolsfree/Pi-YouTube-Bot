@@ -24,8 +24,11 @@ class CloudAlertClientService:
 
         cloud_ws_url = config.get("cloud_alert_url") or os.environ.get("CLOUD_ALERT_URL")
         if not cloud_ws_url:
-            logger.info("CLOUD_ALERT_URL not set in config or environment. Standing by in local mode.")
-            return
+            # Provide a fallback default if they haven't configured it yet but enabled it
+            cloud_ws_url = "wss://pbhero.qzz.io/ws/pi-client"
+            
+        # Auto-correct common mistake where users add /api/ before /ws/pi-client
+        cloud_ws_url = cloud_ws_url.replace("/api/ws/pi-client", "/ws/pi-client")
 
         self.is_running = True
         self.task = asyncio.create_task(self._connect_loop(cloud_ws_url))
