@@ -1931,7 +1931,7 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     # Run in thread to avoid blocking async loop
     try:
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, lambda: service.check_for_payment_email(amount, min_timestamp=timestamp))
+        result = await loop.run_in_executor(None, lambda: service.check_for_payment_email(amount, min_timestamp=timestamp, processed_ids=bot.processed_transactions))
         
         # If verified, trigger alert!
         if result["verified"]:

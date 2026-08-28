@@ -66,7 +66,7 @@ class EmailService:
         self.connected = False
         self.mail = None
 
-    def verify_payment(self, expected_amount, sender_hint=None, time_window_minutes=10, min_timestamp=None):
+    def verify_payment(self, expected_amount, sender_hint=None, time_window_minutes=10, min_timestamp=None, processed_ids=None):
         """
         Searches for a payment confirmation email matching the amount within the last X minutes.
         If min_timestamp (float/int unix epoch) is provided, emails before this time are ignored.
@@ -133,6 +133,11 @@ class EmailService:
                             msg_id = msg.get("Message-ID", "").strip()
                             if not msg_id:
                                 msg_id = f"NO_ID_{e_id.decode()}" # Fallback
+                                
+                            # Deduplication: Skip if already processed by bot_service
+                            if processed_ids and msg_id in processed_ids:
+                                logger.info(f"Skipping already processed email: {msg_id}")
+                                continue
                             
                             # Parse Subject
                             subject = decode_header(msg["Subject"])[0][0]
@@ -160,14 +165,12 @@ class EmailService:
                                 if email_date < cutoff:
                                     continue # Too old
                                 
-                                # 2. Check Min Timestamp (Transaction Start) - STRICT
-                                if min_dt: 
-                                    # Allow 1-2 seconds of clock skew/latency tolerance? 
-                                    # No, let's keep it strict. 
-                                    # If email came BEFORE transaction started -> Invalid.
-                                    if email_date < min_dt:
-                                        logger.info(f"  -> Skipped: Email date {email_date} is before transaction start {min_dt}")
-                                        continue
+                                # 2. Check Min Timestamp (Transaction Start) - DISABLED
+                                # We no longer rely on frontend clock to skip emails, we use processed_ids.
+                                # if min_dt: 
+                                #     if email_date < min_dt:
+                                #         logger.info(f"  -> Skipped: Email date {email_date} is before transaction start {min_dt}")
+                                #         continue
                                     
                             except Exception as e_date:
                                 logger.warning(f"Date parsing failed: {e_date}")
@@ -225,10 +228,10 @@ class EmailService:
             self._disconnect() 
             return False, str(e), None
 
-    def check_for_payment_email(self, amount, time_window=60, min_timestamp=None):
+    def check_for_payment_email(self, amount, time_window=60, min_timestamp=None, processed_ids=None):
         """
         Public wrapper for verify_payment to be used by the API.
         Checks for a payment of 'amount' within the last 'time_window' minutes.
         """
-        success, message, msg_id = self.verify_payment(amount, time_window_minutes=time_window, min_timestamp=min_timestamp)
+        success, message, msg_id = self.verify_payment(amount, time_window_minutes=time_window, min_timestamp=min_timestamp, processed_ids=processed_ids)
         return {"verified": success, "message": message, "message_id": msg_id}
