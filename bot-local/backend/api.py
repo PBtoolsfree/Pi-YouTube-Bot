@@ -312,16 +312,19 @@ async def broadcast_log(data: dict):
     if data.get("type") == "log":
         log_history.append(data)
     
-    to_remove = []
-    for ws in active_websockets:
+    async def safe_send(ws):
         try:
-            # Non-blocking send
-            asyncio.create_task(ws.send_json(data))
+            await ws.send_json(data)
+            return None
         except Exception as e:
             print(f">>> [WS] Send failed: {e}")
-            to_remove.append(ws)
-    for ws in to_remove:
-        active_websockets.remove(ws)
+            return ws
+
+    if active_websockets:
+        results = await asyncio.gather(*(safe_send(ws) for ws in active_websockets), return_exceptions=True)
+        for res in results:
+            if res and not isinstance(res, Exception) and res in active_websockets:
+                active_websockets.remove(res)
         
 
 

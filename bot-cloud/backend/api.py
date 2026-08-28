@@ -338,25 +338,26 @@ async def broadcast_log(data: dict):
         if should_broadcast and bot and getattr(bot, "pi_clients", None):
             asyncio.create_task(bot.pi_clients.broadcast(data))
     
-    to_remove = []
-    for ws in active_websockets:
+    async def safe_send(ws):
         try:
-            # Non-blocking send
-            asyncio.create_task(ws.send_json(data))
+            await ws.send_json(data)
+            return None
         except Exception as e:
             print(f">>> [WS] Send failed: {e}")
-            to_remove.append(ws)
-    for ws in to_remove:
-        active_websockets.remove(ws)
-        
-    to_remove_overlay = []
-    for ws in active_overlay_websockets:
-        try:
-            asyncio.create_task(ws.send_json(data))
-        except Exception:
-            to_remove_overlay.append(ws)
-    for ws in to_remove_overlay:
-        active_overlay_websockets.remove(ws)
+            return ws
+
+    if active_websockets:
+        results = await asyncio.gather(*(safe_send(ws) for ws in active_websockets), return_exceptions=True)
+        for res in results:
+            if res and not isinstance(res, Exception) and res in active_websockets:
+                active_websockets.remove(res)
+
+    if active_overlay_websockets:
+        results = await asyncio.gather(*(safe_send(ws) for ws in active_overlay_websockets), return_exceptions=True)
+        for res in results:
+            if res and not isinstance(res, Exception) and res in active_overlay_websockets:
+                active_overlay_websockets.remove(res)
+
 
 @app.get("/api/logs/history")
 async def get_log_history():
