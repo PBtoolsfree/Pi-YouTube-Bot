@@ -3118,6 +3118,17 @@ class BotService:
                     "transaction_id": transaction_id
                 }))
                 ws_sent = True
+                
+            # Broadcast to Cloud Custom Overlays (so TTS works on public bot)
+            if hasattr(self, "broadcast_func") and self.broadcast_func:
+                logger.info("Broadcasting to Cloud Custom Overlays...")
+                asyncio.create_task(self.broadcast_func({
+                    "type": "donation_alert",
+                    "user": user,
+                    "amount": amount,
+                    "message": message,
+                    "transaction_id": transaction_id
+                }))
             
             # Award loyalty points on the cloud!
             try:
