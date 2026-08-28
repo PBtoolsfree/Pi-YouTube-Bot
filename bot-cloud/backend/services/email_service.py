@@ -116,7 +116,9 @@ class EmailService:
                     if ts > 1e11: ts /= 1000 # Convert ms to seconds
                     # Creates UTC aware datetime from timestamp
                     min_dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
-                    logger.info(f"Filtering emails before {min_dt} (UTC)")
+                    # Add 5 minutes grace period for client clock skew (frontend might have wrong time)
+                    min_dt = min_dt - datetime.timedelta(minutes=5)
+                    logger.info(f"Filtering emails before {min_dt} (UTC) [with 5min buffer]")
                 except Exception as e:
                     logger.warning(f"Invalid min_timestamp: {e}")
 
