@@ -116,9 +116,6 @@ export default function Layout({ activeTab, setActiveTab, status, config, childr
                         ) : (
                             <>
                                 <NavItem id="dashboard" icon={<Activity />} label="Dashboard" active={activeTab} onClick={setActiveTab} dot={navDot('dashboard')} dotColor={dotColor} />
-                                <NavItem id="ignore_list" icon={<ShieldBan />} label="Ignore List" active={activeTab} onClick={setActiveTab} dot={navDot('ignore_list')} dotColor={dotColor} />
-                                <NavItem id="loyalty" icon={<Heart />} label="Loyalty Log" active={activeTab} onClick={setActiveTab} dot={navDot('loyalty')} dotColor={dotColor} />
-                                <NavItem id="tip_history" icon={<History />} label="Tip History" active={activeTab} onClick={setActiveTab} />
                                 <NavItem id="streamer_bot" icon={<Share2 />} label="Integrations" active={activeTab} onClick={setActiveTab} dot={navDot('streamer_bot')} dotColor={dotColor} />
                                 <NavItem id="audio_engine" icon={<Volume2 />} label="Audio Engine" active={activeTab} onClick={setActiveTab} dot={navDot('audio_engine')} dotColor={dotColor} />
                                 <NavItem id="testing" icon={<Beaker />} label="Testing" active={activeTab} onClick={setActiveTab} dot={navDot('testing')} dotColor={dotColor} />

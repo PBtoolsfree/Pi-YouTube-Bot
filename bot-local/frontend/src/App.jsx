@@ -12,16 +12,12 @@ const GoalsPage = lazy(() => import('./pages/Goals'))
 const Orchestrator = lazy(() => import('./pages/Orchestrator'))
 const OBSPage = lazy(() => import('./pages/OBS'))
 const ModerationPage = lazy(() => import('./pages/Moderation'))
-const ViewersPage = lazy(() => import('./pages/Viewers'))
 const AudioEnginePage = lazy(() => import('./pages/AudioEngine'))
-const LoyaltyPage = lazy(() => import('./pages/Loyalty'))
 const LoyaltyManagerPage = lazy(() => import('./pages/LoyaltyManager'))
-const TipHistoryPage = lazy(() => import('./pages/TipHistory'))
 const PersonalitiesPage = lazy(() => import('./pages/Personalities'))
 const StreamerBotPage = lazy(() => import('./pages/StreamerBot'))
 const TestingPage = lazy(() => import('./pages/Testing'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
-const IgnoreListPage = lazy(() => import('./pages/IgnoreList'))
 const TipPageSettings = lazy(() => import('./pages/TipPageSettings'))
 const CloudflareSettings = lazy(() => import('./pages/CloudflareSettings'))
 const AppWebhookSettings = lazy(() => import('./pages/AppWebhookSettings'))
@@ -218,12 +214,8 @@ function App() {
         {activeTab === 'orchestrator' && <Orchestrator config={config} onSave={handleSaveConfig} />}
         {activeTab === 'backup' && <BackupPage />}
         {activeTab === 'moderation' && <ModerationPage config={config} onSave={handleSaveConfig} logs={logs} />}
-        {activeTab === 'viewers' && <ViewersPage />}
-        {activeTab === 'loyalty' && (config?.is_cloud ? <LoyaltyManagerPage /> : <LoyaltyPage />)}
-        {activeTab === 'tip_history' && <TipHistoryPage />}
         {activeTab === 'personalities' && <PersonalitiesPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'streamer_bot' && <StreamerBotPage logs={logs} config={config} onSave={handleSaveConfig} backendStatus={backendStatus} />}
-        {activeTab === 'ignore_list' && <IgnoreListPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'audio_engine' && <AudioEnginePage />}
         {activeTab === 'obs' && <OBSPage config={config} onSave={handleSaveConfig} />}
         {activeTab === 'testing' && <TestingPage />}
