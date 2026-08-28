@@ -82,6 +82,7 @@ class EmailService:
             # IMAP Search is by DATE (Day granularity). So we fetch today's emails first.
             date_str = (datetime.date.today()).strftime("%d-%b-%Y")
             logger.info(f"Searching emails since: {date_str}")
+            with open("email_debug.log", "a") as f: f.write(f"\\n--- NEW VERIFY CHECK ---\\nSearching since {date_str}\\n")
             status, messages = self.mail.search(None, f'(SINCE "{date_str}")')
             
             if status != "OK":
@@ -90,6 +91,7 @@ class EmailService:
 
             email_ids = messages[0].split()
             logger.info(f"Found {len(email_ids)} emails today")
+            with open("email_debug.log", "a") as f: f.write(f"Found {len(email_ids)} emails\\n")
             # Look at the last 20 emails
             recent_ids = email_ids[-20:] if len(email_ids) > 20 else email_ids
             
@@ -145,6 +147,7 @@ class EmailService:
                                 subject = subject.decode()
                             
                             logger.info(f"Checking Email ID {e_id.decode()} (Msg-ID: {msg_id}): {subject}")
+                            with open("email_debug.log", "a") as f: f.write(f"Checking Email {msg_id}: {subject}\\n")
                             
                             # Strict Date Check
                             try:
@@ -160,9 +163,11 @@ class EmailService:
                                     email_date = email_date.astimezone(datetime.timezone.utc)
 
                                 logger.info(f"  -> Email Date: {email_date}")
+                                with open("email_debug.log", "a") as f: f.write(f"  -> Email Date: {email_date}, Cutoff: {cutoff}\\n")
 
                                 # 1. Check Window (sanity check)
                                 if email_date < cutoff:
+                                    with open("email_debug.log", "a") as f: f.write("  -> SKIPPED: Too old\\n")
                                     continue # Too old
                                 
                                 # 2. Check Min Timestamp (Transaction Start) - DISABLED
@@ -174,15 +179,14 @@ class EmailService:
                                     
                             except Exception as e_date:
                                 logger.warning(f"Date parsing failed: {e_date}")
-                                # If critical timestamp check is required but failed, skip to be safe?
-                                if min_timestamp: 
-                                    continue
+                                pass
                                 pass
 
                             # Filter by Subject keywords
                             subject_lower = subject.lower()
                             keywords = ["payment", "received", "credited", "sent you", "money", "rupees", "rs.", "paytm", "phonepe", "gpay", "google pay", "paid"]
                             if not any(k in subject_lower for k in keywords):
+                                with open("email_debug.log", "a") as f: f.write("  -> SKIPPED: Keyword mismatch\\n")
                                 continue
 
                             # Get Body
@@ -212,10 +216,14 @@ class EmailService:
                                 if match:
                                     amount_found = float(match.group(1))
                                     logger.info(f"  -> Match Found! Pattern: {pat}, Amount: {amount_found}")
+                                    with open("email_debug.log", "a") as f: f.write(f"  -> Match Found! Amount: {amount_found}, Expected: {expected_amount}\\n")
                                     
                                     if abs(amount_found - float(expected_amount)) < 1.0:
                                         logger.info(f"PAYMENT VERIFIED: Found {amount_found} in '{subject}'")
+                                        with open("email_debug.log", "a") as f: f.write(f"  -> PAYMENT VERIFIED\\n")
                                         return True, f"Verified via email: {subject}", msg_id
+                                    else:
+                                        with open("email_debug.log", "a") as f: f.write("  -> SKIPPED: Amount mismatch\\n")
                                         
                 except Exception as ex:
                     logger.error(f"Error checking email {e_id}: {ex}")
