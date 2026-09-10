@@ -259,5 +259,61 @@
         "level": "INFO",
         "rotate_mb": 10,
         "rotate_backups": 5
+    },
+    "loyalty": {
+        "points_per_message": 10,
+        "bonus_daily_return": 50,
+        "bonus_streak_multiplier": 1.5,
+        "points_per_tip_rupee": 0,
+        "points_per_superchat_rupee": 0,
+        "points_per_supersticker_rupee": 0,
+        "points_per_membership_l1": 0,
+        "points_per_membership_l2": 0,
+        "points_per_membership_l3": 0,
+        "points_per_membership_l4": 0,
+        "points_per_gifted_membership": 0,
+        "ranks": [
+            {"name": "Noob", "emoji": "🐣", "min_points": 0, "yt_mod": false, "mod_duration_days": 0},
+            {"name": "Bronze", "emoji": "🥉", "min_points": 100, "yt_mod": false, "mod_duration_days": 0},
+            {"name": "Silver", "emoji": "🥈", "min_points": 500, "yt_mod": false, "mod_duration_days": 0},
+            {"name": "Gold", "emoji": "🥇", "min_points": 2000, "yt_mod": false, "mod_duration_days": 0},
+            {"name": "Diamond", "emoji": "💎", "min_points": 5000, "yt_mod": true, "mod_duration_days": 7},
+            {"name": "GOD", "emoji": "👑", "min_points": 10000, "yt_mod": true, "mod_duration_days": 30}
+        ],
+        "welcome_messages": {
+            "first_visit": {
+                "enabled": true,
+                "message": "🎉 Welcome @NAME to PB HERO LIVE! Pehli baar aaye ho — family mein officially welcome! ❤️"
+            },
+            "day_2_streak": {
+                "enabled": true,
+                "message": "🔥 Welcome back @NAME! Kal bhi aaye the, aaj phir aa gaye — kya baat hai! ❤️"
+            },
+            "day_3_streak": {
+                "enabled": true,
+                "message": "🧢 DAY 3! @NAME ka attendance full OP hai! Lagataar 3 din se stream mein! 🔥"
+            },
+            "day_7_streak": {
+                "enabled": true,
+                "message": "🏆 7 DAY STREAK! @NAME is officially a PB HERO LIVE regular! 🔥❤️"
+            },
+            "other_streak": {
+                "enabled": true,
+                "message": "🔥 Welcome back @NAME! Day {streak} streak complete — keep the streak alive! 🚀"
+            },
+            "return_2_6_days": {
+                "enabled": true,
+                "message": "👋 Arey @NAME! Welcome back! Kaafi time baad aaye ho — good to see you again! ❤️"
+            },
+            "return_7_29_days": {
+                "enabled": true,
+                "message": "❤️ @NAME is back! Long time no see — stream mein phir se welcome! 🔥"
+            },
+            "return_30_plus_days": {
+                "enabled": true,
+                "message": "👑 THE LEGEND RETURNS! @NAME is back after {days} days! Welcome back to PB HERO LIVE! 🔥"
+            }
+        },
+        "rewards": []
     }
 }

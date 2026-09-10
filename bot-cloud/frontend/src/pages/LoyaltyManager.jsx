@@ -3,7 +3,8 @@ import axios from 'axios'
 import {
     Heart, Calendar, ArrowUpRight, Award, UserPlus, Clock, Zap, Volume2, Activity,
     Search, Plus, Minus, RotateCcw, Trash2, Settings, Save, ChevronUp, ChevronDown,
-    Gift, Edit2, Check, X, Users, TrendingUp, Crown, AlertCircle, Dices, History, Gamepad2
+    Gift, Edit2, Check, X, Users, TrendingUp, Crown, AlertCircle, Dices, History, Gamepad2,
+    MessageSquare, Sparkles, Eye, AlertTriangle, Info
 } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Button, Input, Switch } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
@@ -11,6 +12,96 @@ import { PageStatusBar } from '@/components/ServiceStatus'
 function safeFixed(value, digits = 1, fallback = "0") {
     const num = Number(value);
     return Number.isFinite(num) ? num.toFixed(digits) : fallback;
+}
+
+const WELCOME_MESSAGE_TYPES = [
+    {
+        key: "first_visit",
+        title: "1. First Visit",
+        badge: "New Viewer",
+        badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+        description: "Sent when a viewer attends the live stream for the very first time.",
+        defaultMessage: "🎉 Welcome @NAME to PB HERO LIVE! Pehli baar aaye ho — family mein officially welcome! ❤️",
+        placeholders: ["@NAME", "{author}"]
+    },
+    {
+        key: "day_2_streak",
+        title: "2. Day 2 Streak",
+        badge: "Streak",
+        badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        description: "Sent when a viewer visits the stream 2 days in a row.",
+        defaultMessage: "🔥 Welcome back @NAME! Kal bhi aaye the, aaj phir aa gaye — kya baat hai! ❤️",
+        placeholders: ["@NAME", "{author}", "{streak}"]
+    },
+    {
+        key: "day_3_streak",
+        title: "3. Day 3 Streak",
+        badge: "Streak",
+        badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        description: "Sent when a viewer reaches a 3-day consecutive stream streak.",
+        defaultMessage: "🧢 DAY 3! @NAME ka attendance full OP hai! Lagataar 3 din se stream mein! 🔥",
+        placeholders: ["@NAME", "{author}", "{streak}"]
+    },
+    {
+        key: "day_7_streak",
+        title: "4. Day 7 Streak",
+        badge: "Milestone",
+        badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+        description: "Sent when a viewer completes a full 7-day weekly streak.",
+        defaultMessage: "🏆 7 DAY STREAK! @NAME is officially a PB HERO LIVE regular! 🔥❤️",
+        placeholders: ["@NAME", "{author}", "{streak}"]
+    },
+    {
+        key: "other_streak",
+        title: "5. Other Streak Days",
+        badge: "Streak",
+        badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        description: "Sent for any other streak day (e.g. Day 4, 5, 6, 8, etc.).",
+        defaultMessage: "🔥 Welcome back @NAME! Day {streak} streak complete — keep the streak alive! 🚀",
+        placeholders: ["@NAME", "{author}", "{streak}"]
+    },
+    {
+        key: "return_2_6_days",
+        title: "6. Returning After 2–6 Days",
+        badge: "Return",
+        badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+        description: "Sent when a viewer returns after missing 2 to 6 days.",
+        defaultMessage: "👋 Arey @NAME! Welcome back! Kaafi time baad aaye ho — good to see you again! ❤️",
+        placeholders: ["@NAME", "{author}", "{days}"]
+    },
+    {
+        key: "return_7_29_days",
+        title: "7. Returning After 7–29 Days",
+        badge: "Return",
+        badgeColor: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+        description: "Sent when a viewer returns after 1 to 4 weeks.",
+        defaultMessage: "❤️ @NAME is back! Long time no see — stream mein phir se welcome! 🔥",
+        placeholders: ["@NAME", "{author}", "{days}"]
+    },
+    {
+        key: "return_30_plus_days",
+        title: "8. Returning After 30+ Days",
+        badge: "Legend Return",
+        badgeColor: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+        description: "Sent when a viewer returns after a month or longer.",
+        defaultMessage: "👑 THE LEGEND RETURNS! @NAME is back after {days} days! Welcome back to PB HERO LIVE! 🔥",
+        placeholders: ["@NAME", "{author}", "{days}"]
+    }
+]
+
+function formatLivePreview(template, { author = "PB Hero", streak = 5, days = 12 } = {}) {
+    if (!template) return ""
+    let text = String(template).replace(/@NAME/g, author)
+    const mapping = {
+        author,
+        name: author,
+        streak: String(streak),
+        days: String(days),
+        delta_days: String(days)
+    }
+    return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+        return key in mapping ? mapping[key] : match
+    })
 }
 
 export default function LoyaltyManagerPage() {
@@ -34,6 +125,106 @@ export default function LoyaltyManagerPage() {
     const [pokemonSearch, setPokemonSearch] = useState("")
     const [showPokemonModal, setShowPokemonModal] = useState(false)
     const [newPokemon, setNewPokemon] = useState({ name: "", power: 10, sprite: "" })
+    const [showResetModal, setShowResetModal] = useState(false)
+
+    const handleWelcomeMessageChange = (key, field, value) => {
+        setLoyaltyConfig(prev => {
+            if (!prev) return prev
+            const currentWm = prev.welcome_messages || {}
+            const defaultItem = WELCOME_MESSAGE_TYPES.find(t => t.key === key)
+            const currentItem = currentWm[key] || { enabled: true, message: defaultItem?.defaultMessage || "" }
+            return {
+                ...prev,
+                welcome_messages: {
+                    ...currentWm,
+                    [key]: {
+                        ...currentItem,
+                        [field]: value
+                    }
+                }
+            }
+        })
+    }
+
+    const insertPlaceholder = (key, placeholder) => {
+        setLoyaltyConfig(prev => {
+            if (!prev) return prev
+            const currentWm = prev.welcome_messages || {}
+            const defaultItem = WELCOME_MESSAGE_TYPES.find(t => t.key === key)
+            const currentItem = currentWm[key] || { enabled: true, message: defaultItem?.defaultMessage || "" }
+            const currentMsg = currentItem.message ?? defaultItem?.defaultMessage ?? ""
+            const newMsg = currentMsg ? `${currentMsg} ${placeholder}` : placeholder
+            return {
+                ...prev,
+                welcome_messages: {
+                    ...currentWm,
+                    [key]: {
+                        ...currentItem,
+                        message: newMsg
+                    }
+                }
+            }
+        })
+    }
+
+    const saveWelcomeMessages = async () => {
+        if (!loyaltyConfig) return
+        const wm = loyaltyConfig.welcome_messages || {}
+        for (const item of WELCOME_MESSAGE_TYPES) {
+            const entry = wm[item.key] || { enabled: true, message: item.defaultMessage }
+            if (entry.enabled && (!entry.message || !entry.message.trim())) {
+                showToast(`Message for "${item.title}" cannot be empty when enabled.`, 'error')
+                return
+            }
+            if (entry.message && entry.message.length > 500) {
+                showToast(`Message for "${item.title}" exceeds 500 characters limit.`, 'error')
+                return
+            }
+        }
+        
+        setSaving(true)
+        try {
+            await axios.post('/api/loyalty/config', loyaltyConfig)
+            showToast('Welcome messages saved successfully!')
+            fetchConfig()
+        } catch (e) {
+            showToast(e.response?.data?.detail || 'Failed to save welcome messages', 'error')
+        }
+        setSaving(false)
+    }
+
+    const handleResetWelcomeMessages = async () => {
+        setSaving(true)
+        try {
+            const res = await axios.post('/api/loyalty/welcome-messages/reset')
+            if (res.data?.welcome_messages) {
+                setLoyaltyConfig(prev => ({
+                    ...prev,
+                    welcome_messages: res.data.welcome_messages
+                }))
+            }
+            showToast('Welcome messages reset to default!')
+            setShowResetModal(false)
+            fetchConfig()
+        } catch (e) {
+            const resetWm = {}
+            WELCOME_MESSAGE_TYPES.forEach(item => {
+                resetWm[item.key] = { enabled: true, message: item.defaultMessage }
+            })
+            try {
+                await axios.post('/api/loyalty/config', {
+                    ...loyaltyConfig,
+                    welcome_messages: resetWm
+                })
+                setLoyaltyConfig(prev => ({ ...prev, welcome_messages: resetWm }))
+                showToast('Welcome messages reset to default!')
+                setShowResetModal(false)
+            } catch (err) {
+                showToast('Failed to reset welcome messages', 'error')
+            }
+        }
+        setSaving(false)
+    }
 
     const wsRef = useRef(null)
 
@@ -282,6 +473,7 @@ export default function LoyaltyManagerPage() {
                 <TabButton id="loans" label="Banking & Loans" icon={<Crown />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="manage" label="Manage Viewers" icon={<Users />} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="games" label="Games" icon={<Gamepad2 />} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="welcome" label="Welcome Messages" icon={<MessageSquare />} active={activeTab} onClick={setActiveTab} />
 
                 <TabButton id="settings" label="Settings" icon={<Settings />} active={activeTab} onClick={setActiveTab} />
             </div>
@@ -1298,6 +1490,237 @@ export default function LoyaltyManagerPage() {
                             {saving ? 'Saving...' : 'Save Configuration'}
                         </Button>
                     </div>
+                </div>
+            )}
+
+            {/* ═══════════════ WELCOME MESSAGES ═══════════════ */}
+            {activeTab === 'welcome' && (
+                <div className="space-y-6">
+                    {/* Header Banner */}
+                    <div className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-xl p-5 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5 text-pink-500" />
+                                    Welcome & Return Announcements
+                                </h3>
+                                <p className="text-sm text-zinc-400 mt-1">
+                                    Customize chat greeting announcements for first-time viewers, streak milestones, and returning members.
+                                    Available placeholders: <code className="text-pink-400 bg-pink-950/40 px-1.5 py-0.5 rounded text-xs">@NAME</code>, <code className="text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded text-xs">&#123;author&#125;</code>, <code className="text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded text-xs">&#123;streak&#125;</code>, <code className="text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded text-xs">&#123;days&#125;</code>
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowResetModal(true)}
+                                    disabled={saving}
+                                    className="border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-9"
+                                >
+                                    <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-zinc-400" />
+                                    Reset to Default
+                                </Button>
+                                <Button
+                                    onClick={saveWelcomeMessages}
+                                    disabled={saving}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-9 px-4 shadow-lg shadow-emerald-950/50"
+                                >
+                                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                                    {saving ? 'Saving...' : 'Save Changes'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Message Cards Grid */}
+                    <div className="grid gap-5 md:grid-cols-2">
+                        {WELCOME_MESSAGE_TYPES.map((item) => {
+                            const configEntry = loyaltyConfig?.welcome_messages?.[item.key] || {
+                                enabled: true,
+                                message: item.defaultMessage
+                            }
+                            const isEnabled = configEntry.enabled !== false
+                            const currentMsg = configEntry.message ?? item.defaultMessage
+                            const charCount = (currentMsg || "").length
+                            const isOverLimit = charCount > 500
+                            const isEmptyWhenEnabled = isEnabled && (!currentMsg || !currentMsg.trim())
+                            const previewText = formatLivePreview(currentMsg, { author: "PB Hero", streak: 5, days: 12 })
+
+                            return (
+                                <Card key={item.key} className={`bg-zinc-900 border transition-all duration-200 ${isEnabled ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-800/40 opacity-70'}`}>
+                                    <CardHeader className="pb-3 border-b border-zinc-800/60">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <CardTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                                                    {item.title}
+                                                </CardTitle>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${item.badgeColor}`}>
+                                                    {item.badge}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className={`text-xs font-medium ${isEnabled ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                                    {isEnabled ? 'Enabled' : 'Disabled'}
+                                                </span>
+                                                <Switch
+                                                    checked={isEnabled}
+                                                    onCheckedChange={(val) => handleWelcomeMessageChange(item.key, 'enabled', val)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-zinc-400 mt-1">{item.description}</p>
+                                    </CardHeader>
+                                    
+                                    <CardContent className="p-4 space-y-3.5">
+                                        {/* Editor Textarea */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <label className="text-zinc-300 font-medium">Message Text</label>
+                                                <span className={`text-[11px] ${isOverLimit ? 'text-rose-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {charCount} / 500 chars
+                                                </span>
+                                            </div>
+                                            <textarea
+                                                rows={3}
+                                                value={currentMsg}
+                                                onChange={(e) => handleWelcomeMessageChange(item.key, 'message', e.target.value)}
+                                                placeholder={item.defaultMessage}
+                                                className={`w-full rounded-md border bg-zinc-950/70 p-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 transition-colors resize-y min-h-[75px] ${
+                                                    isEmptyWhenEnabled 
+                                                        ? 'border-rose-500/60 focus:border-rose-500 focus:ring-rose-500/30' 
+                                                        : isOverLimit
+                                                        ? 'border-rose-500 focus:ring-rose-500/30'
+                                                        : 'border-zinc-800 focus:border-zinc-600 focus:ring-zinc-600/30'
+                                                }`}
+                                            />
+                                            {isEmptyWhenEnabled && (
+                                                <p className="text-[11px] text-rose-400 flex items-center gap-1">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    Message cannot be empty when enabled.
+                                                </p>
+                                            )}
+                                            {isOverLimit && (
+                                                <p className="text-[11px] text-rose-400 flex items-center gap-1">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    Message exceeds maximum 500 characters limit.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Placeholders chips */}
+                                        <div className="space-y-1">
+                                            <span className="text-[11px] text-zinc-400 block font-medium">Click placeholder to append:</span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {item.placeholders.map((ph) => (
+                                                    <button
+                                                        key={ph}
+                                                        type="button"
+                                                        onClick={() => insertPlaceholder(item.key, ph)}
+                                                        className="px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 text-[11px] font-mono transition-colors flex items-center gap-1 cursor-pointer"
+                                                        title={`Append ${ph}`}
+                                                    >
+                                                        <Plus className="h-2.5 w-2.5 text-zinc-400" />
+                                                        {ph}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Live Preview Box */}
+                                        <div className="rounded-lg bg-zinc-950/80 border border-zinc-800/80 p-3 space-y-1.5">
+                                            <div className="flex items-center justify-between text-[11px] text-zinc-400 font-medium">
+                                                <span className="flex items-center gap-1 text-zinc-400">
+                                                    <Eye className="h-3.5 w-3.5 text-indigo-400" />
+                                                    Live Chat Preview
+                                                </span>
+                                                <span className="text-[10px] text-zinc-500 font-normal">
+                                                    (Preview values: author = "PB Hero", streak = 5, days = 12)
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-zinc-200 bg-zinc-900/90 rounded p-2 border border-zinc-800/50 break-words font-sans">
+                                                {isEnabled ? (
+                                                    previewText ? (
+                                                        <span>{previewText}</span>
+                                                    ) : (
+                                                        <span className="italic text-zinc-500">(Empty message)</span>
+                                                    )
+                                                ) : (
+                                                    <span className="italic text-zinc-500 flex items-center gap-1">
+                                                        <AlertCircle className="h-3 w-3 text-zinc-500" />
+                                                        This announcement is currently disabled and will be skipped.
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
+                    </div>
+
+                    {/* Bottom Save bar */}
+                    <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+                        <div className="text-xs text-zinc-400 flex items-center gap-1.5">
+                            <Info className="h-4 w-4 text-blue-400 shrink-0" />
+                            <span>Changes are saved directly to Cloud Bot configuration. Existing points and viewer history remain untouched.</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowResetModal(true)}
+                                disabled={saving}
+                                className="border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs h-9"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-zinc-400" />
+                                Reset to Default
+                            </Button>
+                            <Button
+                                onClick={saveWelcomeMessages}
+                                disabled={saving}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-9 px-6 shadow-lg shadow-emerald-950/50"
+                            >
+                                <Save className="h-3.5 w-3.5 mr-1.5" />
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Reset Confirmation Modal */}
+                    {showResetModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4">
+                                <div className="flex items-center gap-3 text-amber-400">
+                                    <AlertTriangle className="h-6 w-6 shrink-0" />
+                                    <h4 className="text-base font-semibold text-zinc-100">Reset Welcome Messages?</h4>
+                                </div>
+                                <p className="text-sm text-zinc-300 leading-relaxed">
+                                    This will reset all 8 welcome and return announcement messages to their standard defaults.
+                                </p>
+                                <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-400 space-y-1">
+                                    <p className="font-medium text-zinc-300">Data Safety Guarantee:</p>
+                                    <p>• Viewer records, points, and streaks are <strong>NOT</strong> modified.</p>
+                                    <p>• Ranks, rewards, and other loyalty settings are <strong>NOT</strong> modified.</p>
+                                    <p>• Only the message text templates are restored to factory defaults.</p>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setShowResetModal(false)}
+                                        disabled={saving}
+                                        className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleResetWelcomeMessages}
+                                        disabled={saving}
+                                        className="bg-amber-600 hover:bg-amber-500 text-white text-xs"
+                                    >
+                                        {saving ? 'Resetting...' : 'Confirm Reset'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

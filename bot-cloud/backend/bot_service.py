@@ -53,6 +53,64 @@ from backend.services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_WELCOME_MESSAGES = {
+    "first_visit": {
+        "enabled": True,
+        "message": "🎉 Welcome @NAME to PB HERO LIVE! Pehli baar aaye ho — family mein officially welcome! ❤️"
+    },
+    "day_2_streak": {
+        "enabled": True,
+        "message": "🔥 Welcome back @NAME! Kal bhi aaye the, aaj phir aa gaye — kya baat hai! ❤️"
+    },
+    "day_3_streak": {
+        "enabled": True,
+        "message": "🧢 DAY 3! @NAME ka attendance full OP hai! Lagataar 3 din se stream mein! 🔥"
+    },
+    "day_7_streak": {
+        "enabled": True,
+        "message": "🏆 7 DAY STREAK! @NAME is officially a PB HERO LIVE regular! 🔥❤️"
+    },
+    "other_streak": {
+        "enabled": True,
+        "message": "🔥 Welcome back @NAME! Day {streak} streak complete — keep the streak alive! 🚀"
+    },
+    "return_2_6_days": {
+        "enabled": True,
+        "message": "👋 Arey @NAME! Welcome back! Kaafi time baad aaye ho — good to see you again! ❤️"
+    },
+    "return_7_29_days": {
+        "enabled": True,
+        "message": "❤️ @NAME is back! Long time no see — stream mein phir se welcome! 🔥"
+    },
+    "return_30_plus_days": {
+        "enabled": True,
+        "message": "👑 THE LEGEND RETURNS! @NAME is back after {days} days! Welcome back to PB HERO LIVE! 🔥"
+    }
+}
+
+def safe_format_welcome_message(template: str, author: str, streak: int = 1, days: int = 0) -> str:
+    """
+    Safely formats welcome/return message templates supporting:
+    - @NAME and {author} -> viewer name
+    - {streak} -> streak count
+    - {days} and {delta_days} -> days since previous visit
+    Preserves unknown placeholders without crashing.
+    """
+    if not template:
+        return ""
+    text = str(template).replace("@NAME", str(author))
+    mapping = {
+        "author": str(author),
+        "name": str(author),
+        "streak": str(streak),
+        "days": str(days),
+        "delta_days": str(days)
+    }
+    def replacer(match):
+        key = match.group(1).strip()
+        return mapping.get(key, match.group(0))
+    return re.sub(r"\{([a-zA-Z0-9_]+)\}", replacer, text)
+
 def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
@@ -2876,8 +2934,28 @@ class BotService:
         else:
             logger.warning("Streamer.bot Disconnected (Alert handled internally)")
 
+    def _get_welcome_message_config(self, key: str) -> dict:
+        config = self.load_config()
+        loyalty = config.get("loyalty", {})
+        welcome_msgs = loyalty.get("welcome_messages", {})
+        default_val = DEFAULT_WELCOME_MESSAGES.get(key, {"enabled": True, "message": ""})
+        if isinstance(welcome_msgs, dict) and key in welcome_msgs and isinstance(welcome_msgs[key], dict):
+            entry = welcome_msgs[key]
+            return {
+                "enabled": bool(entry.get("enabled", default_val["enabled"])),
+                "message": str(entry.get("message", default_val["message"]))
+            }
+        return dict(default_val)
+
     async def _trigger_welcome(self, author):
-        msg = f"WELCOME {author}! Thank you for joining your first stream here! 🙏"
+        wm_cfg = self._get_welcome_message_config("first_visit")
+        if not wm_cfg.get("enabled", True):
+            logger.info(f"Welcome message for first_visit is disabled, skipping for {author}")
+            return
+
+        msg = safe_format_welcome_message(wm_cfg.get("message", ""), author=author)
+        if not msg:
+            msg = f"WELCOME {author}! Thank you for joining your first stream here! 🙏"
         await self._log_ui("LOYALTY", msg)
         if self.audio:
             await self.audio.speak(f"Welcome {author}! Thanks for joining your first stream!", "public")
@@ -2987,38 +3065,45 @@ class BotService:
 
         eng_text = None
         hindi_voice = None
+        streak = v.get("consecutive_days", 1)
 
         if is_consecutive:
             # Streak Continues
-            streak = v.get("consecutive_days", 1) + 1
+            streak = streak + 1
             v["consecutive_days"] = streak
             
             if streak == 2:
-                eng_text = f"WELCOME BACK {author}! 2 days in a row! Amazing consistency! 🔥"
+                wm_cfg = self._get_welcome_message_config("day_2_streak")
                 hindi_voice = f"Swagat hai {author}! Aap kal bhi aaye thhe, dekhkar khushi hui!"
             elif streak == 3:
-                eng_text = f"HAT-TRICK! 🧢 {author} is here for the 3rd day in a row!"
+                wm_cfg = self._get_welcome_message_config("day_3_streak")
                 hindi_voice = f"Swagat hai {author}! Lagataar teesre din! Kya baat hai!"
             elif streak == 7:
-                eng_text = f"🏆 WEEKLY LEGEND: {author} has reached a 7-DAY STREAK! 🏆"
+                wm_cfg = self._get_welcome_message_config("day_7_streak")
                 hindi_voice = f"Badhai ho {author}! Aapne pure 7 din ka streak pura kar liya hai!"
             else:
-                eng_text = f"Welcome back {author}! Day {streak} streak! Keep it up! 🚀"
+                wm_cfg = self._get_welcome_message_config("other_streak")
                 hindi_voice = f"Namaste {author}! Swaagat hai waapas!"
+
+            if wm_cfg.get("enabled", True):
+                eng_text = safe_format_welcome_message(wm_cfg.get("message", ""), author=author, streak=streak, days=delta_days)
 
         elif delta_days > 1:
             # Streak Broken
             v["consecutive_days"] = 1
             
             if delta_days >= 30:
-                 eng_text = f"WHOA! {author} returns after {delta_days} days! A true legend returns! 🛡️"
+                 wm_cfg = self._get_welcome_message_config("return_30_plus_days")
                  hindi_voice = f"Baap re! {author} pure {delta_days} din baad laute hain!"
             elif delta_days >= 7:
-                 eng_text = f"Long time no see {author}! Welcome back to the stream! ❤️"
+                 wm_cfg = self._get_welcome_message_config("return_7_29_days")
                  hindi_voice = f"Arey {author}! Bohot din baad dikhe! Swagat hai!"
             else:
-                 eng_text = f"Welcome back {author}! Good to see you again! 👋"
+                 wm_cfg = self._get_welcome_message_config("return_2_6_days")
                  hindi_voice = f"Swagat hai waapas {author}! Dekhkar achha laga!"
+
+            if wm_cfg.get("enabled", True):
+                eng_text = safe_format_welcome_message(wm_cfg.get("message", ""), author=author, streak=1, days=delta_days)
         
         # Save updates
         self.viewers.viewers[author] = v
