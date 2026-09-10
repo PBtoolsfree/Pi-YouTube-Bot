@@ -60,6 +60,7 @@ class CloudAlertClientService:
                     await self.send_event({"type": "request_viewer_sync"})
                     await self.send_event({"type": "request_history_sync"})
                     await self.send_event({"type": "request_qr_sync"})
+                    await self.send_event({"type": "request_config_sync"})
                     
                     # Notify Cloud of Streamer.bot status
                     await self.send_event({

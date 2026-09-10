@@ -25,7 +25,7 @@ import json
 import os
 import psutil
 import httpx
-from .bot_service import BotService
+from .bot_service import BotService, DEFAULT_WELCOME_MESSAGES, safe_format_welcome_message
 from .audio_service import AudioService
 from .config_manager import ConfigManager
 from fastapi.responses import JSONResponse
@@ -535,6 +535,113 @@ async def update_config(payload: ConfigUpdate):
         logger.exception("Error saving config")
         raise HTTPException(500, str(exc))
 
+
+def get_welcome_messages_config(loyalty_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if not isinstance(loyalty_cfg, dict):
+        cfg = ConfigManager.get_config()
+        loyalty_cfg = cfg.get("loyalty", {})
+    configured = loyalty_cfg.get("welcome_messages", {})
+    if not isinstance(configured, dict):
+        configured = {}
+    result = {}
+    for key, default_val in DEFAULT_WELCOME_MESSAGES.items():
+        if key in configured and isinstance(configured[key], dict):
+            entry = configured[key]
+            result[key] = {
+                "enabled": bool(entry.get("enabled", default_val["enabled"])),
+                "message": str(entry.get("message", default_val["message"]))
+            }
+        else:
+            result[key] = dict(default_val)
+    return result
+
+
+@app.get("/api/loyalty/config")
+async def get_loyalty_config():
+    cfg = ConfigManager.get_config()
+    loyalty = {
+        "points_per_message": 20,
+        "bonus_daily_return": 3000,
+        "bonus_streak_multiplier": 1.5,
+        "ranks": [
+            {"name": "Noob", "emoji": "🐣", "min_points": 0},
+            {"name": "Bronze", "emoji": "🥉", "min_points": 100},
+            {"name": "Silver", "emoji": "🥈", "min_points": 500},
+            {"name": "Gold", "emoji": "🥇", "min_points": 2000},
+            {"name": "Diamond", "emoji": "💎", "min_points": 5000},
+            {"name": "GOD", "emoji": "👑", "min_points": 10000}
+        ],
+        "rewards": [],
+        "games": {
+            "gamble": {"win_chance": 40},
+            "slots": {"jackpot_chance": 5}
+        }
+    }
+    if "loyalty" in cfg and isinstance(cfg["loyalty"], dict):
+        loyalty.update(cfg.get("loyalty"))
+    loyalty["welcome_messages"] = get_welcome_messages_config(loyalty)
+    return loyalty
+
+
+@app.post("/api/loyalty/config")
+async def save_loyalty_config(payload: Dict[str, Any]):
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Invalid payload format")
+    cfg = ConfigManager.get_config()
+    current_loyalty = cfg.get("loyalty", {})
+    if not isinstance(current_loyalty, dict):
+        current_loyalty = {}
+
+    if "welcome_messages" in payload:
+        wm_payload = payload["welcome_messages"]
+        if not isinstance(wm_payload, dict):
+            raise HTTPException(400, "welcome_messages must be an object")
+
+        valid_keys = set(DEFAULT_WELCOME_MESSAGES.keys())
+        current_wm = current_loyalty.get("welcome_messages", {})
+        if not isinstance(current_wm, dict):
+            current_wm = {}
+        merged_wm = dict(current_wm)
+
+        for key, val in wm_payload.items():
+            if key in valid_keys and isinstance(val, dict):
+                enabled = bool(val.get("enabled", True))
+                msg = str(val.get("message", ""))
+                if enabled and not msg.strip():
+                    raise HTTPException(400, f"Message for '{key}' cannot be empty when enabled")
+                if len(msg) > 500:
+                    raise HTTPException(400, f"Message for '{key}' exceeds 500 characters")
+                merged_wm[key] = {
+                    "enabled": enabled,
+                    "message": msg
+                }
+        payload["welcome_messages"] = merged_wm
+
+    current_loyalty.update(payload)
+    cfg["loyalty"] = current_loyalty
+    ConfigManager.save_config(cfg)
+    try:
+        asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+    except Exception:
+        pass
+    return {"status": "saved", "loyalty": current_loyalty}
+
+
+@app.post("/api/loyalty/welcome-messages/reset")
+async def reset_welcome_messages():
+    import copy
+    cfg = ConfigManager.get_config()
+    current_loyalty = cfg.get("loyalty", {})
+    if not isinstance(current_loyalty, dict):
+        current_loyalty = {}
+    current_loyalty["welcome_messages"] = copy.deepcopy(DEFAULT_WELCOME_MESSAGES)
+    cfg["loyalty"] = current_loyalty
+    ConfigManager.save_config(cfg)
+    try:
+        asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+    except Exception:
+        pass
+    return {"status": "reset", "welcome_messages": current_loyalty["welcome_messages"]}
 
 
 @app.get("/api/audio/status")

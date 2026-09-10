@@ -831,6 +831,17 @@ async def save_loyalty_config(payload: Dict[str, Any]):
     current_loyalty.update(payload)
     cfg["loyalty"] = current_loyalty
     ConfigManager.save_config(cfg)
+
+    # Broadcast to Cloud UI clients
+    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+
+    # Broadcast to Local Pi clients
+    if getattr(bot, "pi_clients", None):
+        asyncio.create_task(bot.pi_clients.broadcast({
+            "type": "sync_config_full",
+            "config": cfg
+        }))
+
     return {"status": "saved", "loyalty": current_loyalty}
 
 
@@ -844,6 +855,17 @@ async def reset_welcome_messages():
     current_loyalty["welcome_messages"] = copy.deepcopy(DEFAULT_WELCOME_MESSAGES)
     cfg["loyalty"] = current_loyalty
     ConfigManager.save_config(cfg)
+
+    # Broadcast to Cloud UI clients
+    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+
+    # Broadcast to Local Pi clients
+    if getattr(bot, "pi_clients", None):
+        asyncio.create_task(bot.pi_clients.broadcast({
+            "type": "sync_config_full",
+            "config": cfg
+        }))
+
     return {"status": "reset", "welcome_messages": current_loyalty["welcome_messages"]}
 
 @app.post("/api/moderation/timeout")

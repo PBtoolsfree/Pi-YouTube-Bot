@@ -2849,6 +2849,13 @@ class BotService:
                     "type": "full_history_sync",
                     "history": history[:200]
                 })
+        elif etype == "request_config_sync":
+            if websocket:
+                logger.info("Pi client requested config sync. Sending full config...")
+                await websocket.send_json({
+                    "type": "sync_config_full",
+                    "config": self.load_config()
+                })
 
     async def _log_ui(self, type, message, author=None, meta=None, is_forwarded=False):
         # Always coerce message to string to prevent frontend crashes
