@@ -261,6 +261,7 @@ class AudioService:
 
         # Original Cleaning
         cleaned = _EMOJI_PATTERN.sub("", cleaned)
+        cleaned = re.sub(r'@([a-zA-Z0-9_]+)', r'\1', cleaned)
         cleaned = re.sub(r"([!?.}]){2,}", r"\1", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         return cleaned
@@ -283,7 +284,17 @@ class AudioService:
         text_lower = text.lower()
         words = set(re.findall(r'\b[a-z]+\b', text_lower))
         
-        hinglish_keywords = {'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat'}
+        hinglish_keywords = {
+            'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 
+            'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 
+            'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat',
+            'mein', 'me', 'pehli', 'baar', 'aaye', 'aaya', 'aayi', 'bolo', 'hissa', 'ban', 
+            'jao', 'kal', 'aaj', 'phir', 'aa', 'gaye', 'din', 'dinon', 'se', 'tum', 'aap', 
+            'hum', 'humein', 'humare', 'apna', 'apne', 'sab', 'sabko', 'dekh', 'dekhkar', 
+            'khushi', 'hui', 'laute', 'lauta', 'badhai', 'shukriya', 'swagat', 'namaste', 
+            'kaafi', 'time', 'adhoori', 'lag', 'thi', 'tha', 'the', 'chuke', 'chuka', 'chuki', 
+            'bas', 'paas', 'hisa', 'shuru', 'banta', 'banata'
+        }
         benglish_keywords = {'kemon', 'acho', 'ami', 'tumi', 'korcho', 'kothay', 'hobe', 'jabo', 'valo', 'bhalo', 'khub', 'kore', 'amar', 'tomar', 'apni', 'tui', 'keno', 'khabe', 'naki', 'ache', 'nei', 'ekhon', 'dada', 'kori', 'kotha', 'bolo', 'bolcho'}
 
         hinglish_score = len(words.intersection(hinglish_keywords))

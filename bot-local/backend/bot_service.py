@@ -2148,7 +2148,7 @@ class BotService:
             msg = f"WELCOME {author}! Thank you for joining your first stream here! 🙏"
         await self._log_ui("LOYALTY", msg)
         if self.audio:
-            await self.audio.speak(f"Welcome {author}! Thanks for joining your first stream!", "public")
+            await self.audio.speak(msg, "public")
         await self._send_chat(msg)
         
         # SEPARATE ACTION: Bot Alerts
@@ -2299,13 +2299,13 @@ class BotService:
         
         # Dispatch generic "Welcome Back" if text defined
         if eng_text:
-            await self._trigger_special_announcement(hindi_voice, eng_text)
+            await self._trigger_special_announcement(eng_text, eng_text)
 
-    async def _trigger_special_announcement(self, hindi_voice, eng_text):
+    async def _trigger_special_announcement(self, voice_text, eng_text):
         await self._log_ui("LOYALTY", eng_text)
         
         if self.audio:
-            await self.audio.speak(hindi_voice, "public", voice="hi-IN-MadhurNeural")
+            await self.audio.speak(voice_text, "public")
         
         await self._send_chat(eng_text)
         
