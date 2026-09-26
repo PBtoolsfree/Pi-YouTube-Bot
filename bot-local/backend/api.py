@@ -2460,4 +2460,19 @@ else:
     async def no_dist_error(full_path: str):
         return Response(content="Frontend 'dist' not found. Run 'cd frontend && npm run build'.", status_code=502)
 
+def _on_config_saved(new_cfg):
+    try:
+        asyncio.create_task(broadcast_log({"type": "config_update", "config": new_cfg}))
+    except Exception:
+        pass
+        
+    try:
+        if getattr(bot, "cloud_alert_client", None) and bot.cloud_alert_client.is_running:
+            asyncio.create_task(bot.cloud_alert_client.send_event({
+                "type": "sync_config_full",
+                "config": new_cfg
+            }))
+    except Exception:
+        pass
 
+ConfigManager.on_save = _on_config_saved

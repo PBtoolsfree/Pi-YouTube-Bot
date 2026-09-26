@@ -140,6 +140,8 @@ class ConfigManager:
 
         return copy.deepcopy(ConfigManager._config_cache or {})
 
+    on_save = None  # Class-level callback: on_save(new_config)
+
     @staticmethod
     def save_config(new_config: Dict[str, Any]) -> bool:
         """Atomically save configuration to disk (thread-safe)."""
@@ -159,6 +161,14 @@ class ConfigManager:
                 ConfigManager._file_mtime = os.path.getmtime(ConfigManager._config_path)
                 ConfigManager._last_load_time = time.time()
                 logger.info("Config saved successfully.")
+                
+                # Trigger callback if defined (outside of lock if possible, but fine inside for now)
+                if ConfigManager.on_save:
+                    try:
+                        ConfigManager.on_save(new_config)
+                    except Exception as e:
+                        logger.error("Error in on_save callback: %s", e)
+                        
                 return True
             except OSError as exc:
                 logger.error("Error saving config: %s", exc)

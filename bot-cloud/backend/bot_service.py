@@ -2794,6 +2794,15 @@ class BotService:
                 from backend.api import broadcast_log
                 asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
 
+        elif etype == "sync_config_full":
+            new_cfg = event.get("config")
+            if new_cfg:
+                from backend.config_manager import ConfigManager
+                ConfigManager.save_config(new_cfg)
+                logger.info("Cloud config completely synced from Local Pi UI changes.")
+                from backend.api import broadcast_log
+                asyncio.create_task(broadcast_log({"type": "config_update", "config": new_cfg}))
+
         elif etype == "viewer_api_action":
             action = event.get("action")
             params = event.get("params", {})
