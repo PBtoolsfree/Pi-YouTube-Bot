@@ -148,6 +148,8 @@ class ConfigManager:
                 tmp_path = ConfigManager._config_path + ".tmp"
                 with open(tmp_path, "w", encoding="utf-8") as fh:
                     json.dump(new_config, fh, indent=4, ensure_ascii=False)
+                    fh.flush()
+                    os.fsync(fh.fileno())
 
                 # Atomic replace
                 os.replace(tmp_path, ConfigManager._config_path)
