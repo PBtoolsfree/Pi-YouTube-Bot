@@ -15,20 +15,21 @@ GAMBLING_FILE = os.path.join(BASE, "data", "gambling_history.json")
 VIEWERS_DB = os.path.join(BASE, "viewers.db")
 
 RANKS = [
-    {"name": "Noob",     "min_points": 0},
-    {"name": "Bronze",   "min_points": 100},
-    {"name": "Silver",   "min_points": 500},
-    {"name": "Gold",     "min_points": 2000},
-    {"name": "Diamond",  "min_points": 5000},
-    {"name": "GOD",      "min_points": 10000},
+    {"name": "Noob",     "min_messages": 0, "min_hours": 0},
+    {"name": "Bronze",   "min_messages": 100, "min_hours": 0},
+    {"name": "Silver",   "min_messages": 500, "min_hours": 0},
+    {"name": "Gold",     "min_messages": 2000, "min_hours": 0},
+    {"name": "Diamond",  "min_messages": 5000, "min_hours": 0},
+    {"name": "GOD",      "min_messages": 10000, "min_hours": 0},
 ]
 
-def get_rank(points):
-    current = RANKS[0]
-    for r in RANKS:
-        if points >= r["min_points"]:
-            current = r
-    return current["name"]
+def get_rank(msg_count, watch_time=0):
+    watch_hours = watch_time / 3600.0
+    sorted_ranks = sorted(RANKS, key=lambda x: int(x.get("min_messages", 0)), reverse=True)
+    for r in sorted_ranks:
+        if msg_count >= int(r.get("min_messages", 0)) and watch_hours >= float(r.get("min_hours", 0)):
+            return r["name"]
+    return RANKS[0]["name"]
 
 
 def main():
@@ -205,7 +206,8 @@ def main():
             "last_seen": last_seen or time.time(),
             "last_date": last_date,
             "consecutive_days": consecutive,
-            "rank": get_rank(best_points),
+            "rank": get_rank(msg_count, 0),
+            "watch_time": 0,
         }
         if user_id:
             viewers[user]["channel_id"] = user_id

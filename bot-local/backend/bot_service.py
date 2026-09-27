@@ -1401,7 +1401,7 @@ class BotService:
             check_loyalty_cb=self._check_loyalty,
             channel_id=channel_id
         )
-        rank_info = self.viewers.get_rank(viewer_data.get("count", 0))
+        rank_info = self.viewers.get_rank(viewer_data.get("count", 0), viewer_data.get("watch_time", 0))
         
         if is_forwarded:
             return None
@@ -1540,27 +1540,36 @@ class BotService:
             v = self.viewers.get_viewer(author)
             pts = v.get("points", 0)
             msg_count = v.get("count", 0)
+            watch_time = v.get("watch_time", 0)
+            watch_hours = watch_time / 3600.0
             
             # Find next rank
             cfg = self.load_config().get("loyalty", {})
             ranks = cfg.get("ranks", self.viewers.ranks)
-            sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)))
+            sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)), reverse=True)
             
-            rank_obj = self.viewers.get_rank(msg_count)
+            rank_obj = self.viewers.get_rank(msg_count, watch_time)
             rank = rank_obj["name"]
             emoji = rank_obj.get("emoji", "")
             
+            sorted_ranks_asc = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)))
             next_rank = None
-            for r in sorted_ranks:
-                if int(r.get("min_messages", 0)) > msg_count:
+            for r in sorted_ranks_asc:
+                req_m = int(r.get("min_messages", 0))
+                req_h = float(r.get("min_hours", 0))
+                if msg_count < req_m or watch_hours < req_h:
                     next_rank = r
                     break
                 
             if next_rank:
-                req = int(next_rank.get("min_messages", 0)) - msg_count
-                await self._send_chat(f"@{author} You have {pts} Points and {msg_count} Messages! Rank: {rank} {emoji}. {req} Messages until {next_rank['name']}!")
+                req_m = int(next_rank.get("min_messages", 0)) - msg_count
+                req_h = float(next_rank.get("min_hours", 0)) - watch_hours
+                req_m_str = f"{req_m} Messages" if req_m > 0 else ""
+                req_h_str = f"{req_h:.1f} Hours" if req_h > 0 else ""
+                req_str = " and ".join(filter(None, [req_m_str, req_h_str]))
+                await self._send_chat(f"@{author} You have {pts} Points, {msg_count} Messages, {watch_hours:.1f} Hrs! Rank: {rank} {emoji}. Need {req_str} for {next_rank['name']}!")
             else:
-                await self._send_chat(f"@{author} You have {pts} Points and {msg_count} Messages! Rank: {rank} {emoji}. You are at the highest rank!")
+                await self._send_chat(f"@{author} You have {pts} Points, {msg_count} Messages, {watch_hours:.1f} Hrs! Rank: {rank} {emoji}. You are at the highest rank!")
         
         elif cmd == "!give":
             if not self.gambling._is_game_enabled("give"):

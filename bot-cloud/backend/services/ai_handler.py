@@ -83,7 +83,7 @@ class AIHandler:
 
             # Get AI Response
             viewer = viewer_service.get_viewer(author)
-            rank = viewer_service.get_rank(viewer.get("count", 0))
+            rank = viewer_service.get_rank(viewer.get("count", 0), viewer.get("watch_time", 0))
             
             logger.info(f"Processing AI Prompt from {author}: {prompt}")
             

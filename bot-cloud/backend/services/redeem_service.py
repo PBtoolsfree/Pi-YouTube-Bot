@@ -181,7 +181,7 @@ class RedeemService:
         # Rank Check
         if reward.get("required_rank"):
             v = viewer_service.get_viewer(author)
-            viewer_rank = viewer_service.get_rank(v.get("count", 0))["name"]
+            viewer_rank = viewer_service.get_rank(v.get("count", 0), v.get("watch_time", 0))["name"]
             
             # Use config-based ranks (same source as viewer_service.get_rank)
             from backend.config_manager import ConfigManager

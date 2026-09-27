@@ -564,12 +564,12 @@ async def get_loyalty_config():
         "bonus_daily_return": 3000,
         "bonus_streak_multiplier": 1.5,
         "ranks": [
-            {"name": "Noob", "emoji": "🐣", "min_messages": 0},
-            {"name": "Bronze", "emoji": "🥉", "min_messages": 100},
-            {"name": "Silver", "emoji": "🥈", "min_messages": 500},
-            {"name": "Gold", "emoji": "🥇", "min_messages": 2000},
-            {"name": "Diamond", "emoji": "💎", "min_messages": 5000},
-            {"name": "GOD", "emoji": "👑", "min_messages": 10000}
+            {"name": "Noob", "emoji": "🐣", "min_messages": 0, "min_hours": 0},
+            {"name": "Bronze", "emoji": "🥉", "min_messages": 100, "min_hours": 0},
+            {"name": "Silver", "emoji": "🥈", "min_messages": 500, "min_hours": 0},
+            {"name": "Gold", "emoji": "🥇", "min_messages": 2000, "min_hours": 0},
+            {"name": "Diamond", "emoji": "💎", "min_messages": 5000, "min_hours": 0},
+            {"name": "GOD", "emoji": "👑", "min_messages": 10000, "min_hours": 0}
         ],
         "rewards": [],
         "games": {
