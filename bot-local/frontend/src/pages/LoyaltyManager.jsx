@@ -1058,7 +1058,7 @@ function ConfigField({ label, value, onChange, type = "text", step }) {
     )
 }
 
-const TIER_STYLES = [
+export const TIER_STYLES = [
     { color: 'text-zinc-400', bg: 'bg-zinc-400/10', border: 'border-zinc-400/20' }, // Noob/gray-like
     { color: 'text-amber-700', bg: 'bg-amber-700/10', border: 'border-amber-700/20' }, // Bronze-like
     { color: 'text-slate-300', bg: 'bg-slate-300/10', border: 'border-slate-300/20' }, // Silver-like
@@ -1071,7 +1071,7 @@ const TIER_STYLES = [
     { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' } // Legend-like
 ]
 
-const getTier = (messages, watchTimeSeconds, config) => {
+export const getTier = (messages, watchTimeSeconds, config) => {
     const watchHours = (watchTimeSeconds || 0) / 3600;
     const defaultTier = { name: 'Noob', color: 'text-zinc-400', bg: 'bg-zinc-400/10', border: 'border-zinc-400/20', icon: '🐣' }
     if (!config || !config.ranks || config.ranks.length === 0) {
@@ -1106,7 +1106,7 @@ const getTier = (messages, watchTimeSeconds, config) => {
     }
 }
 
-function TierBadge({ messages, watchTimeSeconds, config }) {
+export function TierBadge({ messages, watchTimeSeconds, config }) {
     const tier = getTier(messages || 0, watchTimeSeconds || 0, config)
     return (
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border ${tier.bg} ${tier.color} ${tier.border}`}>

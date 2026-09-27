@@ -3,22 +3,28 @@ import axios from 'axios'
 import { Users, Trophy, MessageSquare, Clock, Search } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Input } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
+import { TierBadge } from './LoyaltyManager'
 
 export default function ViewersPage() {
     const [viewers, setViewers] = useState({})
     const [search, setSearch] = useState('')
+    const [loyaltyConfig, setLoyaltyConfig] = useState(null)
 
     useEffect(() => {
-        const fetchViewers = async () => {
+        const fetchData = async () => {
             try {
-                const res = await axios.get('/api/viewers')
-                setViewers(res.data)
+                const [resViewers, resConfig] = await Promise.all([
+                    axios.get('/api/viewers'),
+                    axios.get('/api/config')
+                ]);
+                setViewers(resViewers.data)
+                setLoyaltyConfig(resConfig.data.loyalty)
             } catch (e) {
-                console.error("Viewers fetch error", e)
+                console.error("Fetch error", e)
             }
         }
-        fetchViewers()
-        const div = setInterval(fetchViewers, 10000)
+        fetchData()
+        const div = setInterval(fetchData, 10000)
         return () => clearInterval(div)
     }, [])
 
@@ -27,14 +33,7 @@ export default function ViewersPage() {
         .filter(v => v.name.toLowerCase().includes(search.toLowerCase()))
         .sort((a, b) => b.count - a.count)
 
-    const getRankInfo = (count) => {
-        if (count >= 1000) return { name: "GOD", emoji: "👑", color: "text-amber-400" }
-        if (count >= 500) return { name: "Diamond", emoji: "💎", color: "text-blue-400" }
-        if (count >= 200) return { name: "Gold", emoji: "🥇", color: "text-yellow-500" }
-        if (count >= 50) return { name: "Silver", emoji: "🥈", color: "text-zinc-300" }
-        if (count >= 10) return { name: "Bronze", emoji: "🥉", color: "text-orange-400" }
-        return { name: "Noob", emoji: "🐣", color: "text-zinc-500" }
-    }
+
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
@@ -87,7 +86,6 @@ export default function ViewersPage() {
                                     </tr>
                                 ) : (
                                     sortedViewers.map((viewer, idx) => {
-                                        const rank = getRankInfo(viewer.count)
                                         return (
                                             <tr key={viewer.name} className="hover:bg-white/5 transition-colors group">
                                                 <td className="px-6 py-4 font-mono text-zinc-400">#{idx + 1}</td>
@@ -99,9 +97,7 @@ export default function ViewersPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
-                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${rank.color.replace('text', 'border')}/20 ${rank.color.replace('text', 'bg')}/10 ${rank.color}`}>
-                                                        {rank.emoji} {rank.name}
-                                                    </span>
+                                                    <TierBadge messages={viewer.count || 0} watchTimeSeconds={viewer.watch_time || 0} config={loyaltyConfig} />
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-xs text-muted-foreground font-mono">
                                                     {new Date(viewer.last_seen * 1000).toLocaleString()}
