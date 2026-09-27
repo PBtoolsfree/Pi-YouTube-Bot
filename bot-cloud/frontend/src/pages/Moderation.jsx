@@ -449,7 +449,7 @@ export default function ModerationPage({ config, onSave }) {
                                 <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
                                     <Repeat className="h-4 w-4 text-purple-400" /> Stop Repeating Words
                                 </CardTitle>
-                                <p className="text-[11px] text-zinc-400 mt-1">Stops people from repeating the same word.</p>
+                                <p className="text-[11px] text-zinc-400 mt-1">Stops people from repeating the same words or characters (e.g., "hello hello" or "ohhhhh").</p>
                             </div>
                             <Switch
                                 checked={localConfig.moderation?.filters?.repetition_filter?.enabled ?? false}
@@ -465,7 +465,7 @@ export default function ModerationPage({ config, onSave }) {
                                 <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
                                     <Shield className="h-4 w-4 text-violet-400" /> Auto Spam & Gibberish Blocker
                                 </CardTitle>
-                                <p className="text-[11px] text-zinc-400 mt-1">Automatically detects and mutes repeating characters ("ohhhhh"), spaces, and gibberish.</p>
+                                <p className="text-[11px] text-zinc-400 mt-1">Automatically detects and mutes long keyboard smashes and spammy gibberish text.</p>
                             </div>
                             <Switch
                                 checked={localConfig.moderation?.filters?.gibberish_filter?.enabled ?? true}
