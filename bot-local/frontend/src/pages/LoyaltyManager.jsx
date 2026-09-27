@@ -713,6 +713,7 @@ export default function LoyaltyManagerPage() {
                                             <SortHeader label="Viewer" sortKey="name" current={sortKey} dir={sortDir} onClick={toggleSort} />
                                             <SortHeader label="Points" sortKey="points" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
                                             <SortHeader label="Rank" sortKey="rank" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-center" />
+                                            <SortHeader label="Title" sortKey="custom_title" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-center" />
                                             <SortHeader label="Streak" sortKey="consecutive_days" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-center" />
                                             <SortHeader label="Messages" sortKey="count" current={sortKey} dir={sortDir} onClick={toggleSort} className="text-right" />
                                             <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -733,6 +734,15 @@ export default function LoyaltyManagerPage() {
                                                     {(v.points || 0).toLocaleString()}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-center"><TierBadge messages={v.count || 0} watchTimeSeconds={v.watch_time || 0} config={loyaltyConfig} /></td>
+                                                <td className="px-4 py-2.5 text-center">
+                                                    {v.custom_title ? (
+                                                        <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase whitespace-nowrap">
+                                                            {v.custom_title}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-zinc-600">-</span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-2.5 text-center">
                                                     <span className="text-xs text-zinc-400">{v.consecutive_days || 0} 🔥</span>
                                                 </td>

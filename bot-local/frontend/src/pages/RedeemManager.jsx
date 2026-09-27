@@ -28,7 +28,7 @@ export default function RedeemManager() {
         name: '', cost: 500, type: 'obs', obs_source: '', obs_filter: '',
         sb_action: '', required_rank: '', duration_ms: 5000, mod_duration_days: 7, cooldown_sec: 30, enabled: true,
         eligibility: 'everyone', giveaway_wheel_style: 'roulette', giveaway_elimination: false,
-        giveaway_spin_duration: 5, giveaway_multi_winner: 1
+        giveaway_spin_duration: 5, giveaway_multi_winner: 1, giveaway_prize: '', title_text: ''
     })
 
     const fetchRedeems = useCallback(async () => {
@@ -56,7 +56,7 @@ export default function RedeemManager() {
     }, [fetchRedeems])
 
     const resetForm = () => {
-        setForm({ name: '', cost: 500, type: 'obs', obs_source: '', obs_filter: '', sb_action: '', required_rank: '', duration_ms: 5000, mod_duration_days: 7, cooldown_sec: 30, enabled: true, eligibility: 'everyone', giveaway_wheel_style: 'roulette', giveaway_elimination: false, giveaway_spin_duration: 5, giveaway_multi_winner: 1, giveaway_prize: '' })
+        setForm({ name: '', cost: 500, type: 'obs', obs_source: '', obs_filter: '', sb_action: '', required_rank: '', duration_ms: 5000, mod_duration_days: 7, cooldown_sec: 30, enabled: true, eligibility: 'everyone', giveaway_wheel_style: 'roulette', giveaway_elimination: false, giveaway_spin_duration: 5, giveaway_multi_winner: 1, giveaway_prize: '', title_text: '' })
         setEditing(null)
         setShowForm(false)
     }
@@ -72,7 +72,7 @@ export default function RedeemManager() {
             obs_filter: r.obs_filter || '', sb_action: r.sb_action || '', required_rank: r.required_rank || '',
             duration_ms: r.duration_ms, mod_duration_days: r.mod_duration_days || 7, cooldown_sec: r.cooldown_sec, enabled: r.enabled,
             eligibility: r.eligibility || 'everyone', giveaway_wheel_style: r.giveaway_wheel_style || 'roulette',
-            giveaway_elimination: r.giveaway_elimination || false, giveaway_spin_duration: r.giveaway_spin_duration || 5, giveaway_multi_winner: r.giveaway_multi_winner || 1, giveaway_prize: r.giveaway_prize || ''
+            giveaway_elimination: r.giveaway_elimination || false, giveaway_spin_duration: r.giveaway_spin_duration || 5, giveaway_multi_winner: r.giveaway_multi_winner || 1, giveaway_prize: r.giveaway_prize || '', title_text: r.title_text || ''
         })
         setEditing(r)
         setShowForm(true)
@@ -221,6 +221,16 @@ export default function RedeemManager() {
                                         <option value="everyone">Everyone</option>
                                         <option value="member">Members Only</option>
                                     </select>
+                                </div>
+                            )}
+                            {form.type === 'title' && (
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-zinc-400 uppercase tracking-wider">Title Text</Label>
+                                    <Input
+                                        value={form.title_text}
+                                        onChange={e => setForm({ ...form, title_text: e.target.value })}
+                                        placeholder="e.g. VIP, Boss, Pro Gamer"
+                                    />
                                 </div>
                             )}
                         </div>

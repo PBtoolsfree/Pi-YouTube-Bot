@@ -106,6 +106,7 @@ class RedeemService:
             "giveaway_spin_duration": self._safe_int(data.get("giveaway_spin_duration", 5), 5),
             "giveaway_multi_winner": self._safe_int(data.get("giveaway_multi_winner", 1), 1),
             "giveaway_prize": data.get("giveaway_prize", ""),
+            "title_text": data.get("title_text", ""),
             "created_at": time.time(),
         }
         self.redeems.append(reward)
@@ -119,7 +120,7 @@ class RedeemService:
                 for key in ["name", "cost", "obs_source", "obs_filter", "sb_action", "type", "role_id",
                              "mod_duration_days", "required_rank", "duration_ms", "cooldown_sec", "enabled",
                              "eligibility", "giveaway_wheel_style", "giveaway_elimination", 
-                             "giveaway_spin_duration", "giveaway_multi_winner", "giveaway_prize"]:
+                             "giveaway_spin_duration", "giveaway_multi_winner", "giveaway_prize", "title_text"]:
                     if key in data:
                         val = data[key]
                         if key in ("cost", "duration_ms", "cooldown_sec", "mod_duration_days", "giveaway_spin_duration", "giveaway_multi_winner"):

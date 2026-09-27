@@ -3030,7 +3030,7 @@ class BotService:
     async def _apply_api_reward(self, author, reward_type, parameters, chat_obj=None):
         """Applies a Native API reward to a user (YouTube Mod, Giveaway Ticket). Returns error string on failure."""
         if reward_type == "title":
-            title = parameters.get("name", "Title")
+            title = parameters.get("title_text") or parameters.get("name", "Title")
             v = self.viewers.get_viewer(author)
             v["custom_title"] = title
             self.viewers._dirty = True
