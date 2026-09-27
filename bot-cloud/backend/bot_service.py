@@ -2500,10 +2500,26 @@ class BotService:
             await self._send_chat(f"@{author} Use !redeem <name> to buy an item!")
 
     async def _handle_redeem_cmd(self, author, redeem_name, chat_obj=None):
+        custom_title_text = None
         reward = self.redeem_svc.get_by_name(redeem_name)
+        if not reward:
+            # Check for custom title rewards which may have additional text
+            custom_rewards = [r for r in self.redeem_svc.redeems if r.get("type") == "custom_title" and r.get("enabled")]
+            for cr in custom_rewards:
+                cr_name_lower = cr["name"].lower()
+                if redeem_name.lower().startswith(cr_name_lower + " "):
+                    reward = cr
+                    custom_title_text = redeem_name[len(cr_name_lower):].strip()
+                    break
+
         if not reward:
             await self._send_chat(f"@{author} Unknown reward '{redeem_name}'. Use !shop to see list.")
             return
+        
+        # Inject custom title text into the reward object temporarily
+        if custom_title_text:
+            reward = dict(reward) # Create a copy so we don't modify the service's dict
+            reward["custom_title_text"] = custom_title_text
         
         target_sb_ws = self.sb_ws
         
@@ -3013,6 +3029,22 @@ class BotService:
 
     async def _apply_api_reward(self, author, reward_type, parameters, chat_obj=None):
         """Applies a Native API reward to a user (YouTube Mod, Giveaway Ticket). Returns error string on failure."""
+        if reward_type == "title":
+            title = parameters.get("name", "Title")
+            v = self.viewers.get_viewer(author)
+            v["custom_title"] = title
+            self.viewers._dirty = True
+            return "" # Empty string means success
+            
+        if reward_type == "custom_title":
+            title = parameters.get("custom_title_text")
+            if not title:
+                return "You must specify a title! Example: !redeem Custom Title <your title>"
+            v = self.viewers.get_viewer(author)
+            v["custom_title"] = title
+            self.viewers._dirty = True
+            return ""
+
         if reward_type in ["youtube_mod", "youtube_mod_rank"]:
             duration_days = int(parameters.get("duration", parameters.get("mod_duration_days", 7)))
             duration_sec = duration_days * 86400

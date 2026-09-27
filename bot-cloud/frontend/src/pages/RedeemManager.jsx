@@ -206,6 +206,8 @@ export default function RedeemManager() {
                                     <option value="obs">OBS Effect (Streamer.bot)</option>
                                     <option value="youtube_mod">YouTube Moderator</option>
                                     <option value="giveaway_ticket">Giveaway Ticket</option>
+                                    <option value="title">Predefined Title</option>
+                                    <option value="custom_title">Custom Title</option>
                                 </select>
                             </div>
                             {form.type === 'giveaway_ticket' && (

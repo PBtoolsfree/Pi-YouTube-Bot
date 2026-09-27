@@ -178,12 +178,14 @@ IMPORTANT: Jab koi viewer game ke baare mein puche, to ENTHUSIASTICALLY aur DETA
 
             # Inject Viewer Lore/Stats
             points = viewer.get("points", 0)
+            title = viewer.get("custom_title")
+            title_info = f", Title: {title}" if title else ""
             if prompt.lower().startswith("bot roast"):
-                system_prompt += f"\n\nThe user {author} asked you to roast them or someone else. Make it funny, safe, and reference their point balance ({points}) and rank ({rank['name']})."
+                system_prompt += f"\n\nThe user {author} asked you to roast them or someone else. Make it funny, safe, and reference their point balance ({points}) and rank ({rank['name']}){title_info}."
             elif prompt.lower().startswith("bot hype"):
-                system_prompt += f"\n\nThe user {author} asked for hype. Give them a WWE-style intro using their rank ({rank['name']}) and points ({points})."
+                system_prompt += f"\n\nThe user {author} asked for hype. Give them a WWE-style intro using their rank ({rank['name']}) and points ({points}){title_info}."
             else:
-                system_prompt += f"\n\nViewer Info: The viewer asking this is {author} (Points: {points}, Rank: {rank['name']}). Be concise and engaging."
+                system_prompt += f"\n\nViewer Info: The viewer asking this is {author} (Points: {points}, Rank: {rank['name']}{title_info}). Be concise and engaging."
             
             # Pass full history to AI
             result = await self.ai.chat(self.history[author], system_prompt=system_prompt)
@@ -214,8 +216,10 @@ IMPORTANT: Jab koi viewer game ke baare mein puche, to ENTHUSIASTICALLY aur DETA
                      if self.history[author] and self.history[author][0]["role"] == "assistant":
                          self.history[author].pop(0)
 
+                title = viewer.get("custom_title")
+                title_prefix = f"[{title}] " if title else ""
                 prefix = f"[{rank['emoji']} {rank['name']}] "
-                full_response = f"{prefix}To {author}: {clean_response}"
+                full_response = f"{prefix}To {title_prefix}{author}: {clean_response}"
                 
                 # Log to UI
                 await log_ui_cb("AI_RESPONSE", full_response, meta=result)
