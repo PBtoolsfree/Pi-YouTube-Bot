@@ -515,8 +515,6 @@ export default function ModerationPage({ config, onSave }) {
                                 </div>
                             )}
 
-
-                            </div>
                         </CardContent>
                     </Card>
 
