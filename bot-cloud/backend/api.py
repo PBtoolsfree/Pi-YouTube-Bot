@@ -776,12 +776,12 @@ async def get_loyalty_config():
         "points_per_membership_l4": 0,
         "points_per_gifted_membership": 0,
         "ranks": [
-            {"name": "Noob", "emoji": "🐣", "min_points": 0, "yt_mod": False, "mod_duration_days": 0},
-            {"name": "Bronze", "emoji": "🥉", "min_points": 100, "yt_mod": False, "mod_duration_days": 0},
-            {"name": "Silver", "emoji": "🥈", "min_points": 500, "yt_mod": False, "mod_duration_days": 0},
-            {"name": "Gold", "emoji": "🥇", "min_points": 2000, "yt_mod": False, "mod_duration_days": 0},
-            {"name": "Diamond", "emoji": "💎", "min_points": 5000, "yt_mod": True, "mod_duration_days": 7},
-            {"name": "GOD", "emoji": "👑", "min_points": 10000, "yt_mod": True, "mod_duration_days": 30}
+            {"name": "Noob", "emoji": "🐣", "min_messages": 0},
+            {"name": "Bronze", "emoji": "🥉", "min_messages": 100},
+            {"name": "Silver", "emoji": "🥈", "min_messages": 500},
+            {"name": "Gold", "emoji": "🥇", "min_messages": 2000},
+            {"name": "Diamond", "emoji": "💎", "min_messages": 5000},
+            {"name": "GOD", "emoji": "👑", "min_messages": 10000}
         ],
         "rewards": []
     }

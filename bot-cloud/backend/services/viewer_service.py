@@ -10,12 +10,12 @@ class ViewerService:
     def __init__(self, viewers_path="viewers.json"):
         self.viewers_path = viewers_path
         self.ranks = [
-            {"name": "Noob", "emoji": "🐣", "min_points": 0},
-            {"name": "Bronze", "emoji": "🥉", "min_points": 100},
-            {"name": "Silver", "emoji": "🥈", "min_points": 500},
-            {"name": "Gold", "emoji": "🥇", "min_points": 2000},
-            {"name": "Diamond", "emoji": "💎", "min_points": 5000},
-            {"name": "GOD", "emoji": "👑", "min_points": 10000}
+            {"name": "Noob", "emoji": "🐣", "min_messages": 0},
+            {"name": "Bronze", "emoji": "🥉", "min_messages": 100},
+            {"name": "Silver", "emoji": "🥈", "min_messages": 500},
+            {"name": "Gold", "emoji": "🥇", "min_messages": 2000},
+            {"name": "Diamond", "emoji": "💎", "min_messages": 5000},
+            {"name": "GOD", "emoji": "👑", "min_messages": 10000}
         ]
         self.viewers = self._load_viewers()
         
@@ -285,7 +285,7 @@ class ViewerService:
                 self.viewers[author]["count"] = self.viewers[author].get("count", 0) + old_data.get("count", 0)
                 self.viewers[author]["consecutive_days"] = max(self.viewers[author].get("consecutive_days", 1), old_data.get("consecutive_days", 1))
                 self.viewers[author]["channel_id"] = channel_id
-                self.viewers[author]["rank"] = self.get_rank(self.viewers[author]["points"])["name"]
+                self.viewers[author]["rank"] = self.get_rank(self.viewers[author].get("count", 0))["name"]
                 
                 # Keep other legacy stats if they don't exist in new profile
                 if "first_seen_today" in old_data and "first_seen_today" not in self.viewers[author]:
@@ -373,12 +373,12 @@ class ViewerService:
         if author not in self.viewers: return
         
         v = self.viewers[author]
-        old_rank = self.get_rank(v["points"])
+        old_rank = self.get_rank(v.get("count", 0))
         
         v["points"] += amount
         self.mark_dirty()
         
-        new_rank = self.get_rank(v["points"])
+        new_rank = self.get_rank(v.get("count", 0))
         
         if old_rank["name"] != new_rank["name"]:
             v["rank"] = new_rank["name"]
@@ -401,19 +401,19 @@ class ViewerService:
             return True
         return False
 
-    def get_rank(self, points):
+    def get_rank(self, messages_count):
         from backend.config_manager import ConfigManager
         cfg = ConfigManager.get_config().get("loyalty", {})
         ranks = cfg.get("ranks", self.ranks)
         
         if not ranks:
-            return {"name": "Noob", "emoji": "🐣", "min_points": 0}
+            return {"name": "Noob", "emoji": "🐣", "min_messages": 0}
             
         current_rank = ranks[0]
-        sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_points", 0)))
+        sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)))
         
         for rank in sorted_ranks:
-            if points >= int(rank.get("min_points", 0)):
+            if messages_count >= int(rank.get("min_messages", 0)):
                 current_rank = rank
             else:
                 break
@@ -540,7 +540,7 @@ class ViewerService:
             
         # Rank update logic since points decreased
         old_rank = v.get("rank", "Noob")
-        new_rank = self.get_rank(v["points"])
+        new_rank = self.get_rank(v.get("count", 0))
         if old_rank != new_rank["name"]:
             v["rank"] = new_rank["name"]
             
@@ -576,7 +576,7 @@ class ViewerService:
             return True
         if author not in self.viewers: return False
         self.viewers[author]["points"] = max(0, int(amount))
-        self.viewers[author]["rank"] = self.get_rank(self.viewers[author]["points"])["name"]
+        self.viewers[author]["rank"] = self.get_rank(self.viewers[author].get("count", 0))["name"]
         self.mark_dirty()
         self._save_single_viewer(author, self.viewers[author])
         self._notify_viewer_update(author, "set_points")
@@ -595,8 +595,8 @@ class ViewerService:
         if self.viewers[sender]["points"] >= amount:
             self.viewers[sender]["points"] -= amount
             self.viewers[receiver]["points"] += amount
-            self.viewers[receiver]["rank"] = self.get_rank(self.viewers[receiver]["points"])["name"]
-            self.viewers[sender]["rank"] = self.get_rank(self.viewers[sender]["points"])["name"]
+            self.viewers[receiver]["rank"] = self.get_rank(self.viewers[receiver].get("count", 0))["name"]
+            self.viewers[sender]["rank"] = self.get_rank(self.viewers[sender].get("count", 0))["name"]
             
             self.mark_dirty()
             self._save_single_viewer(sender, self.viewers[sender])
@@ -664,7 +664,7 @@ class ViewerService:
     def get_leaderboard(self, limit=10):
         # Sort by points desc
         sorted_viewers = sorted(
-            [{"name": k, "rank": self.get_rank(v.get("points", 0))["name"], **v} for k, v in self.viewers.items()],
+            [{"name": k, "rank": self.get_rank(v.get("count", 0))["name"], **v} for k, v in self.viewers.items()],
             key=lambda x: x.get("points", 0),
             reverse=True
         )

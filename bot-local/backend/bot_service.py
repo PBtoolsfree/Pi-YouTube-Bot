@@ -1401,7 +1401,7 @@ class BotService:
             check_loyalty_cb=self._check_loyalty,
             channel_id=channel_id
         )
-        rank_info = self.viewers.get_rank(viewer_data.get("points", 0))
+        rank_info = self.viewers.get_rank(viewer_data.get("count", 0))
         
         if is_forwarded:
             return None
@@ -1539,27 +1539,28 @@ class BotService:
         elif cmd == "!points" or cmd == "!ponits":
             v = self.viewers.get_viewer(author)
             pts = v.get("points", 0)
+            msg_count = v.get("count", 0)
             
             # Find next rank
             cfg = self.load_config().get("loyalty", {})
             ranks = cfg.get("ranks", self.viewers.ranks)
-            sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_points", 0)))
+            sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)))
             
-            rank_obj = self.viewers.get_rank(pts)
+            rank_obj = self.viewers.get_rank(msg_count)
             rank = rank_obj["name"]
             emoji = rank_obj.get("emoji", "")
             
             next_rank = None
             for r in sorted_ranks:
-                if int(r.get("min_points", 0)) > pts:
+                if int(r.get("min_messages", 0)) > msg_count:
                     next_rank = r
                     break
                 
             if next_rank:
-                req = int(next_rank.get("min_points", 0)) - pts
-                await self._send_chat(f"@{author} You have {pts} Points! Rank: {rank} {emoji}. {req} Points until {next_rank['name']}!")
+                req = int(next_rank.get("min_messages", 0)) - msg_count
+                await self._send_chat(f"@{author} You have {pts} Points and {msg_count} Messages! Rank: {rank} {emoji}. {req} Messages until {next_rank['name']}!")
             else:
-                await self._send_chat(f"@{author} You have {pts} Points! Rank: {rank} {emoji}. You are at the max rank!")
+                await self._send_chat(f"@{author} You have {pts} Points and {msg_count} Messages! Rank: {rank} {emoji}. You are at the highest rank!")
         
         elif cmd == "!give":
             if not self.gambling._is_game_enabled("give"):
@@ -2169,9 +2170,7 @@ class BotService:
         if native_reward:
              await self._apply_api_reward(author, native_reward.get("type"), native_reward)
 
-        # Check for our new top-level YouTube Mod rank rewards
-        if rank.get("yt_mod"):
-             await self._apply_api_reward(author, "youtube_mod_rank", {"duration": rank.get("mod_duration_days", 7)})
+
 
     async def _apply_api_reward(self, author, reward_type, parameters, chat_obj=None):
         """Applies a Native API reward to a user (YouTube Mod, Giveaway Ticket). Returns error string on failure."""

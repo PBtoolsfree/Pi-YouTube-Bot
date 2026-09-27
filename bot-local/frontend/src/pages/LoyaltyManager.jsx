@@ -246,11 +246,11 @@ export default function LoyaltyManagerPage() {
                             <CardContent className="p-4 space-y-4">
                                 {loyaltyConfig && (loyaltyConfig.ranks || []).length > 0 ? (
                                     [...loyaltyConfig.ranks]
-                                        .sort((a, b) => b.min_points - a.min_points)
+                                        .sort((a, b) => b.min_messages - a.min_messages)
                                         .map(rank => {
-                                            const count = viewerList.filter(v => getTier(v.points || 0, loyaltyConfig).name === rank.name).length
+                                            const count = viewerList.filter(v => getTier(v.count || 0, loyaltyConfig).name === rank.name).length
                                             const percent = viewerList.length > 0 ? (count / viewerList.length) * 100 : 0
-                                            const tierData = getTier(rank.min_points, loyaltyConfig)
+                                            const tierData = getTier(rank.min_messages, loyaltyConfig)
                                             return (
                                                 <div key={rank.name} className="space-y-1">
                                                     <div className="flex justify-between text-xs">
@@ -265,7 +265,7 @@ export default function LoyaltyManagerPage() {
                                         })
                                 ) : (
                                     ['DIAMOND', 'PLATINUM', 'GOLD', 'SILVER', 'BRONZE'].map(tierName => {
-                                        const count = viewerList.filter(v => getTier(v.points || 0).name === tierName).length
+                                        const count = viewerList.filter(v => getTier(v.count || 0).name === tierName).length
                                         const percent = viewerList.length > 0 ? (count / viewerList.length) * 100 : 0
                                         const tierData = getTier(tierName === 'DIAMOND' ? 10000 : tierName === 'PLATINUM' ? 5000 : tierName === 'GOLD' ? 2000 : tierName === 'SILVER' ? 500 : 0)
                                         return (
@@ -313,7 +313,7 @@ export default function LoyaltyManagerPage() {
                                                             {v.name}
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-3 text-center"><TierBadge points={v.points} config={loyaltyConfig} /></td>
+                                                    <td className="px-6 py-3 text-center"><TierBadge messages={v.count || 0} config={loyaltyConfig} /></td>
                                                     <td className="px-6 py-3 text-center">
                                                         <div className="inline-flex items-center gap-1 bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded text-[10px] border border-blue-500/20 font-medium">
                                                             {v.consecutive_days || 1} 🔥
@@ -404,7 +404,7 @@ export default function LoyaltyManagerPage() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-3 text-right"><TierBadge points={v.points} config={loyaltyConfig} /></td>
+                                            <td className="px-6 py-3 text-right"><TierBadge messages={v.count || 0} config={loyaltyConfig} /></td>
                                             <td className="px-6 py-3 text-right font-mono font-bold text-sm">
                                                 {(v.points || 0).toLocaleString()} <span className="text-zinc-600 text-[10px] font-normal uppercase">PTS</span>
                                             </td>
@@ -732,7 +732,7 @@ export default function LoyaltyManagerPage() {
                                                 <td className="px-4 py-2.5 text-right font-mono font-bold text-sm text-zinc-100">
                                                     {(v.points || 0).toLocaleString()}
                                                 </td>
-                                                <td className="px-4 py-2.5 text-center"><TierBadge points={v.points} config={loyaltyConfig} /></td>
+                                                <td className="px-4 py-2.5 text-center"><TierBadge messages={v.count || 0} config={loyaltyConfig} /></td>
                                                 <td className="px-4 py-2.5 text-center">
                                                     <span className="text-xs text-zinc-400">{v.consecutive_days || 0} 🔥</span>
                                                 </td>
@@ -934,7 +934,7 @@ export default function LoyaltyManagerPage() {
                             </CardTitle>
                             <button onClick={() => setLoyaltyConfig(c => ({
                                 ...c,
-                                ranks: [...(c.ranks || []), { name: "New Rank", emoji: "⭐", min_points: 0, yt_mod: false, mod_duration_days: 0 }]
+                                ranks: [...(c.ranks || []), { name: "New Rank", emoji: "⭐", min_messages: 0 }]
                             }))} className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1">
                                 <Plus className="h-3 w-3" /> Add Rank
                             </button>
@@ -945,9 +945,7 @@ export default function LoyaltyManagerPage() {
                                     <tr>
                                         <th className="px-4 py-2 text-left font-medium">Emoji</th>
                                         <th className="px-4 py-2 text-left font-medium">Name</th>
-                                        <th className="px-4 py-2 text-right font-medium">Min Points</th>
-                                        <th className="px-4 py-2 text-center font-medium">YT Mod</th>
-                                        <th className="px-4 py-2 text-right font-medium text-[10px] leading-tight w-24">Auto-<br/>Remove (Days)</th>
+                                        <th className="px-4 py-2 text-right font-medium">Min Messages</th>
                                         <th className="px-4 py-2 w-16"></th>
                                     </tr>
                                 </thead>
@@ -969,28 +967,9 @@ export default function LoyaltyManagerPage() {
                                                     }} />
                                             </td>
                                             <td className="px-4 py-2 text-right">
-                                                <Input type="number" className="h-7 text-sm bg-zinc-800 border-zinc-700 text-zinc-200 text-right w-24 ml-auto" value={rank.min_points}
+                                                <Input type="number" className="h-7 text-sm bg-zinc-800 border-zinc-700 text-zinc-200 text-right w-24 ml-auto" value={rank.min_messages}
                                                     onChange={e => {
-                                                        const ranks = [...loyaltyConfig.ranks]; ranks[idx] = { ...ranks[idx], min_points: parseInt(e.target.value) || 0 }
-                                                        setLoyaltyConfig(c => ({ ...c, ranks }))
-                                                    }} />
-                                            </td>
-                                            <td className="px-4 py-2 text-center">
-                                                <div className="flex justify-center">
-                                                    <Switch checked={rank.yt_mod || false}
-                                                        onCheckedChange={val => {
-                                                            const ranks = [...loyaltyConfig.ranks]; ranks[idx] = { ...ranks[idx], yt_mod: val }
-                                                            setLoyaltyConfig(c => ({ ...c, ranks }))
-                                                        }} />
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <Input type="number" 
-                                                    className={`h-7 text-sm text-right w-16 ml-auto ${!rank.yt_mod ? 'bg-zinc-800/50 border-zinc-800 text-zinc-600' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`} 
-                                                    value={rank.mod_duration_days || 0}
-                                                    disabled={!rank.yt_mod}
-                                                    onChange={e => {
-                                                        const ranks = [...loyaltyConfig.ranks]; ranks[idx] = { ...ranks[idx], mod_duration_days: parseInt(e.target.value) || 0 }
+                                                        const ranks = [...loyaltyConfig.ranks]; ranks[idx] = { ...ranks[idx], min_messages: parseInt(e.target.value) || 0 }
                                                         setLoyaltyConfig(c => ({ ...c, ranks }))
                                                     }} />
                                             </td>
@@ -1074,23 +1053,23 @@ const TIER_STYLES = [
     { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' } // Legend-like
 ]
 
-const getTier = (points, config) => {
+const getTier = (messages, config) => {
     const defaultTier = { name: 'Noob', color: 'text-zinc-400', bg: 'bg-zinc-400/10', border: 'border-zinc-400/20', icon: '🐣' }
     if (!config || !config.ranks || config.ranks.length === 0) {
-        if (points >= 10000) return { name: 'DIAMOND', color: 'text-cyan-400', bg: 'bg-cyan-400/10', border: 'border-cyan-400/20', icon: '💎' }
-        if (points >= 5000) return { name: 'PLATINUM', color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20', icon: '💠' }
-        if (points >= 2000) return { name: 'GOLD', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20', icon: '👑' }
-        if (points >= 500) return { name: 'SILVER', color: 'text-slate-300', bg: 'bg-slate-300/10', border: 'border-slate-300/20', icon: '⚔️' }
+        if (messages >= 10000) return { name: 'DIAMOND', color: 'text-cyan-400', bg: 'bg-cyan-400/10', border: 'border-cyan-400/20', icon: '💎' }
+        if (messages >= 5000) return { name: 'PLATINUM', color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20', icon: '💠' }
+        if (messages >= 2000) return { name: 'GOLD', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20', icon: '👑' }
+        if (messages >= 500) return { name: 'SILVER', color: 'text-slate-300', bg: 'bg-slate-300/10', border: 'border-slate-300/20', icon: '⚔️' }
         return { name: 'BRONZE', color: 'text-amber-700', bg: 'bg-amber-700/10', border: 'border-amber-700/20', icon: '🛡️' }
     }
     
-    const sortedRanks = [...config.ranks].sort((a, b) => a.min_points - b.min_points)
+    const sortedRanks = [...config.ranks].sort((a, b) => a.min_messages - b.min_messages)
     
     let matchedRank = sortedRanks[0]
     let matchedIdx = 0
     
     for (let i = 0; i < sortedRanks.length; i++) {
-        if (points >= sortedRanks[i].min_points) {
+        if (messages >= sortedRanks[i].min_messages) {
             matchedRank = sortedRanks[i]
             matchedIdx = i
         }
@@ -1108,8 +1087,8 @@ const getTier = (points, config) => {
     }
 }
 
-function TierBadge({ points, config }) {
-    const tier = getTier(points || 0, config)
+function TierBadge({ messages, config }) {
+    const tier = getTier(messages || 0, config)
     return (
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border ${tier.bg} ${tier.color} ${tier.border}`}>
             <span>{tier.icon}</span>
