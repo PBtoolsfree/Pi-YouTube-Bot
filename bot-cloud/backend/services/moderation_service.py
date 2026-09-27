@@ -128,10 +128,25 @@ class ModerationService:
             if count >= limit:
                 return True, sym_cfg.get("message", f"Too many symbols/emojis! (Max {limit})")
 
-        # E. Repetition Filter
+        # E. Repetition Filter (Words & Characters)
         rep_cfg = filters.get("repetition_filter", {})
         if rep_cfg.get("enabled"):
+            # 1. Consecutive Character Repetition (e.g. "ohhhhhhh")
+            if re.search(r"(.)\1{4,}", message):
+                return True, "Stop repeating characters!"
+
             words = message.split()
+            if words:
+                from collections import Counter
+                word_counts = Counter([w.lower() for w in words])
+                for w, count in word_counts.items():
+                    # If a word is repeated 3 or more times
+                    if len(w) > 1 and count >= 3:
+                        return True, "Stop repeating words!"
+                    # For single characters (like 'a a a a')
+                    elif len(w) == 1 and count >= 4:
+                        return True, "Stop repeating words!"
+
             if len(words) > 3:
                 unique = set([w.lower() for w in words])
                 ratio = len(unique) / len(words)
@@ -154,25 +169,10 @@ class ModerationService:
             if len(message) > len_cfg.get("limit", 300):
                 return True, "Message is too long! (Text Wall)"
 
-        # H. Auto Spam & Gibberish Filter
+        # H. Auto Spam & Gibberish Filter (Keyboard smashes, long texts)
         gib_cfg = filters.get("gibberish_filter", {})
         if gib_cfg.get("enabled", True):
-            # 1. Consecutive Character Repetition (e.g. "ohhhhhhh", "ahhhhhhh")
-            if re.search(r"(.)\1{4,}", message):
-                return True, "Excessive character repetition detected!"
-
-            # 2. Repeated Words Filter (e.g., "hello hello hello hello")
             words = message.split()
-            if words:
-                from collections import Counter
-                word_counts = Counter([w.lower() for w in words])
-                for w, count in word_counts.items():
-                    # If a word (length > 1) is repeated 3 or more times
-                    if len(w) > 1 and count >= 3:
-                        return True, f"Repeated word '{w}' detected!"
-                    # For single characters (like 'a a a a'), flag if repeated 4 or more times
-                    elif len(w) == 1 and count >= 4:
-                        return True, f"Excessive single character repetition detected!"
 
             # 3. Extremely long words (gibberish/spam, e.g., "gsiyeuueuehdbdhdidhdjs")
             url_pattern = r"(https?://\S+|www\.\S+|\S+\.(com|org|net|io|gg|tv|xyz)\b)"

@@ -474,13 +474,13 @@ export default function ModerationPage({ config, onSave }) {
                         </div>
                     </Card>
 
-                    {/* Spam Blocker & Emoji Spammer */}
+                    {/* Fast Typing Spam */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                         <CardHeader className="p-4 border-b border-zinc-800">
                             <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-indigo-400" /> Spam & Emoji Blocker
+                                <Zap className="h-4 w-4 text-indigo-400" /> Fast Typing Spam
                             </CardTitle>
-                            <p className="text-[11px] text-zinc-400 mt-1">Stop fast typing or spamming too many emojis.</p>
+                            <p className="text-[11px] text-zinc-400 mt-1">Stop fast typing and repeated message spam.</p>
                         </CardHeader>
                         <CardContent className="p-4 space-y-4">
                             <div className="flex items-center justify-between">
@@ -516,23 +516,37 @@ export default function ModerationPage({ config, onSave }) {
                             )}
 
 
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-xs font-medium text-zinc-300">Emoji / Symbol Limit</div>
-                                    <div className="text-[10px] text-zinc-500">Max emojis per message</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Switch
-                                        className="scale-75 origin-right"
-                                        checked={localConfig.moderation?.filters?.excess_symbols?.enabled ?? false}
-                                        onCheckedChange={(c) => updateNested('moderation.filters.excess_symbols.enabled', c)}
-                                    />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Emoji Blocker */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm overflow-hidden">
+                        <div className="flex flex-row items-center justify-between p-4 bg-zinc-900">
+                            <div>
+                                <CardTitle className="text-zinc-100 font-semibold text-sm flex items-center gap-2">
+                                    <EyeOff className="h-4 w-4 text-pink-400" /> Emoji & Symbol Blocker
+                                </CardTitle>
+                                <p className="text-[11px] text-zinc-400 mt-1">Stops people from spamming too many emojis or symbols.</p>
+                            </div>
+                            <Switch
+                                checked={localConfig.moderation?.filters?.excess_symbols?.enabled ?? false}
+                                onCheckedChange={(c) => updateNested('moderation.filters.excess_symbols.enabled', c)}
+                            />
+                        </div>
+                        {localConfig.moderation?.filters?.excess_symbols?.enabled && (
+                            <div className="px-4 pb-4 pt-3 bg-zinc-950/30 border-t border-zinc-800">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs font-medium text-zinc-300">Emoji / Symbol Limit</div>
+                                        <div className="text-[10px] text-zinc-500">Max allowed per message</div>
+                                    </div>
                                     <Input type="number" className="h-7 w-16 text-xs text-center bg-zinc-950 border-zinc-700"
                                         value={localConfig.moderation?.filters?.excess_symbols?.limit ?? 10}
                                         onChange={(e) => updateNested('moderation.filters.excess_symbols.limit', parseInt(e.target.value))} />
                                 </div>
                             </div>
-                        </CardContent>
+                        )}
                     </Card>
 
                     {/* Punishments */}
