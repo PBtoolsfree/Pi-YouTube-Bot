@@ -103,8 +103,29 @@ class YouTubeService:
             return True, mod_id
             
         except Exception as e:
+            err_msg = str(e).lower()
+            if "already a moderator" in err_msg or "400" in err_msg:
+                logger.info(f"User {channel_id_to_mod} is already a moderator. Attempting to fetch existing mod_id...")
+                try:
+                    request = service.liveChatModerators().list(
+                        liveChatId=live_chat_id,
+                        part="snippet",
+                        maxResults=50
+                    )
+                    while request:
+                        response = request.execute()
+                        for item in response.get("items", []):
+                            if item["snippet"]["moderatorDetails"]["channelId"] == channel_id_to_mod:
+                                existing_mod_id = item["id"]
+                                logger.info(f"Found existing mod_id for {channel_id_to_mod}: {existing_mod_id}")
+                                return True, existing_mod_id
+                        request = service.liveChatModerators().list_next(request, response)
+                except Exception as inner_e:
+                    logger.error(f"Failed to fetch existing mod_id: {inner_e}")
+                return True, "UNKNOWN_MOD_ID"
+                
             logger.error(f"YouTube Mod Add Error: {e}")
-            if "force-ssl" in str(e):
+            if "force-ssl" in err_msg:
                 return False, "Missing permissions. Please re-authenticate YouTube in the dashboard."
             return False, f"YouTube API Error: {str(e)}"
 
@@ -113,6 +134,8 @@ class YouTubeService:
         Note: No moderation_enabled check here — revocation is a cleanup action
         that should always be allowed, even if auto-mod granting is disabled.
         """
+        if not mod_id or mod_id == "UNKNOWN_MOD_ID":
+            return False, "No valid mod_id provided — cannot revoke."
         if not mod_id:
             return False, "No mod_id provided — cannot revoke."
         return await asyncio.to_thread(self._remove_moderator_sync, mod_id)

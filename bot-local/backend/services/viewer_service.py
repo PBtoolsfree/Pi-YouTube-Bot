@@ -521,7 +521,7 @@ class ViewerService:
     def get_leaderboard(self, limit=10):
         # Sort by points desc
         sorted_viewers = sorted(
-            [{"name": k, "rank": self.get_rank(v.get("count", 0), v.get("watch_time", 0))["name"], **v} for k, v in self.viewers.items()],
+            [{"name": k, **v, "rank": self.get_rank(v.get("count", 0), v.get("watch_time", 0))["name"]} for k, v in self.viewers.items()],
             key=lambda x: x.get("points", 0),
             reverse=True
         )
