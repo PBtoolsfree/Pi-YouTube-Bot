@@ -445,8 +445,10 @@ class BotService:
         except Exception as e:
              logger.error(f"Sheet Auto-Connect Failed: {e}")
 
-        if os.environ.get("RUN_MODE") == "cloud":
-            logger.info("Running in Cloud Mode. Starting Heavy Lifting Services (AI, YouTube, Goals).")
+        run_mode = os.environ.get("RUN_MODE", "standalone")
+        
+        if run_mode in ["cloud", "standalone"]:
+            logger.info(f"Running in {run_mode.capitalize()} Mode. Starting Heavy Lifting Services (AI, YouTube, Goals).")
             self._spawn_managed_loop("banking", self._banking_loop)
             self.dynamic_engagement_task = self._spawn_managed_loop("dynamic_engagement", self._dynamic_engagement_loop)
             self._spawn_managed_loop("stream_context", self._stream_context_loop)
@@ -456,16 +458,16 @@ class BotService:
             self._spawn_managed_loop("leaderboard_mod_sync", self._leaderboard_mod_sync_loop)
             self._spawn_managed_loop("goal_monitoring", self._goal_monitoring_loop)
             self._spawn_managed_loop("auto_message", self._auto_message_loop)
-            return
 
-        logger.info("Running in Local Pi Mode. Starting Hardware/Local Services (Audio, Streamer.bot).")
-        # Always start SB loop so it can dynamically connect when enabled via UI
-        self.sb_ws_task = self._spawn_managed_loop("sb_ws", self._sb_ws_loop)
-        if self.tunnel:
-            self._spawn_task(self.tunnel.start())
-        if self.cloud_alert_client:
-            await self.cloud_alert_client.start()
-        self._spawn_managed_loop("email_monitor", self._email_monitor_loop)
+        if run_mode in ["local", "standalone"]:
+            logger.info(f"Running in {run_mode.capitalize()} Mode. Starting Hardware/Local Services (Audio, Streamer.bot).")
+            # Always start SB loop so it can dynamically connect when enabled via UI
+            self.sb_ws_task = self._spawn_managed_loop("sb_ws", self._sb_ws_loop)
+            if self.tunnel:
+                self._spawn_task(self.tunnel.start())
+            if self.cloud_alert_client:
+                await self.cloud_alert_client.start()
+            self._spawn_managed_loop("email_monitor", self._email_monitor_loop)
 
     async def _auto_message_loop(self):
         """Sends scheduled auto-messages at configured intervals."""
@@ -520,14 +522,19 @@ class BotService:
                             logger.info(f"Reward Expired for {r.get('author')}: {r.get('reward_type')}")
                             revoke_ok = False
                             # Execute removal logic
-                            if r.get("reward_type") == "youtube_mod":
-                                success, msg = await self.youtube_api.remove_moderator(r.get("mod_id"))
-                                if success:
-                                    await self._log_ui("SYSTEM", f"Revoked expired YouTube Moderator from {r.get('author')} (Wrench Taken)")
+                            if r.get("reward_type") in ["youtube_mod", "youtube_mod_rank"]:
+                                is_leaderboard_mod = any(x.get("author") == r.get("author") and x.get("reward_type") == "youtube_mod_leaderboard" for x in rewards)
+                                if is_leaderboard_mod:
+                                    logger.info(f"Skipping moderator revocation for {r.get('author')} because they are a Top 3 Leaderboard mod.")
                                     revoke_ok = True
                                 else:
-                                    logger.warning(f"Failed to revoke expired YouTube Mod for {r.get('author')}: {msg}")
-                                    await self._log_ui("WARNING", f"Failed to revoke expired mod for {r.get('author')}: {msg} — will retry")
+                                    success, msg = await self.youtube_api.remove_moderator(r.get("mod_id"))
+                                    if success:
+                                        await self._log_ui("SYSTEM", f"Revoked expired YouTube Moderator from {r.get('author')} (Wrench Taken)")
+                                        revoke_ok = True
+                                    else:
+                                        logger.warning(f"Failed to revoke expired YouTube Mod for {r.get('author')}: {msg}")
+                                        await self._log_ui("WARNING", f"Failed to revoke expired mod for {r.get('author')}: {msg} — will retry")
                             else:
                                 revoke_ok = True  # Unknown type, just clean up
                             
