@@ -2503,9 +2503,10 @@ class BotService:
         custom_title_text = None
         reward = self.redeem_svc.get_by_name(redeem_name)
         if not reward:
-            # Check for custom title rewards which may have additional text
-            custom_rewards = [r for r in self.redeem_svc.redeems if r.get("type") == "custom_title" and r.get("enabled")]
-            for cr in custom_rewards:
+            # Check for rewards which may have additional text (e.g. custom titles)
+            for cr in self.redeem_svc.redeems:
+                if not cr.get("enabled", True):
+                    continue
                 cr_name_lower = cr["name"].lower()
                 if redeem_name.lower().startswith(cr_name_lower + " "):
                     reward = cr
