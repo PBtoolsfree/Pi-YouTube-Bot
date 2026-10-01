@@ -562,7 +562,7 @@ class BotService:
                 await self.sync_leaderboard_mods()
             except Exception as e:
                 logger.error(f"Leaderboard Mod Sync Loop Error: {e}")
-            await asyncio.sleep(300) # Check every 5 minutes
+            await asyncio.sleep(30) # Check every 30 seconds
 
     async def sync_leaderboard_mods(self):
         """Automatically manages YouTube Mod status for the Top 3 leaderboard viewers."""
@@ -617,8 +617,7 @@ class BotService:
                         if mod.get("mod_id"):
                             success, msg = await self.youtube_api.remove_moderator(mod.get("mod_id"))
                             if success or mod.get("mod_id") == "UNKNOWN_MOD_ID":
-                                if mod.get("mod_id") != "UNKNOWN_MOD_ID":
-                                    await self._log_ui("SYSTEM", f"Revoked Top 3 Mod from {mod.get('author')} (Dropped from Leaderboard)")
+                                await self._log_ui("MOD", f"Revoked Top 3 Mod from {mod.get('author')} (Dropped from Leaderboard)")
                                 needs_save = True
                             else:
                                 # Keep the entry so we retry next cycle
@@ -653,7 +652,7 @@ class BotService:
                                     "mod_id": mod_id_or_err,
                                     "expires_at": None
                                 })
-                                await self._log_ui("SYSTEM", f"Granted Top 3 Mod status to {name} 👑")
+                                await self._log_ui("MOD", f"Granted Top 3 Mod status to {name} 👑")
                                 needs_save = True
                             else:
                                 logger.warning(f"Failed to add mod for {name}: {mod_id_or_err}")
@@ -677,7 +676,7 @@ class BotService:
                                         "mod_id": mod_id_or_err,
                                         "expires_at": None
                                     })
-                                    await self._log_ui("SYSTEM", f"Granted Top 3 Mod status to {name} 👑")
+                                    await self._log_ui("MOD", f"Granted Top 3 Mod status to {name} 👑")
                                     needs_save = True
                                 else:
                                     logger.warning(f"Failed to add mod for {name}: {mod_id_or_err}")

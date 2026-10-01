@@ -155,7 +155,10 @@ class YouTubeService:
             return True, "Moderator removed."
             
         except Exception as e:
+            err_msg = str(e).lower()
             logger.error(f"YouTube Mod Remove Error: {e}")
+            if "404" in err_msg or "not found" in err_msg or "403" in err_msg or "forbidden" in err_msg:
+                return True, "Already removed or inaccessible."
             return False, f"YouTube API Error: {str(e)}"
 
     async def send_chat_message(self, message: str, live_chat_id: str = None):
