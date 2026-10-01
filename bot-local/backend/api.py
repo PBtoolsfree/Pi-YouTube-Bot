@@ -814,7 +814,9 @@ async def toggle_offline():
     ConfigManager.save_config(cfg)
     
     # Broadcast to Local UI
-    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
+    cfg_copy = cfg.copy()
+    cfg_copy["is_cloud"] = (os.environ.get("RUN_MODE") == "cloud")
+    asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg_copy}))
     
     # Broadcast to Cloud
     if getattr(bot, "cloud_alert_client", None) and bot.cloud_alert_client.is_running:
