@@ -532,7 +532,7 @@ async def debug_fs():
 @app.get("/api/config")
 async def get_config(request: Request):
     full_config = ConfigManager.get_config()
-    is_cloud = (os.environ.get("RUN_MODE") == "cloud")
+    is_cloud = (os.environ.get("RUN_MODE") != "local")
     
     # SECURITY: If public (Tunnel), sanitize the config to hide secrets (API Keys, etc)
     if getattr(request.state, "is_public", False):
@@ -593,6 +593,7 @@ async def update_config(payload: ConfigUpdate):
             raise HTTPException(500, "Failed to save config")
             
         # Broadcast to Cloud UI clients
+        payload.config["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
         asyncio.create_task(broadcast_log({"type": "config_update", "config": payload.config}))
         
         # Broadcast to Local Pi clients
@@ -833,6 +834,7 @@ async def save_loyalty_config(payload: Dict[str, Any]):
     ConfigManager.save_config(cfg)
 
     # Broadcast to Cloud UI clients
+    cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
     asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
 
     # Broadcast to Local Pi clients
@@ -857,6 +859,7 @@ async def reset_welcome_messages():
     ConfigManager.save_config(cfg)
 
     # Broadcast to Cloud UI clients
+    cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
     asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
 
     # Broadcast to Local Pi clients
@@ -1301,6 +1304,7 @@ async def toggle_offline():
     ConfigManager.save_config(cfg)
     
     # Broadcast to Cloud UI
+    cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
     asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
     
     # Broadcast to Local Pi
@@ -1597,7 +1601,7 @@ async def clear_donations_route():
         bot.processed_transactions.clear() # Clear deduplication cache to allow old tips again
         
         # Broadcast to Pi Clients
-        is_cloud = (os.environ.get("RUN_MODE") == "cloud")
+        is_cloud = (os.environ.get("RUN_MODE") != "local")
         if is_cloud and getattr(bot, "pi_clients", None):
             await bot.pi_clients.broadcast({
                 "type": "sync_action",
@@ -1617,7 +1621,7 @@ async def delete_donation_item_route(payload: DeleteDonationRequest):
     success = bot.delete_donation_history_item(payload.timestamp, payload.user, payload.amount)
     if success:
         # Broadcast to Pi Clients
-        is_cloud = (os.environ.get("RUN_MODE") == "cloud")
+        is_cloud = (os.environ.get("RUN_MODE") != "local")
         if is_cloud and getattr(bot, "pi_clients", None):
             await bot.pi_clients.broadcast({
                 "type": "sync_action",
