@@ -156,7 +156,7 @@ export default function RedeemManager() {
                             <p className="text-zinc-300 font-medium">How it works:</p>
                             <p>1. Create a reward below with an OBS source name, filter name, and a Streamer.bot action.</p>
                             <p>2. In <span className="text-cyan-400 font-mono">Streamer.bot</span>, create an action matching the <span className="text-amber-400 font-mono">SB Action Name</span>. Use <span className="text-zinc-300">OBS → Set Source Filter Visibility</span> sub-action.</p>
-                            <p>3. Viewers use <span className="text-emerald-400 font-mono">!redeem &lt;name&gt;</span> in chat to trigger the reward.</p>
+                            <p>3. Viewers use <span className="text-emerald-400 font-mono">!redeem &lt;name/number&gt;</span> in chat to trigger the reward.</p>
                         </div>
                     </div>
                 </CardContent>
@@ -603,8 +603,8 @@ export default function RedeemManager() {
                     </h4>
                     <div className="grid gap-2 md:grid-cols-2 text-xs">
                         <div className="bg-zinc-950/50 rounded-lg px-3 py-2 border border-zinc-800/50">
-                            <span className="text-emerald-400 font-mono font-bold">!redeem &lt;name&gt;</span>
-                            <span className="text-zinc-500 ml-2">— Activate a reward</span>
+                            <span className="text-emerald-400 font-mono font-bold">!redeem &lt;name/number&gt;</span>
+                            <span className="text-zinc-500 ml-2">— Activate a reward by name or index</span>
                         </div>
                         <div className="bg-zinc-950/50 rounded-lg px-3 py-2 border border-zinc-800/50">
                             <span className="text-emerald-400 font-mono font-bold">!redeem / !shop</span>
