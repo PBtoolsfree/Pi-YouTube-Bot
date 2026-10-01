@@ -2501,12 +2501,32 @@ class BotService:
 
     async def _handle_redeem_cmd(self, author, redeem_name, chat_obj=None):
         custom_title_text = None
-        reward = self.redeem_svc.get_by_name(redeem_name)
+        reward = None
+        
+        # Available rewards to match the index shown in !shop
+        available = [r for r in self.redeem_svc.redeems if r.get("enabled", True)]
+        
+        # Check if the redeem_name is entirely digits (e.g. "!redeem 1")
+        if redeem_name.isdigit():
+            idx = int(redeem_name) - 1
+            if 0 <= idx < len(available):
+                reward = available[idx]
+        else:
+            # Check if it starts with digits followed by space (e.g. "!redeem 6 Badshah")
+            parts = redeem_name.split(' ', 1)
+            if parts[0].isdigit():
+                idx = int(parts[0]) - 1
+                if 0 <= idx < len(available):
+                    reward = available[idx]
+                    custom_title_text = parts[1].strip()
+
+        # If not found by index, try by exact name
         if not reward:
-            # Check for rewards which may have additional text (e.g. custom titles)
-            for cr in self.redeem_svc.redeems:
-                if not cr.get("enabled", True):
-                    continue
+            reward = self.redeem_svc.get_by_name(redeem_name)
+            
+        if not reward:
+            # Check for rewards which may have additional text (e.g. custom titles) by name
+            for cr in available:
                 cr_name_lower = cr["name"].lower()
                 if redeem_name.lower().startswith(cr_name_lower + " "):
                     reward = cr
