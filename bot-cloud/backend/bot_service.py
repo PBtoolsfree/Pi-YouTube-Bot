@@ -2858,6 +2858,7 @@ class BotService:
                 ConfigManager.save_config(cfg)
                 logger.info(f"Cloud config synced from Local: stream_offline={value}")
                 from backend.api import broadcast_log
+                cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
                 asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
 
         elif etype == "sync_config_full":
@@ -2867,6 +2868,7 @@ class BotService:
                 ConfigManager.save_config(new_cfg)
                 logger.info("Cloud config completely synced from Local Pi UI changes.")
                 from backend.api import broadcast_log
+                new_cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
                 asyncio.create_task(broadcast_log({"type": "config_update", "config": new_cfg}))
 
         elif etype == "viewer_api_action":
