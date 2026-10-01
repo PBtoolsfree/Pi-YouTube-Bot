@@ -181,7 +181,9 @@ function OverviewSection() {
 function TopViewers() {
     const [viewers, setViewers] = useState([])
     useEffect(() => {
-        axios.get(`${API_URL}/loyalty/leaderboard`).then(r => setViewers(r.data?.slice(0, 5) || [])).catch(() => { })
+        axios.get(`${API_URL}/loyalty/leaderboard`)
+            .then(r => setViewers(Array.isArray(r.data) ? r.data.slice(0, 5) : []))
+            .catch(() => { setViewers([]) })
     }, [])
     if (!viewers.length) return null
     return (

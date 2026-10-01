@@ -22,6 +22,13 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("Uncaught error:", error, errorInfo);
+    if (this.state.isChunkError) {
+      const lastReload = sessionStorage.getItem('chunk_error_reload');
+      if (!lastReload || Date.now() - parseInt(lastReload) > 10000) {
+          sessionStorage.setItem('chunk_error_reload', Date.now().toString());
+          window.location.reload();
+      }
+    }
   }
 
   handleReload = () => {
