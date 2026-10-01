@@ -2527,10 +2527,15 @@ class BotService:
         if not reward:
             # Check for rewards which may have additional text (e.g. custom titles) by name
             for cr in available:
-                cr_name_lower = cr["name"].lower()
-                if redeem_name.lower().startswith(cr_name_lower + " "):
+                cr_name_lower = cr["name"].strip().lower()
+                if redeem_name.strip().lower().startswith(cr_name_lower + " "):
                     reward = cr
-                    custom_title_text = redeem_name[len(cr_name_lower):].strip()
+                    import re
+                    match = re.match(re.escape(cr["name"].strip()) + r'\s+(.*)', redeem_name.strip(), re.IGNORECASE)
+                    if match:
+                        custom_title_text = match.group(1).strip()
+                    else:
+                        custom_title_text = redeem_name.strip()[len(cr_name_lower):].strip()
                     break
 
         if not reward:
@@ -2565,7 +2570,10 @@ class BotService:
             broadcast_func=self.broadcast_func,
         )
         if result["ok"]:
-            reward_obj = result.get("reward", reward)
+            reward_obj = dict(result.get("reward", reward))
+            if "custom_title_text" in reward:
+                reward_obj["custom_title_text"] = reward["custom_title_text"]
+                
             reward_type = reward_obj.get("type", "obs")
             
             # Execute native rewards
