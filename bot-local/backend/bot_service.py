@@ -395,8 +395,9 @@ class BotService:
                             # Execute removal logic
                             if r.get("reward_type") == "youtube_mod":
                                 success, msg = await self.youtube_api.remove_moderator(r.get("mod_id"))
-                                if success:
-                                    await self._log_ui("SYSTEM", f"Revoked expired YouTube Moderator from {r.get('author')} (Wrench Taken)")
+                                if success or r.get("mod_id") == "UNKNOWN_MOD_ID":
+                                    if r.get("mod_id") != "UNKNOWN_MOD_ID":
+                                        await self._log_ui("SYSTEM", f"Revoked expired YouTube Moderator from {r.get('author')} (Wrench Taken)")
                                     revoke_ok = True
                                 else:
                                     logger.warning(f"Failed to revoke expired YouTube Mod for {r.get('author')}: {msg}")
@@ -481,8 +482,9 @@ class BotService:
                         logger.info(f"Revoking Top 3 Mod status from {mod.get('author')}")
                         if mod.get("mod_id"):
                             success, msg = await self.youtube_api.remove_moderator(mod.get("mod_id"))
-                            if success:
-                                await self._log_ui("SYSTEM", f"Revoked Top 3 Mod from {mod.get('author')} (Dropped from Leaderboard)")
+                            if success or mod.get("mod_id") == "UNKNOWN_MOD_ID":
+                                if mod.get("mod_id") != "UNKNOWN_MOD_ID":
+                                    await self._log_ui("SYSTEM", f"Revoked Top 3 Mod from {mod.get('author')} (Dropped from Leaderboard)")
                                 needs_save = True
                             else:
                                 # Keep the entry so we retry next cycle
