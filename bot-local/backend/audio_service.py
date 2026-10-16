@@ -301,11 +301,11 @@ class AudioService:
             'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 
             'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 
             'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat',
-            'mein', 'me', 'pehli', 'baar', 'aaye', 'aaya', 'aayi', 'bolo', 'hissa', 'ban', 
+            'mein', 'pehli', 'baar', 'aaye', 'aaya', 'aayi', 'bolo', 'hissa', 'ban', 
             'jao', 'kal', 'aaj', 'phir', 'aa', 'gaye', 'din', 'dinon', 'se', 'tum', 'aap', 
             'hum', 'humein', 'humare', 'apna', 'apne', 'sab', 'sabko', 'dekh', 'dekhkar', 
             'khushi', 'hui', 'laute', 'lauta', 'badhai', 'shukriya', 'swagat', 'namaste', 
-            'kaafi', 'time', 'adhoori', 'lag', 'thi', 'tha', 'the', 'chuke', 'chuka', 'chuki', 
+            'kaafi', 'adhoori', 'lag', 'thi', 'tha', 'chuke', 'chuka', 'chuki', 
             'bas', 'paas', 'hisa', 'shuru', 'banta', 'banata'
         }
         benglish_keywords = {'kemon', 'acho', 'ami', 'tumi', 'korcho', 'kothay', 'hobe', 'jabo', 'valo', 'bhalo', 'khub', 'kore', 'amar', 'tomar', 'apni', 'tui', 'keno', 'khabe', 'naki', 'ache', 'nei', 'ekhon', 'dada', 'kori', 'kotha', 'bolo', 'bolcho'}

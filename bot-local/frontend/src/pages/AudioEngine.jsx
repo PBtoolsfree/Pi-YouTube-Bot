@@ -347,8 +347,9 @@ export default function AudioEnginePage() {
                             </button>
                         </div>
                     </div>
-                    {voiceMode === 'single' && (
                     <div className="space-y-4">
+                        {voiceMode === 'single' && (
+                        <>
                         <div className="space-y-2">
                             <label className="text-xs font-medium text-zinc-400 uppercase">Language</label>
                             <div className="flex flex-wrap gap-2">
@@ -390,7 +391,8 @@ export default function AudioEnginePage() {
                             </div>
                         </div>
 
-                    )}
+                        </>
+                        )}
 
                         {/* Rate & Volume Sliders */}
                         <div className="space-y-3">
