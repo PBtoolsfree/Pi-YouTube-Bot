@@ -127,6 +127,13 @@ def _find_ffplay() -> str:
     return local if os.path.exists(local) else "ffplay"
 
 
+
+def _gtts_language_for_voice(voice: Optional[str]) -> str:
+    """Return the closest supported gTTS language for an Edge neural voice."""
+    language = (voice or "").split("-", 1)[0].lower()
+    return language if language in {"en", "hi", "bn"} else "en"
+
+
 def _validate_rate_volume(value: str) -> str:
     """Validate and clamp TTS rate/volume format (e.g. '+0%', '-50%', '+100%')."""
     if not value or not isinstance(value, str):
@@ -270,16 +277,22 @@ class AudioService:
         """Determine the correct voice based on config and auto-language detection."""
         cfg = ConfigManager.get_config()
         audio_cfg = cfg.get("audio", {})
-        
-        if override_voice:
-            return override_voice
-            
         auto_voices = audio_cfg.get("auto_voices", {})
-        auto_enabled = auto_voices.get("enabled", False)
-        
-        if not auto_enabled:
-            return audio_cfg.get("voice", "en-IN-PrabhatNeural")
-            
+
+        # voice_mode is authoritative. Older config files are mapped from the
+        # previous auto_voices.enabled checkbox for backwards compatibility.
+        voice_mode = audio_cfg.get("voice_mode")
+        if voice_mode not in {"auto", "single"}:
+            voice_mode = "auto" if auto_voices.get("enabled", False) else "single"
+
+        if voice_mode == "single":
+            return override_voice or audio_cfg.get("voice", "en-IN-PrabhatNeural")
+
+        # In Auto Multi-Language mode the detected language determines the voice;
+        # an inherited/default voice sent by the Cloud client must not override it.
+        if override_voice:
+            logger.debug("Ignoring explicit voice override in Auto Multi-Language mode")
+
         lang_code = "unknown"
         text_lower = text.lower()
         words = set(re.findall(r'\b[a-z]+\b', text_lower))
@@ -301,7 +314,15 @@ class AudioService:
         benglish_score = len(words.intersection(benglish_keywords))
 
         mapped_lang = "default"
-        if hinglish_score > 0 or benglish_score > 0:
+        # Prefer the actual writing system over statistical classification. This
+        # avoids Roman/English mixed tokens from masking Hindi or Bengali text.
+        if re.search(r"[\u0900-\u097F]", text):
+            lang_code = "hi"
+            mapped_lang = "hi"
+        elif re.search(r"[\u0980-\u09FF]", text):
+            lang_code = "bn"
+            mapped_lang = "bn"
+        elif hinglish_score > 0 or benglish_score > 0:
             if hinglish_score > benglish_score:
                 mapped_lang = "hi"
             elif benglish_score > hinglish_score:
@@ -467,6 +488,9 @@ class AudioService:
                 "volume": audio_cfg.get("volume", "+0%"),
                 "rate": audio_cfg.get("rate", "+0%"),
                 "priority_mode": audio_cfg.get("priority_mode", "public"),
+                "voice_mode": audio_cfg.get("voice_mode") or (
+                    "auto" if audio_cfg.get("auto_voices", {}).get("enabled", False) else "single"
+                ),
             },
             # ── Enhanced health data ──
             "health_status": self.health_status,
@@ -766,8 +790,11 @@ class AudioService:
             fd, tmp_path = tempfile.mkstemp(prefix="pibot_tts_", suffix=".mp3", dir=temp_dir)
             os.close(fd)
 
+            fallback_language = _gtts_language_for_voice(voice)
+            _append_audio_log(f"[{channel}] gTTS fallback language={fallback_language}")
+
             def _gtts_generate() -> None:
-                tts = gTTS(text=text, lang="en", slow=False)
+                tts = gTTS(text=text, lang=fallback_language, slow=False)
                 tts.save(tmp_path)
 
             await loop.run_in_executor(None, _gtts_generate)

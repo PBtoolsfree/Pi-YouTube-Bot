@@ -38,6 +38,7 @@ export default function AudioEnginePage() {
     const [selectedLang, setSelectedLang] = useState('en-IN')
     const [selectedVoice, setSelectedVoice] = useState('')
     const [hasChanges, setHasChanges] = useState(false)
+    const [voiceMode, setVoiceMode] = useState('auto')
     const [activeTab, setActiveTab] = useState('private')
     const [autoVoices, setAutoVoices] = useState({
         enabled: true,
@@ -82,9 +83,24 @@ export default function AudioEnginePage() {
                 // Auto-detect language from voice prefix
                 const lang = LANGUAGES.find(l => currentVoice.startsWith(l.id))
                 if (lang) setSelectedLang(lang.id)
-                if (res.data.audio?.auto_voices) {
-                    setAutoVoices(res.data.audio.auto_voices)
+                const defaultAutoVoices = {
+                    enabled: true,
+                    public: { en: '', hi: '', bn: '', default: '' },
+                    private: { en: '', hi: '', bn: '', default: '' }
                 }
+                const configuredAutoVoices = res.data.audio?.auto_voices || {}
+                const loadedAutoVoices = {
+                    ...defaultAutoVoices,
+                    ...configuredAutoVoices,
+                    public: { ...defaultAutoVoices.public, ...(configuredAutoVoices.public || {}) },
+                    private: { ...defaultAutoVoices.private, ...(configuredAutoVoices.private || {}) }
+                }
+                const savedMode = res.data.audio?.voice_mode
+                const resolvedMode = savedMode === 'auto' || savedMode === 'single'
+                    ? savedMode
+                    : (loadedAutoVoices.enabled !== false ? 'auto' : 'single')
+                setVoiceMode(resolvedMode)
+                setAutoVoices({ ...loadedAutoVoices, enabled: resolvedMode === 'auto' })
 
                 // Load rate/volume
                 const rateStr = res.data.audio?.rate || '+0%'
@@ -132,7 +148,8 @@ export default function AudioEnginePage() {
                     ...config.audio,
                     voice: selectedVoice,
                     priority_mode: activePriorityMode,
-                    auto_voices: autoVoices,
+                    voice_mode: voiceMode,
+                    auto_voices: { ...autoVoices, enabled: voiceMode === 'auto' },
                     rate: rateStr,
                     volume: volStr,
                     banned_words: bannedWords,
@@ -296,6 +313,41 @@ export default function AudioEnginePage() {
                     )}
                 </CardHeader>
                 <CardContent className="pt-4 grid sm:grid-cols-2 gap-6">
+                    <div className="sm:col-span-2 flex flex-col gap-3 border-b border-zinc-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-widest text-zinc-200">Voice Mode</div>
+                            <p className="mt-1 text-xs text-zinc-400">
+                                {voiceMode === 'auto'
+                                    ? 'Detect each message language and use the matching Public / Private voice map.'
+                                    : 'Use one configured voice for all messages.'}
+                            </p>
+                        </div>
+                        <div className="inline-flex gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+                            <button
+                                type="button"
+                                aria-pressed={voiceMode === 'auto'}
+                                onClick={() => { setVoiceMode('auto'); setAutoVoices(prev => ({ ...prev, enabled: true })); setHasChanges(true); }}
+                                className={cn(
+                                    "rounded-md px-3 py-2 text-xs font-semibold transition-colors",
+                                    voiceMode === 'auto' ? "bg-emerald-500 text-zinc-950" : "text-zinc-400 hover:text-zinc-100"
+                                )}
+                            >
+                                Auto Multi-Language
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={voiceMode === 'single'}
+                                onClick={() => { setVoiceMode('single'); setAutoVoices(prev => ({ ...prev, enabled: false })); setHasChanges(true); }}
+                                className={cn(
+                                    "rounded-md px-3 py-2 text-xs font-semibold transition-colors",
+                                    voiceMode === 'single' ? "bg-blue-500 text-white" : "text-zinc-400 hover:text-zinc-100"
+                                )}
+                            >
+                                Single Language
+                            </button>
+                        </div>
+                    </div>
+                    {voiceMode === 'single' && (
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <label className="text-xs font-medium text-zinc-400 uppercase">Language</label>
@@ -337,6 +389,8 @@ export default function AudioEnginePage() {
                                 </div>
                             </div>
                         </div>
+
+                    )}
 
                         {/* Rate & Volume Sliders */}
                         <div className="space-y-3">
@@ -410,11 +464,19 @@ export default function AudioEnginePage() {
                     <div className="bg-zinc-950 rounded-lg border border-zinc-800 p-4 space-y-4">
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Playback Status</span>
-                            {safeStats.is_playing ? (
-                                <span className="text-xs text-emerald-500 font-bold animate-pulse">SPEAKING</span>
-                            ) : (
-                                <span className="text-xs text-zinc-500 font-bold">IDLE</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <span className={cn(
+                                    "rounded px-2 py-1 text-[9px] font-bold uppercase tracking-wide",
+                                    voiceMode === 'auto' ? "bg-emerald-500/10 text-emerald-400" : "bg-blue-500/10 text-blue-400"
+                                )}>
+                                    {voiceMode === 'auto' ? 'AUTO MULTI-LANGUAGE' : 'SINGLE LANGUAGE'}
+                                </span>
+                                {safeStats.is_playing ? (
+                                    <span className="text-xs text-emerald-500 font-bold animate-pulse">SPEAKING</span>
+                                ) : (
+                                    <span className="text-xs text-zinc-500 font-bold">IDLE</span>
+                                )}
+                            </div>
                         </div>
                         <div className="border-t border-zinc-900 pt-3">
                             <div className="text-[10px] text-zinc-500 uppercase mb-1">Last Spoken</div>
@@ -455,26 +517,16 @@ export default function AudioEnginePage() {
                 </CardContent>
             </Card>
 
-            {/* Auto Voices Config */}
-            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row justify-between items-center">
-                    <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                        <Mic className="h-4 w-4 text-zinc-400" /> Auto Language Voices
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-zinc-400">Enable Auto-Language</label>
-                        <input 
-                            type="checkbox" 
-                            checked={autoVoices.enabled || false}
-                            onChange={(e) => {
-                                setAutoVoices({...autoVoices, enabled: e.target.checked})
-                                setHasChanges(true)
-                            }}
-                            className="h-4 w-4 rounded border-zinc-800 bg-zinc-950 text-emerald-500 focus:ring-emerald-500/20"
-                        />
-                    </div>
-                </CardHeader>
-                {autoVoices.enabled && (
+            {voiceMode === 'auto' && (
+                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                    <CardHeader className="pb-3 border-b border-zinc-800">
+                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                            <Mic className="h-4 w-4 text-zinc-400" /> Automatic Language Voice Map
+                        </CardTitle>
+                        <p className="mt-2 text-xs text-zinc-400">
+                            These voice mappings are used only in Auto Multi-Language mode. Public and Private channels can use different voices.
+                        </p>
+                    </CardHeader>
                     <CardContent className="pt-4 grid sm:grid-cols-2 gap-6">
                         {['public', 'private'].map(channel => (
                             <div key={channel} className="space-y-4">
@@ -505,8 +557,8 @@ export default function AudioEnginePage() {
                             </div>
                         ))}
                     </CardContent>
-                )}
-            </Card>
+                </Card>
+            )}
 
             {/* Banned Words Manager */}
             <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
