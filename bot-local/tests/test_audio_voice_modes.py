@@ -77,6 +77,14 @@ class TestAudioVoiceModes(unittest.TestCase):
             "hi-IN-MadhurNeural",
         )
 
+    def test_single_mode_ignores_per_event_voice_override(self):
+        self.config = make_config("single")
+        self.config["audio"]["voice"] = "hi-IN-MadhurNeural"
+        self.assertEqual(
+            self.audio._determine_voice("Hello everyone", "en-IN-NeerjaNeural", "public"),
+            "hi-IN-MadhurNeural",
+        )
+
     def test_legacy_config_uses_auto_voices_enabled_flag(self):
         self.config = make_config()
         self.config["audio"].pop("voice_mode")

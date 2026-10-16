@@ -286,7 +286,9 @@ class AudioService:
             voice_mode = "auto" if auto_voices.get("enabled", False) else "single"
 
         if voice_mode == "single":
-            return override_voice or audio_cfg.get("voice", "en-IN-PrabhatNeural")
+            # Single Language mode is intentionally global: per-event/cloud voice
+            # hints must not change the voice selected in the dashboard.
+            return audio_cfg.get("voice", "en-IN-PrabhatNeural")
 
         # In Auto Multi-Language mode the detected language determines the voice;
         # an inherited/default voice sent by the Cloud client must not override it.
