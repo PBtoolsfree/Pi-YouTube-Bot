@@ -1,0 +1,51 @@
+name: Audio Engine Voice Modes
+
+on:
+  push:
+    branches:
+      - "fix/audio-multilingual-mode-*"
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  python-regression:
+    name: Audio voice mode regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal audio test dependencies
+        run: python -m pip install --upgrade "edge-tts>=7.3.1" "langid>=1.1.6"
+      - name: Run voice mode tests
+        working-directory: bot-local
+        run: python -m unittest discover -s tests -p "test_audio_voice_modes.py" -v
+
+  frontend-builds:
+    name: Build ${{ matrix.app }} Audio Engine dashboard
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - bot-local/frontend
+          - bot-cloud/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: ${{ matrix.app }}
+        run: npm ci
+      - name: Build frontend
+        working-directory: ${{ matrix.app }}
+        run: npm run build
