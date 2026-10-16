@@ -53,13 +53,51 @@ class PokemonService:
         
         self.load_data()
         
-        # Start background task to spawn pokemons periodically
+        # Background task for periodic spawning
         self.spawn_task = None
-        
+        self._despawn_task = None
+        self.target_spawn_time = 0
+        self._was_live = False
+        self._last_spawn_time = 0
+        self.is_running = False
+
     def start(self):
-        if not self.spawn_task:
-            self.spawn_task = asyncio.create_task(self._spawn_loop())
-        
+        if self.spawn_task and not self.spawn_task.done():
+            self.logger.info("PokemonService spawn loop is already active.")
+            return
+        self.is_running = True
+        self.spawn_task = asyncio.create_task(self._spawn_loop())
+        self.logger.info("PokemonService background spawn loop started.")
+
+    def stop(self):
+        self.is_running = False
+        if self.spawn_task and not self.spawn_task.done():
+            self.spawn_task.cancel()
+        self.spawn_task = None
+        if self._despawn_task and not self._despawn_task.done():
+            self._despawn_task.cancel()
+        self._despawn_task = None
+        self.target_spawn_time = 0
+        self.logger.info("PokemonService stopped.")
+
+    def get_config(self) -> dict:
+        """Returns the current pokemon configuration dictionary."""
+        config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
+        loyalty = config.get("loyalty", {})
+        games = loyalty.get("games", {}) or config.get("games", {})
+        return games.get("pokemon", {})
+
+    def _is_stream_live(self) -> bool:
+        """Checks if stream is genuinely live via bot.is_stream_live property or fallback."""
+        if hasattr(self.bot, "is_stream_live"):
+            return bool(self.bot.is_stream_live)
+        # Fallback if bot instance is mocked or lacks property:
+        # Require explicit _remote_stream_live or is_stream_live_state; do NOT assume is_sb_connected means stream is live!
+        cfg = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
+        if cfg.get("stream_offline", False):
+            return False
+        return bool(getattr(self.bot, "_remote_stream_live", getattr(self.bot, "is_stream_live_state", False)))
+
     def load_data(self):
         try:
             os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
@@ -120,95 +158,321 @@ class PokemonService:
             self.logger.error(f"Failed to save pokemon data: {e}")
 
     async def _spawn_loop(self):
-        target_time = 0
-        while True:
-            await asyncio.sleep(10) # check every 10 seconds
-            
-            config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
-            pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
-            
-            if not pokemon_config.get("enabled", True):
-                target_time = 0 # reset target time when disabled
-                continue
-                
+        self.logger.info("PokemonService: _spawn_loop initialized.")
+        while self.is_running:
             try:
-                interval_min = int(pokemon_config.get("spawn_interval", 15))
-            except (ValueError, TypeError):
-                interval_min = 15
-            
-            # Convert minutes to seconds and add some variance (+/- 10%)
-            base_delay = interval_min * 60
-            variance = int(base_delay * 0.1)
-            
-            if target_time == 0 or (target_time - time.time()) > (base_delay + variance):
-                delay = base_delay + random.randint(-variance, variance) if variance > 0 else base_delay
-                if delay < 60: delay = 60
-                target_time = time.time() + delay
+                pokemon_config = self.get_config()
                 
-            if time.time() >= target_time:
-                await self.spawn_wild_pokemon()
-                
-                # set next spawn time
-                delay = base_delay + random.randint(-variance, variance) if variance > 0 else base_delay
-                if delay < 60: delay = 60
-                target_time = time.time() + delay
+                # 1. Game Enabled check
+                if not pokemon_config.get("enabled", True):
+                    if self.target_spawn_time != 0:
+                        self.logger.info("Pokemon Safari Adventure disabled in config. Spawning paused.")
+                        self.target_spawn_time = 0
+                    await asyncio.sleep(10)
+                    continue
+                    
+                # 2. Live Status check
+                is_live = self._is_stream_live()
+                if not is_live:
+                    if self._was_live:
+                        self.logger.info("Live stream ended or disconnected. Pokemon spawning paused.")
+                        self._was_live = False
+                        self.target_spawn_time = 0
+                    await asyncio.sleep(10)
+                    continue
 
-    async def spawn_wild_pokemon(self, force=False):
-        if self.active_wild_pokemon is not None and not force:
-            return # Already one spawned
+                # Parse configured spawn interval (minutes, default 15)
+                try:
+                    interval_min = int(pokemon_config.get("spawn_interval", 15))
+                    if interval_min < 1:
+                        interval_min = 1
+                except (ValueError, TypeError):
+                    interval_min = 15
+
+                base_delay = interval_min * 60
+                if base_delay < 60:
+                    base_delay = 60
+
+                # Stream just transitioned from offline to live
+                if not self._was_live:
+                    self._was_live = True
+                    delay = base_delay
+                    self.target_spawn_time = time.time() + delay
+                    self.logger.info(
+                        f"Stream is LIVE! Pokemon Safari active. Next automatic spawn in {delay / 60:.1f}m (due {time.strftime('%H:%M:%S', time.localtime(self.target_spawn_time))})."
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                # Initialize target time if missing
+                if self.target_spawn_time == 0:
+                    delay = base_delay
+                    self.target_spawn_time = time.time() + delay
+                    self.logger.info(f"Target spawn time set for in {delay / 60:.1f}m.")
+
+                # 3. Check if due for spawn
+                if time.time() >= self.target_spawn_time:
+                    # Spawn if no wild pokemon is currently active
+                    if self.active_wild_pokemon is None:
+                        await self.spawn_wild_pokemon(force=False, is_test=False)
+                    else:
+                        self.logger.info("Active wild Pokemon already present; delaying next spawn cycle.")
+
+                    # Calculate next spawn time exactly from the spawn moment
+                    delay = base_delay
+                    self.target_spawn_time = time.time() + delay
+                    self.logger.info(
+                        f"Next automatic Pokemon spawn scheduled in {delay / 60:.1f}m (due {time.strftime('%H:%M:%S', time.localtime(self.target_spawn_time))})."
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    sleep_time = min(10, max(1, self.target_spawn_time - time.time()))
+                    await asyncio.sleep(sleep_time)
+
+            except asyncio.CancelledError:
+                self.logger.info("PokemonService: _spawn_loop cancelled.")
+                break
+            except Exception as e:
+                self.logger.error(f"Unexpected error in Pokemon _spawn_loop: {e}", exc_info=True)
+                await asyncio.sleep(5)
+
+    async def spawn_wild_pokemon(self, force=False, is_test=False):
+        cfg = self.get_config()
+        if not force:
+            if not cfg.get("enabled", True):
+                return None
+            if not self._is_stream_live():
+                return None
+            if self.active_wild_pokemon is not None:
+                return None
+
+        if not POKEMON_LIST:
+            load_pokemon_list()
+        if not POKEMON_LIST:
+            self.logger.error("Pokemon list is empty!")
+            return None
+
+        # Cancel any active despawn task before setting up a new spawn
+        if self._despawn_task and not self._despawn_task.done():
+            self._despawn_task.cancel()
 
         pokemon = random.choice(POKEMON_LIST)
-        self.active_wild_pokemon = {
+        enable_images = cfg.get("enable_images", cfg.get("images", True))
+        enable_cries = cfg.get("enable_cries", cfg.get("cries", True))
+
+        spawn_id = f"spawn_{int(time.time())}_{random.randint(1000, 9999)}"
+        poke_data = {
+            "id": spawn_id,
+            "event_id": spawn_id,
             "name": pokemon["name"],
-            "sprite": pokemon["sprite"],
-            "spawn_time": time.time()
+            "sprite": pokemon.get("sprite", ""),
+            "power": pokemon.get("power", 10),
+            "type": pokemon.get("type", "Normal"),
+            "spawn_time": time.time(),
+            "duration": 60,
+            "expires_at": time.time() + 60,
+            "is_test": is_test,
+            "settings": {
+                "images": enable_images,
+                "cries": enable_cries
+            }
         }
-        
-        self.logger.info(f"A wild {pokemon['name']} appeared!")
-        
-        # Broadcast spawn to overlays
-        if self.bot.broadcast_func:
-            await self.bot.broadcast_func({
-                "type": "POKEMON_EVENT",
-                "action": "spawn",
-                "pokemon": self.active_wild_pokemon
-            })
-        
-        # Announce in chat
-        await self.bot._send_chat(f"🚨 A wild {pokemon['name']} has appeared on stream! Type !catch to capture it!")
+        self.active_wild_pokemon = {
+            **poke_data,
+            "pokemon": poke_data
+        }
+        self._last_spawn_time = time.time()
+
+        self.logger.info(f"Wild {pokemon['name']} spawned! (ID: {spawn_id}, Test: {is_test}, Images: {enable_images}, Cries: {enable_cries})")
+
+        # Broadcast spawn to overlays (both POKEMON_EVENT for Pi sync and pokemon_event for web overlays)
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            try:
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "spawn",
+                    "pokemon": poke_data,
+                    "is_test": is_test,
+                    "remaining_seconds": 60,
+                    "event_id": spawn_id
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast Pokemon spawn: {b_err}")
+
+        # Announce in YouTube chat only for genuine live spawns
+        if not is_test and self.bot and hasattr(self.bot, "_send_chat"):
+            try:
+                await self.bot._send_chat(f"🚨 A wild {pokemon['name']} has appeared on stream! Type !catch to capture it!")
+            except Exception as c_err:
+                self.logger.error(f"Failed to send Pokemon spawn chat: {c_err}")
+
+        # Auto-despawn timer
+        async def _despawn_timer():
+            try:
+                await asyncio.sleep(60)
+                await self._auto_despawn(spawn_id, is_test=is_test)
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                self.logger.error(f"Error in auto_despawn task: {e}")
+
+        self._despawn_task = asyncio.create_task(_despawn_timer())
+        return self.active_wild_pokemon
+
+    async def _auto_despawn(self, spawn_id: str, is_test: bool = False):
+        if self.active_wild_pokemon and (self.active_wild_pokemon.get("id") == spawn_id or self.active_wild_pokemon.get("event_id") == spawn_id):
+            despawned = self.active_wild_pokemon
+            self.active_wild_pokemon = None
+            self.logger.info(f"Wild {despawned['name']} (ID: {spawn_id}) despawned.")
+            if self.bot and getattr(self.bot, "broadcast_func", None):
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "despawn",
+                    "pokemon": despawned,
+                    "is_test": is_test,
+                    "event_id": spawn_id
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            if not is_test and self.bot and hasattr(self.bot, "_send_chat"):
+                await self.bot._send_chat(f"💨 The wild {despawned['name']} fled into the tall grass!")
 
     async def handle_catch(self, user):
         if not self.active_wild_pokemon:
             return f"@{user}, there is no wild Pokemon to catch right now!"
-            
-        pokemon = self.active_wild_pokemon
-        self.active_wild_pokemon = None # Caught!
+
+        # Block catching test spawns from mutating real user state
+        if self.active_wild_pokemon.get("is_test"):
+            return f"@{user}, that was a test spawn for the stream overlay! Test Pokemon cannot be caught."
+
+        cfg = self.get_config()
         
-        # Initialize user if not exists
+        # 1. Catch Cost check
+        try:
+            catch_cost = int(cfg.get("catch_cost", 10))
+        except (ValueError, TypeError):
+            catch_cost = 10
+
+        if catch_cost > 0 and self.bot and hasattr(self.bot, "viewers"):
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            user_entry = viewers_map.get(user, {})
+            user_pts = user_entry.get("points", 0)
+            if user_pts < catch_cost:
+                return f"@{user}, you need {catch_cost} points to attempt catching! (Your balance: {int(user_pts)} pts)"
+            # Deduct points for the catch attempt
+            if hasattr(self.bot.viewers, "deduct_points"):
+                self.bot.viewers.deduct_points(user, catch_cost)
+            elif hasattr(self.bot.viewers, "add_points"):
+                self.bot.viewers.add_points(user, -catch_cost)
+            else:
+                user_entry["points"] = user_pts - catch_cost
+
+        # 2. Catch Success Rate (RNG roll)
+        try:
+            catch_rate = int(cfg.get("catch_rate", 50))
+            catch_rate = max(1, min(100, catch_rate))
+        except (ValueError, TypeError):
+            catch_rate = 50
+
+        roll = random.randint(1, 100)
+        pokemon = self.active_wild_pokemon
+
+        if roll > catch_rate:
+            # Catch failed — Pokemon breaks free but remains active for remaining time
+            cost_msg = f" ({catch_cost} pts spent)" if catch_cost > 0 else ""
+            return f"💨 Oh no @{user}! The wild {pokemon['name']} broke free from the Pokéball!{cost_msg} Try again!"
+
+        # 3. Catch Succeeded!
+        if self._despawn_task and not self._despawn_task.done():
+            self._despawn_task.cancel()
+        caught_pokemon = {
+            "name": pokemon["name"],
+            "power": pokemon.get("power", 10),
+            "sprite": pokemon.get("sprite", ""),
+            "type": pokemon.get("type", "Normal")
+        }
+        self.active_wild_pokemon = None
+
         if user not in self.users_data:
             self.users_data[user] = {"pokemons": [], "wins": 0, "losses": 0}
-            
+
         user_data = self.users_data[user]
-        
-        # Backward compatibility conversion
-        if "pokemons" not in user_data:
-            user_data["pokemons"] = []
-            if user_data.get("pokemon"):
-                user_data["pokemons"].append(user_data["pokemon"])
-                
-        user_data["pokemons"].append(pokemon["name"])
+        user_data.setdefault("pokemons", []).append(caught_pokemon)
         self.save_data()
-        
+
+        # Keep viewer record in sync if available
+        if self.bot and hasattr(self.bot, "viewers"):
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            if user in viewers_map:
+                viewers_map[user].setdefault("pokemons", []).append(caught_pokemon)
+
         # Broadcast catch to overlays
-        if self.bot.broadcast_func:
-            await self.bot.broadcast_func({
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            try:
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "catch",
+                    "user": user,
+                    "pokemon": caught_pokemon
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast catch event: {b_err}")
+
+        return f"🎉 @{user} caught the wild {caught_pokemon['name']}! Added to your Pokédex!"
+
+    def get_status(self):
+        pokemon_config = self.get_config()
+        return {
+            "enabled": bool(pokemon_config.get("enabled", True)),
+            "images": bool(pokemon_config.get("images", True)),
+            "cries": bool(pokemon_config.get("cries", True)),
+            "scheduler_running": bool(self.spawn_task and not self.spawn_task.done()),
+            "stream_live": self._is_stream_live(),
+            "active_pokemon": self.active_wild_pokemon,
+            "next_spawn_in_seconds": max(0, int(self.target_spawn_time - time.time())) if self.target_spawn_time > 0 else None,
+            "spawn_interval_minutes": int(pokemon_config.get("spawn_interval", 15)),
+            "catch_rate": int(pokemon_config.get("catch_rate", 50)),
+            "catch_cost": int(pokemon_config.get("catch_cost", 10)),
+            "duel_cost": int(pokemon_config.get("duel_cost", 50)),
+            "duel_reward": int(pokemon_config.get("duel_reward", 100)),
+            "pokedex_count": len(POKEMON_LIST)
+        }
+
+    async def handle_battle(self, challenger, target, bet=50):
+        challenger_poke = self.get_user_pokemon(challenger)
+        if not challenger_poke:
+            challenger_poke = {"name": "Pikachu", "power": 55, "sprite": "https://play.pokemonshowdown.com/sprites/gen5/pikachu.png"}
+        target_poke = self.get_user_pokemon(target)
+        if not target_poke:
+            target_poke = {"name": "Charizard", "power": 85, "sprite": "https://play.pokemonshowdown.com/sprites/gen5/charizard.png"}
+
+        winner = challenger if challenger_poke.get("power", 10) >= target_poke.get("power", 10) else target
+        loser = target if winner == challenger else challenger
+
+        cfg = self.get_config()
+        reward = int(cfg.get("duel_reward", 100))
+
+        if self.bot and hasattr(self.bot, "viewers"):
+            if hasattr(self.bot.viewers, "add_points"):
+                self.bot.viewers.add_points(winner, reward)
+
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            payload = {
                 "type": "POKEMON_EVENT",
-                "action": "catch",
-                "user": user,
-                "pokemon": pokemon
-            })
-        
-        return f"🎉 @{user} caught the wild {pokemon['name']}! You now have {len(user_data['pokemons'])} Pokemons! Type !pokemon to see them."
+                "action": "battle",
+                "challenger": {"name": challenger, "pokemon": challenger_poke},
+                "target": {"name": target, "pokemon": target_poke},
+                "winner": winner,
+                "bet": bet
+            }
+            await self.bot.broadcast_func(payload)
+            await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+
+        return f"⚔️ @{winner} won the battle against @{loser}!"
 
     async def handle_check_pokemon(self, user):
         user_data = self.users_data.get(user, {})
@@ -226,6 +490,10 @@ class PokemonService:
 
     def get_user_pokemon(self, user, pokemon_name=None):
         user_data = self.users_data.get(user)
+        if not user_data and self.bot and hasattr(self.bot, "viewers"):
+            # Check viewer service records as fallback
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            user_data = viewers_map.get(user, {})
         if not user_data:
             return None
             
@@ -235,18 +503,27 @@ class PokemonService:
             
         if not pokemons:
             return None
+
+        def extract_name(item):
+            if isinstance(item, dict):
+                return item.get("name", "")
+            return str(item)
             
         if pokemon_name:
-            poke_name = next((p for p in pokemons if p.lower() == pokemon_name.lower()), None)
-            if not poke_name:
+            matching = next((p for p in pokemons if extract_name(p).lower() == pokemon_name.lower()), None)
+            if not matching:
                 return None
+            target_name = extract_name(matching)
         else:
-            if len(pokemons) == 1:
-                poke_name = pokemons[0]
+            if len(pokemons) >= 1:
+                target_name = extract_name(pokemons[0])
             else:
                 return None
                 
-        return next((p for p in POKEMON_LIST if p["name"].lower() == poke_name.lower()), None)
+        found = next((p for p in POKEMON_LIST if p["name"].lower() == target_name.lower()), None)
+        if found:
+            return found
+        return {"name": target_name, "power": 50, "sprite": ""}
 
     async def handle_show_pokemon(self, user, pokemon_name):
         pokemon = self.get_user_pokemon(user, pokemon_name)
@@ -289,10 +566,14 @@ class PokemonService:
         if not target_poke_test and not self.users_data.get(target, {}).get("pokemon"):
             return f"@{challenger}, {target} doesn't have any Pokemons to battle!"
             
+        config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
+        pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
+        min_bet = int(pokemon_config.get("duel_cost", 50))
+
         try:
             bet_amount = int(bet_amount)
-            if bet_amount < 1:
-                return "Bet amount must be at least 1."
+            if bet_amount < min_bet:
+                return f"Bet amount must be at least {min_bet} points."
         except ValueError:
             return "Invalid bet amount."
             
@@ -368,12 +649,19 @@ class PokemonService:
         
         challenger_wins = random.random() < win_chance
         
+        config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
+        pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
+        try:
+            duel_reward = int(pokemon_config.get("duel_reward", 0))
+        except (ValueError, TypeError):
+            duel_reward = 0
+
         if challenger_wins:
             winner = challenger
             loser = target
             winner_poke = challenger_poke
             loser_poke = target_poke
-            self.bot.viewers.update_viewer(winner, points=challenger_bal + bet)
+            self.bot.viewers.update_viewer(winner, points=challenger_bal + bet + duel_reward)
             self.bot.viewers.update_viewer(loser, points=target_bal - bet)
             self.users_data[winner]["wins"] += 1
             self.users_data[loser]["losses"] += 1
@@ -382,7 +670,7 @@ class PokemonService:
             loser = challenger
             winner_poke = target_poke
             loser_poke = challenger_poke
-            self.bot.viewers.update_viewer(winner, points=target_bal + bet)
+            self.bot.viewers.update_viewer(winner, points=target_bal + bet + duel_reward)
             self.bot.viewers.update_viewer(loser, points=challenger_bal - bet)
             self.users_data[winner]["wins"] += 1
             self.users_data[loser]["losses"] += 1
@@ -390,14 +678,19 @@ class PokemonService:
         self.save_data()
         
         # Broadcast battle to overlays
-        if self.bot.broadcast_func:
-            await self.bot.broadcast_func({
-                "type": "POKEMON_EVENT",
-                "action": "battle",
-                "challenger": {"name": challenger, "pokemon": challenger_poke},
-                "target": {"name": target, "pokemon": target_poke},
-                "winner": winner,
-                "bet": bet
-            })
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            try:
+                await self.bot.broadcast_func({
+                    "type": "POKEMON_EVENT",
+                    "action": "battle",
+                    "challenger": {"name": challenger, "pokemon": challenger_poke},
+                    "target": {"name": target, "pokemon": target_poke},
+                    "winner": winner,
+                    "bet": bet,
+                    "reward": duel_reward
+                })
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast battle event: {b_err}")
         
-        return f"🏆 BATTLE RESULTS: @{winner}'s {winner_poke['name']} defeated @{loser}'s {loser_poke['name']} and won {bet} points!"
+        bonus_msg = f" (+{duel_reward} bonus)" if duel_reward > 0 else ""
+        return f"🏆 BATTLE RESULTS: @{winner}'s {winner_poke['name']} defeated @{loser}'s {loser_poke['name']} and won {bet}{bonus_msg} points!"

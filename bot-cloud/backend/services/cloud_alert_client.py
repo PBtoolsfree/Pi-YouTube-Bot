@@ -57,13 +57,17 @@ class CloudAlertClientService:
                     await self.send_event({"type": "request_viewer_sync"})
                     await self.send_event({"type": "request_history_sync"})
                     
-                    while self.is_running:
-                        msg = await ws.recv()
-                        try:
-                            event = json.loads(msg)
-                            await self._handle_cloud_event(event)
-                        except Exception as parse_err:
-                            logger.error(f"Error parsing cloud event: {parse_err}")
+                    hb_task = asyncio.create_task(self._heartbeat_loop())
+                    try:
+                        while self.is_running:
+                            msg = await ws.recv()
+                            try:
+                                event = json.loads(msg)
+                                await self._handle_cloud_event(event)
+                            except Exception as parse_err:
+                                logger.error(f"Error parsing cloud event: {parse_err}")
+                    finally:
+                        hb_task.cancel()
             except Exception as e:
                 self.ws = None
                 self.connected = False
@@ -73,6 +77,22 @@ class CloudAlertClientService:
                 logger.warning(f"Cloud Alert Client connection lost: {e}. Retrying in 5 seconds...")
                 await self.bot._log_ui("SYSTEM", "Cloud Alert connection lost. Reconnecting...")
                 await asyncio.sleep(5)
+
+    async def _heartbeat_loop(self):
+        """Sends periodic heartbeats to Cloud to confirm node is alive and sync SB and Live status."""
+        while self.is_running and self.connected:
+            try:
+                is_sb = getattr(self.bot, "is_sb_connected", getattr(self.bot, "sb_ws", None) is not None)
+                is_live = getattr(self.bot, "is_stream_live", False)
+                await self.send_event({
+                    "type": "pi_heartbeat",
+                    "streamerbot_connected": bool(is_sb),
+                    "stream_live": bool(is_live),
+                    "timestamp": time.time()
+                })
+            except Exception as e:
+                logger.debug(f"Heartbeat send error: {e}")
+            await asyncio.sleep(20)
 
     async def send_event(self, event):
         if self.connected and getattr(self, "ws", None):

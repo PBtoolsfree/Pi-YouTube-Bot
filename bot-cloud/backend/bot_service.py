@@ -235,6 +235,49 @@ class BotService:
 
         # Recent clips (for dashboard)
         self.recent_clips = []
+        self.remote_sb_connected = False
+        self._remote_stream_live = False
+        self.last_pi_heartbeat = 0.0
+        self.last_stream_state_timestamp = 0.0
+
+    @property
+    def is_stream_live(self) -> bool:
+        """
+        Determines whether the stream is genuinely live with safety against stale heartbeats.
+        Separates 4 distinct states:
+        1. Local Pi connected (last_pi_heartbeat fresh within 60s)
+        2. Streamer.bot connected (remote_sb_connected == True)
+        3. YouTube stream actually live (_remote_stream_live == True or active _live_context)
+        4. Manual override (config['stream_offline'] == False)
+
+        Rules:
+        - Streamer.bot connected + stream offline -> False (auto Pokémon spawning stays disabled)
+        - Streamer.bot connected + stream live + fresh heartbeat -> True (auto spawning allowed)
+        - Local Pi disconnected or heartbeat stale (>60s) -> False (auto spawning pauses safely)
+        - Stream stops -> False (cloud marks stream offline, halts automatic spawns)
+        """
+        config = self.load_config()
+        if config.get("stream_offline", False):
+            return False
+
+        run_mode = os.environ.get("RUN_MODE", "standalone")
+        if run_mode == "cloud":
+            # 1. Local Pi heartbeat freshness check (< 60s)
+            last_hb = getattr(self, "last_pi_heartbeat", 0.0)
+            if time.time() - last_hb > 60.0:
+                return False
+            # 2. Streamer.bot connected on gaming PC
+            if not getattr(self, "remote_sb_connected", False):
+                return False
+            # 3. Explicit YouTube stream LIVE check
+            has_live_stream = bool(getattr(self, "_remote_stream_live", False) or getattr(self, "_live_context", None) is not None)
+            if not has_live_stream:
+                return False
+            return True
+        else:
+            if not self.is_sb_connected:
+                return False
+            return bool(getattr(self, "is_stream_live_state", False) or getattr(self, "_remote_stream_live", False))
 
     @property
     def is_sb_connected(self):
@@ -311,6 +354,8 @@ class BotService:
             asyncio.create_task(self.sb_ws.close())
 
         # Stop sub-services
+        if getattr(self, "pokemon", None):
+            self.pokemon.stop()
         if getattr(self, "tunnel", None):
             self.tunnel.stop()
         if getattr(self, "cloud_alert_client", None):
@@ -432,8 +477,9 @@ class BotService:
         # Start ViewerService background tasks (auto-save loop)
         await self.viewers.start()
         
-        # Start PokemonService task (ONLY in cloud)
-        if os.environ.get("RUN_MODE") == "cloud":
+        # Start PokemonService task (cloud or standalone mode)
+        run_mode_env = os.environ.get("RUN_MODE", "standalone")
+        if run_mode_env in ["cloud", "standalone"]:
             if hasattr(self, "pokemon") and self.pokemon:
                 self.pokemon.start()
             
@@ -2715,7 +2761,34 @@ class BotService:
                 logger.info("[CHAT] Falling back to YouTube API")
                 asyncio.create_task(self.youtube_api.send_chat_message(message))
 
+    async def _handle_sb_event(self, data: dict):
+        """Processes Streamer.bot event payloads for stream lifecycle tracking."""
+        event = data.get("event", {})
+        source = event.get("source")
+        etype = event.get("type")
+
+        # Stream Lifecycle Event Tracking
+        if etype in ["BroadcastStarted", "StreamStarted", "LiveStreamStarted"]:
+            self._remote_stream_live = True
+            self.last_stream_state_timestamp = time.time()
+            logger.info(f"[SB Event] Stream started event received: {etype}")
+        elif etype in ["BroadcastEnded", "StreamStopped", "LiveStreamEnded"]:
+            self._remote_stream_live = False
+            self.last_stream_state_timestamp = time.time()
+            logger.info(f"[SB Event] Stream stopped event received: {etype}")
+        elif etype == "BroadcastUpdated":
+            b_data = data.get("data", {}) if isinstance(data.get("data"), dict) else {}
+            b_info = b_data.get("broadcast", b_data) if isinstance(b_data.get("broadcast"), dict) else b_data
+            status = str(b_info.get("status") or b_info.get("state") or b_info.get("broadcastStatus") or "").lower()
+            if status in ["live", "active"]:
+                self._remote_stream_live = True
+                self.last_stream_state_timestamp = time.time()
+            elif status in ["complete", "completed", "ended", "offline"]:
+                self._remote_stream_live = False
+                self.last_stream_state_timestamp = time.time()
+
     async def handle_pi_client_event(self, event, websocket=None):
+        self.last_pi_heartbeat = time.time()
         etype = event.get("type")
         if etype == "chat_message" or etype == "sync_chat_message":
             author = event.get("author")
@@ -2742,21 +2815,41 @@ class BotService:
             
             await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded, force_ai=force_ai)
             
+        elif etype == "pi_heartbeat":
+            self.last_pi_heartbeat = time.time()
+            if "streamerbot_connected" in event:
+                self.remote_sb_connected = bool(event.get("streamerbot_connected"))
+            if "stream_live" in event:
+                self._remote_stream_live = bool(event.get("stream_live"))
+                self.last_stream_state_timestamp = float(event.get("timestamp", time.time()))
+            if websocket:
+                try:
+                    await websocket.send_text(json.dumps({"type": "pi_heartbeat_ack", "timestamp": time.time()}))
+                except Exception:
+                    pass
+
         elif etype == "streamerbot_status":
             # Sync status from local Pi
-            self.remote_sb_connected = event.get("connected", False)
+            self.remote_sb_connected = bool(event.get("connected", False))
+            self.last_pi_heartbeat = time.time()
+            if not self.remote_sb_connected:
+                self._remote_stream_live = False
             if self.remote_sb_connected:
                 logger.info("Local Pi reported Streamer.bot is CONNECTED")
             else:
                 logger.warning("Local Pi reported Streamer.bot is DISCONNECTED")
+
+        elif etype == "stream_status":
+            self._remote_stream_live = bool(event.get("live", False))
+            self.last_stream_state_timestamp = float(event.get("timestamp", time.time()))
+            self.last_pi_heartbeat = time.time()
+            logger.info(f"Local Pi reported stream status: {'LIVE' if self._remote_stream_live else 'OFFLINE'} (source: {event.get('source')})")
                 
         elif etype == "stream_disconnected":
-            import time
             self._last_disconnect = time.time()
             logger.warning("Stream disconnected! Tracking buffering downtime.")
             
         elif etype == "stream_reconnected":
-            import time
             if hasattr(self, "_last_disconnect") and self._last_disconnect > 0:
                 downtime = time.time() - self._last_disconnect
                 self._total_downtime = getattr(self, "_total_downtime", 0) + downtime
@@ -2773,8 +2866,6 @@ class BotService:
             video_id = event.get("video_id")
             start_timestamp = event.get("start_timestamp")
             title = event.get("title", "Live Stream")
-            
-            import time
             current_time = int(time.time())
             stream_duration = current_time - start_timestamp
             total_downtime = int(getattr(self, "_total_downtime", 0))

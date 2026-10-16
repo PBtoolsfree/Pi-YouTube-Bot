@@ -265,6 +265,32 @@ export default function OBSPage({ config, onSave }) {
                         </CardContent>
                     </Card>
 
+                    {/* Pokemon Safari Adventure Overlay Card */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Monitor className="h-4 w-4 text-emerald-400" /> Pokémon Safari Adventure Overlay
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                            <p className="text-xs text-zinc-400">
+                                Displays wild Pokémon spawns, player capture events, and Pokémon duels during YouTube live streams. Transparent canvas.
+                            </p>
+                            <div className="flex gap-2">
+                                <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
+                                    {`${origin}/overlay/pokemon`}
+                                </div>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/overlay/pokemon`, 'pokemon')}>
+                                    {copiedMap['pokemon'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                            <div className="text-[11px] text-zinc-500 flex gap-4">
+                                <span>Resolution: <strong>1920x1080</strong></span>
+                                <span>Background: <strong>Transparent</strong></span>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Boss Fight Overlay Card */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
                         <CardHeader className="pb-3 border-b border-zinc-800">

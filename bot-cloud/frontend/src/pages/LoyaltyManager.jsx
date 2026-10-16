@@ -4,7 +4,7 @@ import {
     Heart, Calendar, ArrowUpRight, Award, UserPlus, Clock, Zap, Volume2, Activity,
     Search, Plus, Minus, RotateCcw, Trash2, Settings, Save, ChevronUp, ChevronDown,
     Gift, Edit2, Check, X, Users, TrendingUp, Crown, AlertCircle, Dices, History, Gamepad2,
-    MessageSquare, Sparkles, Eye, AlertTriangle, Info
+    MessageSquare, Sparkles, Eye, AlertTriangle, Info, Copy
 } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Button, Input, Switch } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
@@ -1180,21 +1180,37 @@ export default function LoyaltyManagerPage() {
                                     onChange={v => setLoyaltyConfig(c => ({ ...c, games: { ...c.games, pokemon: { ...c.games?.pokemon, spawn_interval: v === '' ? '' : Number(v) } } }))} type="number" />
                             </div>
 
-                            <div className="pt-4 border-t border-zinc-800 flex justify-between items-center">
-                                <div className="text-xs text-zinc-400 max-w-sm">
-                                    <span className="font-semibold text-rose-400 block mb-1">Testing</span>
-                                    Use this to manually trigger a wild Pokémon spawn and test if your overlay works. Pokémon automatically spawn every 10-20 minutes when Game Enabled.
+                            <div className="pt-4 border-t border-zinc-800 space-y-3">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                    <div className="text-xs text-zinc-400 max-w-sm">
+                                        <span className="font-semibold text-rose-400 block mb-1">Testing & Verification</span>
+                                        Trigger a wild Pokémon test spawn on your OBS Browser Source without altering live stream points or awarding real catches.
+                                    </div>
+                                    <Button className="h-9 px-6 bg-rose-600 hover:bg-rose-500 text-white font-bold" onClick={async () => {
+                                        try {
+                                            const res = await axios.post('/api/loyalty/spawn_pokemon?is_test=true');
+                                            const data = res.data;
+                                            if (data.success) {
+                                                const overlays = data.connected_overlays ?? 0;
+                                                alert(`✅ ${data.message}\nActive OBS Overlays Connected: ${overlays}${overlays === 0 ? '\n\n⚠️ Tip: Open your OBS Browser Source pointing to /overlay/pokemon to view the graphic live.' : ''}`);
+                                            } else {
+                                                alert("❌ Failed to spawn: " + (data.message || "Unknown error"));
+                                            }
+                                        } catch (e) {
+                                            alert("Error spawning pokemon: " + (e.response?.data?.message || e.message));
+                                        }
+                                    }}>
+                                        Test Spawn
+                                    </Button>
                                 </div>
-                                <Button className="h-9 px-6 bg-rose-600 hover:bg-rose-500 text-white font-bold" onClick={async () => {
-                                    try {
-                                        await axios.post('/api/loyalty/spawn_pokemon');
-                                        alert("Pokemon Spawn Triggered!");
-                                    } catch (e) {
-                                        alert("Error spawning pokemon: " + e.message);
-                                    }
-                                }}>
-                                    Test Spawn
-                                </Button>
+
+                                <div className="p-3 bg-zinc-950/70 border border-zinc-800/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">OBS Browser Source URL</span>
+                                        <span className="text-xs font-mono text-emerald-400 select-all break-all">{`${window.location.origin}/overlay/pokemon`}</span>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-500 self-end sm:self-center">1920x1080 • Transparent</span>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

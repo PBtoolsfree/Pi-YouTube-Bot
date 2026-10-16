@@ -136,6 +136,10 @@ class BotService:
         self._secret_word = None
         self._loot_box_active = False
 
+        # Stream Live State Tracking
+        self.is_stream_live = False
+        self.last_stream_live_timestamp = 0.0
+
         # Sub-Services
         self.viewers = ViewerService()
         self.viewers.bot = self
@@ -822,19 +826,23 @@ class BotService:
                         }
                         await self._log_ui("SYSTEM", "Connected to Streamer.bot WS")
                         
-                        # Notify Cloud Bot
+                        # Notify Cloud Bot of Streamer.bot connection (note: does NOT imply stream is live)
                         if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
                             asyncio.create_task(self.cloud_alert_client.send_event({
                                 "type": "streamerbot_status", 
                                 "connected": True
                             }))
-                            asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_reconnected"}))
                             
                         subscribe_msg: Dict[str, Any] = {
                             "request": "Subscribe",
                             "id": "PiBotSubs",
                             "events": {
-                                "YouTube": ["Message", "SuperChat", "SuperSticker", "NewSubscriber", "Member", "GiftSub"],
+                                "YouTube": [
+                                    "Message", "SuperChat", "SuperSticker", "NewSubscriber", "Member", "GiftSub",
+                                    "BroadcastStarted", "BroadcastEnded", "BroadcastUpdated"
+                                ],
+                                "Obs": ["StreamStarted", "StreamStopped"],
+                                "OBS": ["StreamStarted", "StreamStopped"],
                                 "general": ["Custom", "Alert"],
                                 "Twitch": ["Message", "RewardRedemption"]
                             }
@@ -882,6 +890,7 @@ class BotService:
                 finally:
                      # Critical: Reset ws object so status checks fail appropriately
                      self.sb_ws = None
+                     self.is_stream_live = False
                      if "streamerbot" not in self.worker_health:
                          self.worker_health["streamerbot"] = {"restart_count": 0}
                      self.worker_health["streamerbot"]["status"] = "disconnected"
@@ -893,10 +902,16 @@ class BotService:
                              "type": "streamerbot_status", 
                              "connected": False
                          }))
-                         asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_disconnected"}))
+                         asyncio.create_task(self.cloud_alert_client.send_event({
+                             "type": "stream_status",
+                             "live": False,
+                             "timestamp": time.time(),
+                             "source": "sb_closed"
+                         }))
 
             except Exception as e:
                 self.sb_ws = None
+                self.is_stream_live = False
                 if "streamerbot" not in self.worker_health:
                     self.worker_health["streamerbot"] = {"restart_count": 0}
                 self.worker_health["streamerbot"]["status"] = "error"
@@ -910,7 +925,12 @@ class BotService:
                         "type": "streamerbot_status", 
                         "connected": False
                     }))
-                    asyncio.create_task(self.cloud_alert_client.send_event({"type": "stream_disconnected"}))
+                    asyncio.create_task(self.cloud_alert_client.send_event({
+                        "type": "stream_status",
+                        "live": False,
+                        "timestamp": time.time(),
+                        "source": "sb_error"
+                    }))
                     
                 await asyncio.sleep(5)
 
@@ -933,8 +953,66 @@ class BotService:
             logger.info(f"[SB Event] Source: {source} | Type: {etype} | Keys: {list(data.keys())}")
             if etype in ["Message", "YouTubeMessage"]:
                 logger.info(f"[SB Message Raw] {json.dumps(data)}")
+
+        # Authoritative Stream Lifecycle Event Tracking
+        if etype in ["BroadcastStarted", "StreamStarted", "LiveStreamStarted"]:
+            self.is_stream_live = True
+            self.last_stream_live_timestamp = time.time()
+            logger.info(f"[Stream Lifecycle] Stream started event received: {etype}")
+            if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                asyncio.create_task(self.cloud_alert_client.send_event({
+                    "type": "stream_status",
+                    "live": True,
+                    "timestamp": time.time(),
+                    "source": etype
+                }))
+        elif etype in ["BroadcastEnded", "StreamStopped", "LiveStreamEnded"]:
+            self.is_stream_live = False
+            self.last_stream_live_timestamp = time.time()
+            logger.info(f"[Stream Lifecycle] Stream stopped event received: {etype}")
+            if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                asyncio.create_task(self.cloud_alert_client.send_event({
+                    "type": "stream_status",
+                    "live": False,
+                    "timestamp": time.time(),
+                    "source": etype
+                }))
+        elif etype == "BroadcastUpdated":
+            b_data = data.get("data", {}) if isinstance(data.get("data"), dict) else {}
+            b_info = b_data.get("broadcast", b_data) if isinstance(b_data.get("broadcast"), dict) else b_data
+            status = str(b_info.get("status") or b_info.get("state") or b_info.get("broadcastStatus") or "").lower()
+            if status in ["live", "active"]:
+                self.is_stream_live = True
+                self.last_stream_live_timestamp = time.time()
+                if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                    asyncio.create_task(self.cloud_alert_client.send_event({
+                        "type": "stream_status",
+                        "live": True,
+                        "timestamp": time.time(),
+                        "source": "BroadcastUpdated"
+                    }))
+            elif status in ["complete", "completed", "ended", "offline"]:
+                self.is_stream_live = False
+                self.last_stream_live_timestamp = time.time()
+                if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                    asyncio.create_task(self.cloud_alert_client.send_event({
+                        "type": "stream_status",
+                        "live": False,
+                        "timestamp": time.time(),
+                        "source": "BroadcastUpdated"
+                    }))
         
         is_msg = etype in ["Message", "YouTubeMessage"]
+        if is_msg and not self.is_stream_live:
+            self.is_stream_live = True
+            self.last_stream_live_timestamp = time.time()
+            if getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running:
+                asyncio.create_task(self.cloud_alert_client.send_event({
+                    "type": "stream_status",
+                    "live": True,
+                    "timestamp": time.time(),
+                    "source": "chat_activity"
+                }))
         is_alert = etype in [
             "Member", "YouTubeMember", "YouTubeMemberMilestone", "MemberMileStone",
             "GiftSub", "YouTubeGiftMembershipReceived", "YouTubeMembershipGift", "GiftMembershipReceived", "MembershipGift",

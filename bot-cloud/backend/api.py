@@ -118,15 +118,6 @@ webhook_logger = WebhookLogger()
 def _is_public_request(request: Request) -> bool:
     """Determine if a request comes from the public internet (via Cloudflare Tunnel)."""
     host = request.headers.get("host", "").lower()
-    
-    # ---------------------------------------------------------
-    # NEW LOGIC: Allow direct Dashboard access via specific domain
-    # If the user is accessing via their main dashboard domain,
-    # treat it as a local/admin request to avoid redirecting to /tip
-    # ---------------------------------------------------------
-    if "pbhero.qzz.io" in host:
-        return False
-        
     cfg = _get_config()
     # Allow configurable tunnel domains
     tunnel_domains = cfg.get("security", {}).get(
@@ -151,10 +142,11 @@ class TunnelSecurityASGIMiddleware:
             
         request = Request(scope, receive=receive)
         
-        # 1. Identify if request is from Cloudflare Tunnel
+        # 1. Identify if request is from Cloudflare Tunnel / public internet
         is_public = _is_public_request(request)
         cf_ip = request.headers.get("cf-connecting-ip")
         path = request.url.path
+        method = request.method
         
         cfg = _get_config()
         security_cfg = cfg.get("security", {})
@@ -162,28 +154,46 @@ class TunnelSecurityASGIMiddleware:
             "/tip", "/tip/", "/api/donate", "/api/webhook/*", "/api/config", "/assets", "/favicon.ico", "/manifest.json"
         ])
         
-        is_allowed_public = (
+        # Scoped safe public display/read-only APIs:
+        is_safe_public_api = (
+            (path in ["/api/health", "/api/version"] and method == "GET")
+            or (path == "/api/config" and method == "GET")
+            or (path == "/api/loyalty/pokemon/active" and method == "GET")
+            or (path == "/api/subscriber" and method == "GET")
+            or (path.startswith("/api/custom-overlays") and method == "GET")
+            or path == "/api/donate"
+            or path.startswith("/api/payment/")
+            or path.startswith("/api/webhook/")
+        )
+
+        # Scoped safe public pages and static assets:
+        is_safe_public_page_or_asset = (
             path.startswith("/assets")
             or path.startswith("/uploads")
-            or path.startswith("/api/")
             or path.startswith("/overlay")
             or path.startswith("/obs")
-            or path.startswith("/ws/")
+            or path.startswith("/ws/overlay")
+            or path.startswith("/ws/pi-client")
             or (path in ["/", ""] and "mode" in request.query_params)
             or path in ["/favicon.ico", "/manifest.json", "/tip", "/tip/",
                         "/logo.jpg", "/Background.jpg", "/vite.svg",
                         "/public-avatar-overlay", "/giveawayspin"]
-            or path in allowed_paths
-            or "*" in allowed_paths
-            or any(
-                (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
-                for a in allowed_paths
-            )
         )
 
+        # Custom config-allowed paths (only if not attempting to write to /api/config)
+        is_custom_allowed = (
+            (path in allowed_paths or "*" in allowed_paths or any(
+                (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
+                for a in allowed_paths
+            ))
+            and not (path == "/api/config" and method != "GET")
+        )
+
+        is_allowed_public = is_safe_public_page_or_asset or is_safe_public_api or is_custom_allowed
+
         # 1.5. AUTO-REDIRECT ROOT TO TIP FOR PUBLIC REQUESTS
-        # Do this BEFORE any authentication checks!
-        if is_public and path in ("/", ""):
+        # Only redirect if visiting root without specific parameters
+        if is_public and path in ("/", "") and "mode" not in request.query_params:
             response = RedirectResponse("/tip")
             await response(scope, receive, send)
             return
@@ -217,12 +227,21 @@ class TunnelSecurityASGIMiddleware:
                     return
                 # Authenticated admin gets full access
                 is_public_bypass = True
+            else:
+                # If no password is set, deny public access to non-whitelisted admin paths
+                if is_public:
+                    logger.warning("Blocked unauthenticated public access to admin endpoint: %s", path)
+                    response = JSONResponse(
+                        status_code=403,
+                        content={"error": "Access Denied via Public Internet", "path": path}
+                    )
+                    await response(scope, receive, send)
+                    return
 
-        # Inject state for endpoints
+        # Inject state for endpoints (e.g. get_config checks request.state.is_public to sanitize secrets)
         scope["state"] = {"is_public": is_public and not is_public_bypass}
 
         if is_public and not is_public_bypass:
-
             # RATE LIMITING
             client_ip = cf_ip or (request.client.host if request.client else "unknown")
             if not rate_limiter.is_allowed(client_ip):
@@ -231,19 +250,14 @@ class TunnelSecurityASGIMiddleware:
                 await response(scope, receive, send)
                 return
 
-            # ALWAYS ALLOW ASSETS & HEALTH CHECK & TIP PAGE & WS CLIENTS
-            if (
-                path.startswith("/assets")
-                or path.startswith("/uploads")
-                or path.startswith("/api/payment/")
-                or path.startswith("/api/donate")
-                or path == "/api/config"
-                or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
-                            "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
-            ):
-                return await self.app(scope, receive, send)
+            # Explicit security: Block any public attempt to mutate /api/config
+            if path == "/api/config" and method != "GET":
+                logger.warning("Blocked public mutation attempt to /api/config from %s", client_ip)
+                response = JSONResponse(status_code=403, content={"error": "Configuration modification not allowed via public internet"})
+                await response(scope, receive, send)
+                return
 
-            # WEBHOOK SECURITY SHORT-CIRCUIT
+            # WEBHOOK SECURITY CHECK
             if path.startswith("/api/webhook/"):
                 required_secret = security_cfg.get("webhook_secret")
                 if required_secret:
@@ -256,25 +270,15 @@ class TunnelSecurityASGIMiddleware:
                         await response(scope, receive, send)
                         return
 
-            # PERMISSIONS CHECK
-            is_allowed = (
-                path in allowed_paths
-                or "*" in allowed_paths
-                or any(
-                    (path.startswith(a[:-1]) if a.endswith("*") else path.startswith(a + "/"))
-                    for a in allowed_paths
-                )
-            )
+            # SAFE PUBLIC PATHS PASS-THROUGH
+            if is_allowed_public:
+                return await self.app(scope, receive, send)
 
-            # Restrict POST/PUT/DELETE for /api/config publicly
-            if request.method != "GET" and path == "/api/config":
-                is_allowed = False
-
-            if not is_allowed:
-                logger.warning("Blocked external access to: %s from %s", path, client_ip)
-                response = JSONResponse(status_code=403, content={"error": "Access Denied via Public Internet", "path": path})
-                await response(scope, receive, send)
-                return
+            # Any unauthenticated attempt to reach internal endpoints is blocked
+            logger.warning("Blocked external access to: %s from %s", path, client_ip)
+            response = JSONResponse(status_code=403, content={"error": "Access Denied via Public Internet", "path": path})
+            await response(scope, receive, send)
+            return
 
         return await self.app(scope, receive, send)
 
@@ -920,12 +924,50 @@ async def start_boss(payload: Dict[str, Any]):
     return {"status": "success", "message": result["message"]}
 
 @app.post("/api/loyalty/spawn_pokemon")
-async def spawn_pokemon():
+async def spawn_pokemon(is_test: bool = True):
     if not hasattr(bot, "pokemon"):
         return {"success": False, "message": "Pokemon service not initialized"}
     
-    await bot.pokemon.spawn_wild_pokemon(force=True)
-    return {"success": True, "message": "Wild Pokemon spawned!"}
+    result = await bot.pokemon.spawn_wild_pokemon(force=True, is_test=is_test)
+    if result:
+        overlay_count = len(active_overlay_websockets)
+        return {
+            "success": True, 
+            "message": f"{'Test ' if is_test else ''}Wild {result.get('name', 'Pokemon')} spawned!",
+            "pokemon": result,
+            "is_test": is_test,
+            "connected_overlays": overlay_count
+        }
+    return {"success": False, "message": "Failed to spawn Pokemon"}
+
+@app.get("/api/loyalty/pokemon/active")
+async def get_active_pokemon():
+    """Returns currently active wild Pokemon if any, including remaining seconds."""
+    if not hasattr(bot, "pokemon"):
+        return {"active": False, "pokemon": None}
+    active = bot.pokemon.active_wild_pokemon
+    if not active:
+        return {"active": False, "pokemon": None}
+    now = time.time()
+    rem = max(0, int(active.get("expires_at", now + 60) - now))
+    if rem <= 0:
+        return {"active": False, "pokemon": None}
+    return {
+        "active": True,
+        "pokemon": active["pokemon"],
+        "remaining_seconds": rem,
+        "is_test": active.get("is_test", False),
+        "event_id": active.get("event_id")
+    }
+
+@app.get("/api/loyalty/pokemon/status")
+async def get_pokemon_status():
+    """Returns diagnostics on the Pokemon auto-spawn system."""
+    if not hasattr(bot, "pokemon"):
+        return {"status": "unavailable", "message": "Pokemon service not initialized"}
+    status = bot.pokemon.get_status()
+    status["connected_overlays"] = len(active_overlay_websockets)
+    return status
 
 @app.get("/api/loyalty/pokemons")
 async def get_pokemons():
@@ -2279,18 +2321,35 @@ async def broadcast_overlay(count: int, type: str = "subscriber_count"):
 
 @app.websocket("/ws/overlay")
 async def websocket_overlay_endpoint(websocket: WebSocket):
-    # Block public access to overlay WebSocket
-    if websocket.headers.get("cf-connecting-ip") or websocket.headers.get("cf-ray"):
-        await websocket.close(code=1008, reason="Access Denied")
-        return
+    # Allow OBS Browser Source connections across Cloudflare tunnels / public domains
     await websocket.accept()
     active_overlay_websockets.append(websocket)
     try:
         # Send initial state
         await websocket.send_json({"type": "subscriber_count", "count": bot.subscriber_count})
+
+        # Send active wild pokemon state upon connection/reconnect if currently spawned
+        if hasattr(bot, "pokemon") and bot.pokemon and bot.pokemon.active_wild_pokemon:
+            active = bot.pokemon.active_wild_pokemon
+            now = time.time()
+            rem = max(0, int(active.get("expires_at", now + 60) - now))
+            if rem > 0:
+                await websocket.send_json({
+                    "type": "pokemon_event",
+                    "action": "spawn",
+                    "pokemon": active["pokemon"],
+                    "remaining_seconds": rem,
+                    "is_test": active.get("is_test", False),
+                    "event_id": active.get("event_id")
+                })
+
         while True:
             await websocket.receive_text() # Keep alive
     except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug(f"Overlay websocket closed: {e}")
+    finally:
         if websocket in active_overlay_websockets:
             active_overlay_websockets.remove(websocket)
 
@@ -3243,6 +3302,10 @@ async def websocket_pi_client_endpoint(websocket: WebSocket):
         pi_clients.disconnect(websocket)
         if websocket in active_pi_websockets:
             active_pi_websockets.remove(websocket)
+        if len(active_pi_websockets) == 0:
+            bot.remote_sb_connected = False
+            bot.last_pi_heartbeat = 0.0
+            logger.info("All Pi clients disconnected. Cleared remote_sb_connected and last_pi_heartbeat.")
         logger.info("Pi client disconnected.")
 
 # --- FRONTEND STATIC SERVING ---

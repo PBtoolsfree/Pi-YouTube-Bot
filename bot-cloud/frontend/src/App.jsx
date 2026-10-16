@@ -66,9 +66,13 @@ function App() {
   const [status, setStatus] = useState('disconnected')
   const [error, setError] = useState(null)
   const [isPublicMode, setIsPublicMode] = useState(() => {
-    // SAFEGUARD: Access env vars safely
-    // ONLY force public mode if we are on a known public domain (Vercel, Cloudflare, etc)
-    // OR if the user is explicitly visiting /tip
+    // If the path is explicitly an overlay or editor, NEVER force public tip page
+    const path = window.location.pathname;
+    const search = window.location.search;
+    if (path.startsWith('/overlay') || path === '/giveawayspin' || path === '/public-avatar-overlay' || path === '/obs/game' || path === '/overlay-editor' || search.includes('mode=')) {
+      return false;
+    }
+
     const hostname = window.location.hostname;
     if (hostname.includes('pbhero.qzz.io')) {
       return false;
@@ -78,21 +82,24 @@ function App() {
       hostname.includes('trycloudflare.com') ||
       hostname.includes('qzz.io') ||
       hostname.includes('pbherotip') ||
-      window.location.pathname === '/tip'
+      path === '/tip'
     )
   })
   const wsRef = useRef(null)
 
   useEffect(() => {
-    // Make body transparent for overlay routes
-    if (window.location.search.includes('mode=') || window.location.pathname.startsWith('/overlay/') || window.location.pathname === '/giveawayspin') {
+    // Make body and document transparent for overlay routes
+    const isOverlayRoute = window.location.search.includes('mode=') || window.location.pathname.startsWith('/overlay') || window.location.pathname === '/giveawayspin' || window.location.pathname === '/public-avatar-overlay' || window.location.pathname === '/obs/game';
+    if (isOverlayRoute) {
       document.body.style.backgroundColor = 'transparent'
       document.body.style.background = 'transparent'
+      document.documentElement.style.backgroundColor = 'transparent'
+      document.documentElement.style.background = 'transparent'
       document.body.classList.remove('bg-zinc-950')
     }
 
-    // If specific route, don't fetch config
-    if (window.location.pathname === '/tip') return
+    // If overlay route or tip route, don't fetch dashboard config or logs
+    if (isOverlayRoute || window.location.pathname === '/tip') return
 
     fetchConfig()
     fetchStatus()
@@ -217,13 +224,7 @@ function App() {
   const isPokemonOverlay = window.location.pathname === '/overlay/pokemon' || window.location.search.includes('mode=pokemon')
   const isOverlayEditor = window.location.pathname === '/overlay-editor'
 
-  console.log("Routing Debug:", { pathname: window.location.pathname, search: window.location.search, isSubOverlay })
-
-  // Explicit Route or Fallback Public Mode
-  if (window.location.pathname === '/tip' || isPublicMode) {
-    return <TipPage />
-  }
-
+  // OVERLAYS FIRST: Must match before any public mode / tip page fallbacks
   if (isOverlay) return <div className="bg-transparent h-screen w-screen"><AudioOverlay /></div>
   if (isChatOverlay) return <div className="bg-transparent h-screen w-screen"><ChatOverlay /></div>
   if (isAlertOverlay) return <div className="bg-transparent h-screen w-screen"><AlertOverlay /></div>
@@ -242,8 +243,13 @@ function App() {
   if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
   if (isTickerOverlay) return <TickerOverlay />
   if (isQROverlay) return <QROverlay />
-  if (isPokemonOverlay) return <PokemonOverlay />
+  if (isPokemonOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><PokemonOverlay /></div>
   if (isOverlayEditor) return <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center bg-zinc-950"><div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full" /></div>}><OverlayEditor /></Suspense>
+
+  // Explicit Route or Fallback Public Mode
+  if (window.location.pathname === '/tip' || isPublicMode) {
+    return <TipPage />
+  }
 
   if (!config) return (
     <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 text-white gap-4">
