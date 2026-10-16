@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
-import { Volume2, Zap, Clock, Activity, SkipForward, Trash2, Pause, Play, GripVertical, Save, Mic, AlertTriangle, X, Plus, Gauge, Timer, ShieldAlert } from 'lucide-react'
+import { Volume2, Zap, Clock, Activity, SkipForward, Trash2, Pause, Play, GripVertical, Save, Mic, AlertTriangle, X, Plus, Gauge, Timer, ShieldAlert, Globe, Sparkles } from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Button } from '@/components/ui'
 import { Reorder } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -35,6 +35,7 @@ const HEALTH_CONFIG = {
 export default function AudioEnginePage() {
     const [stats, setStats] = useState(null)
     const [config, setConfig] = useState(null)
+    const [mode, setMode] = useState('auto') // 'auto' | 'single'
     const [selectedLang, setSelectedLang] = useState('en-IN')
     const [selectedVoice, setSelectedVoice] = useState('')
     const [hasChanges, setHasChanges] = useState(false)
@@ -76,25 +77,30 @@ export default function AudioEnginePage() {
             try {
                 const res = await axios.get('/api/config')
                 setConfig(res.data)
-                const currentVoice = res.data.audio?.voice || 'en-IN-PrabhatNeural'
+                const audioCfg = res.data.audio || {}
+                const currentVoice = audioCfg.voice || 'en-IN-PrabhatNeural'
                 setSelectedVoice(currentVoice)
+
+                // Load mode: priority to mode field, fallback to auto_voices.enabled
+                const savedMode = audioCfg.mode || (audioCfg.auto_voices?.enabled !== false ? 'auto' : 'single')
+                setMode(savedMode)
 
                 // Auto-detect language from voice prefix
                 const lang = LANGUAGES.find(l => currentVoice.startsWith(l.id))
                 if (lang) setSelectedLang(lang.id)
-                if (res.data.audio?.auto_voices) {
-                    setAutoVoices(res.data.audio.auto_voices)
+                if (audioCfg.auto_voices) {
+                    setAutoVoices(audioCfg.auto_voices)
                 }
 
                 // Load rate/volume
-                const rateStr = res.data.audio?.rate || '+0%'
-                const volStr = res.data.audio?.volume || '+0%'
+                const rateStr = audioCfg.rate || '+0%'
+                const volStr = audioCfg.volume || '+0%'
                 setRate(parseInt(rateStr.replace('%', '')) || 0)
                 setVolume(parseInt(volStr.replace('%', '')) || 0)
 
                 // Load banned words
-                if (res.data.audio?.banned_words) {
-                    setBannedWords(res.data.audio.banned_words)
+                if (audioCfg.banned_words) {
+                    setBannedWords(audioCfg.banned_words)
                 }
             } catch (e) { }
         }
@@ -130,9 +136,13 @@ export default function AudioEnginePage() {
                 ...config,
                 audio: {
                     ...config.audio,
+                    mode: mode,
                     voice: selectedVoice,
                     priority_mode: activePriorityMode,
-                    auto_voices: autoVoices,
+                    auto_voices: {
+                        ...autoVoices,
+                        enabled: mode === 'auto'
+                    },
                     rate: rateStr,
                     volume: volStr,
                     banned_words: bannedWords,
@@ -283,12 +293,45 @@ export default function AudioEnginePage() {
                 <MetricCard title="Timeouts" value={safeStats.metrics.timeout_kills || 0} icon={<Timer className="text-purple-500" />} desc="Zombie kills" />
             </div>
 
-            {/* Config & Status */}
+            {/* Voice Configuration & Engine Settings */}
             <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row justify-between items-center">
-                    <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                        <Mic className="h-4 w-4 text-zinc-400" /> Voice Configuration
-                    </CardTitle>
+                <CardHeader className="pb-3 border-b border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                            <Mic className="h-4 w-4 text-zinc-400" /> Voice Engine Mode
+                        </CardTitle>
+                        {/* Mutually exclusive mode toggle switch */}
+                        <div className="flex p-0.5 bg-zinc-950 border border-zinc-800 rounded-lg">
+                            <button
+                                type="button"
+                                id="btn-mode-auto"
+                                onClick={() => { setMode('auto'); setHasChanges(true); }}
+                                className={cn(
+                                    "px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5",
+                                    mode === 'auto'
+                                        ? "bg-emerald-500 text-zinc-950 shadow-sm font-bold"
+                                        : "text-zinc-400 hover:text-zinc-200"
+                                )}
+                            >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Auto Multi-Language
+                            </button>
+                            <button
+                                type="button"
+                                id="btn-mode-single"
+                                onClick={() => { setMode('single'); setHasChanges(true); }}
+                                className={cn(
+                                    "px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5",
+                                    mode === 'single'
+                                        ? "bg-blue-500 text-white shadow-sm font-bold"
+                                        : "text-zinc-400 hover:text-zinc-200"
+                                )}
+                            >
+                                <Mic className="h-3.5 w-3.5" />
+                                Single Language
+                            </button>
+                        </div>
+                    </div>
                     {hasChanges && (
                         <Button size="sm" onClick={handleSave} className="h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
                             <Save className="h-3.5 w-3.5" /> Save Changes
@@ -296,216 +339,226 @@ export default function AudioEnginePage() {
                     )}
                 </CardHeader>
                 <CardContent className="pt-4 grid sm:grid-cols-2 gap-6">
+                    {/* Left Column: Mode-specific configuration */}
                     <div className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-zinc-400 uppercase">Language</label>
-                            <div className="flex flex-wrap gap-2">
-                                {LANGUAGES.map(l => (
-                                    <button
-                                        key={l.id}
-                                        onClick={() => { setSelectedLang(l.id); setSelectedVoice(l.voices[0].id); setHasChanges(true); }}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded text-xs font-medium transition-colors border",
-                                            selectedLang === l.id
-                                                ? "bg-zinc-100 text-zinc-900 border-zinc-100"
-                                                : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700"
-                                        )}
-                                    >
-                                        {l.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="space-y-4">
-                            <label className="text-xs font-medium text-zinc-400 uppercase">Voice Profile</label>
-                            <div className="relative">
-                                <select
-                                    className="w-full h-10 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none"
-                                    value={selectedVoice}
-                                    onChange={(e) => { setSelectedVoice(e.target.value); setHasChanges(true); }}
-                                >
-                                    {LANGUAGES.find(l => l.id === selectedLang)?.voices.map(v => (
-                                        <option key={v.id} value={v.id} className="bg-zinc-900 text-zinc-300">
-                                            {v.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
-                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
+                        {mode === 'single' ? (
+                            /* Single Language Settings ONLY */
+                            <div className="space-y-4 p-4 rounded-lg bg-zinc-950/40 border border-zinc-800/80">
+                                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                                    <Mic className="h-3.5 w-3.5 text-blue-400" />
+                                    <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                                        Manual Voice Selection
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-zinc-400 uppercase">Language</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {LANGUAGES.map(l => (
+                                            <button
+                                                key={l.id}
+                                                type="button"
+                                                onClick={() => { setSelectedLang(l.id); setSelectedVoice(l.voices[0].id); setHasChanges(true); }}
+                                                className={cn(
+                                                    "px-3 py-1.5 rounded text-xs font-medium transition-colors border",
+                                                    selectedLang === l.id
+                                                        ? "bg-zinc-100 text-zinc-900 border-zinc-100 font-semibold"
+                                                        : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                                                )}
+                                            >
+                                                {l.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-zinc-400 uppercase">Voice Profile</label>
+                                    <div className="relative">
+                                        <select
+                                            className="w-full h-10 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none"
+                                            value={selectedVoice}
+                                            onChange={(e) => { setSelectedVoice(e.target.value); setHasChanges(true); }}
+                                        >
+                                            {LANGUAGES.find(l => l.id === selectedLang)?.voices.map(v => (
+                                                <option key={v.id} value={v.id} className="bg-zinc-900 text-zinc-300">
+                                                    {v.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Rate & Volume Sliders */}
-                        <div className="space-y-3">
-                            <label className="text-xs font-medium text-zinc-400 uppercase">Speech Rate</label>
-                            <div className="flex items-center gap-3">
-                                <Gauge className="h-4 w-4 text-zinc-500 shrink-0" />
-                                <input
-                                    type="range"
-                                    min={-50}
-                                    max={100}
-                                    value={rate}
-                                    onChange={(e) => { setRate(parseInt(e.target.value)); setHasChanges(true); }}
-                                    className="flex-1 h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none"
-                                />
-                                <span className="text-xs font-mono text-zinc-300 w-14 text-right tabular-nums">
-                                    {rate >= 0 ? `+${rate}%` : `${rate}%`}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-xs font-medium text-zinc-400 uppercase">Volume</label>
-                            <div className="flex items-center gap-3">
-                                <Volume2 className="h-4 w-4 text-zinc-500 shrink-0" />
-                                <input
-                                    type="range"
-                                    min={-50}
-                                    max={100}
-                                    value={volume}
-                                    onChange={(e) => { setVolume(parseInt(e.target.value)); setHasChanges(true); }}
-                                    className="flex-1 h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-emerald-500 [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none"
-                                />
-                                <span className="text-xs font-mono text-zinc-300 w-14 text-right tabular-nums">
-                                    {volume >= 0 ? `+${volume}%` : `${volume}%`}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <label className="text-xs font-medium text-zinc-400 uppercase">Active Priority Mode</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    onClick={() => { setActivePriorityMode('private'); setHasChanges(true); }}
-                                    className={cn(
-                                        "px-3 py-2 rounded-md text-xs font-bold border transition-all flex items-center justify-center gap-2",
-                                        activePriorityMode === 'private'
-                                            ? "bg-amber-500 text-zinc-950 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-                                            : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
-                                    )}
-                                >
-                                    <Zap className="h-3.5 w-3.5" />
-                                    Prioritize Private
-                                </button>
-                                <button
-                                    onClick={() => { setActivePriorityMode('public'); setHasChanges(true); }}
-                                    className={cn(
-                                        "px-3 py-2 rounded-md text-xs font-bold border transition-all flex items-center justify-center gap-2",
-                                        activePriorityMode === 'public'
-                                            ? "bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
-                                            : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
-                                    )}
-                                >
-                                    <Volume2 className="h-3.5 w-3.5" />
-                                    Prioritize Public
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {/* Status Box */}
-                    <div className="bg-zinc-950 rounded-lg border border-zinc-800 p-4 space-y-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Playback Status</span>
-                            {safeStats.is_playing ? (
-                                <span className="text-xs text-emerald-500 font-bold animate-pulse">SPEAKING</span>
-                            ) : (
-                                <span className="text-xs text-zinc-500 font-bold">IDLE</span>
-                            )}
-                        </div>
-                        <div className="border-t border-zinc-900 pt-3">
-                            <div className="text-[10px] text-zinc-500 uppercase mb-1">Last Spoken</div>
-                            <p className="text-xs text-zinc-300 font-mono italic">
-                                "{typeof safeStats.current_text === 'object' ? safeStats.current_text.text : (safeStats.current_text || "...")}"
-                            </p>
-                        </div>
-
-                        {/* Uptime display */}
-                        <div className="border-t border-zinc-900 pt-3">
-                            <div className="text-[10px] text-zinc-500 uppercase mb-1">Engine Uptime</div>
-                            <p className="text-sm text-zinc-200 font-mono">
-                                {formatUptime(safeStats.uptime_seconds || 0)}
-                            </p>
-                        </div>
-
-                        {/* Temp dir indicator (Pi optimization check) */}
-                        {safeStats.temp_dir && (
-                            <div className="border-t border-zinc-900 pt-3">
-                                <div className="text-[10px] text-zinc-500 uppercase mb-1">Temp Storage</div>
-                                <div className="flex items-center gap-1.5">
-                                    <div className={cn(
-                                        "h-1.5 w-1.5 rounded-full",
-                                        safeStats.temp_dir.includes('/dev/shm') ? "bg-emerald-500" : "bg-zinc-600"
-                                    )} />
-                                    <span className="text-xs text-zinc-400 font-mono">{safeStats.temp_dir}</span>
-                                    {safeStats.temp_dir.includes('/dev/shm') && (
-                                        <span className="text-[9px] text-emerald-500 bg-emerald-500/10 px-1 rounded">RAM</span>
-                                    )}
+                        ) : (
+                            /* Auto Multi-Language Settings ONLY */
+                            <div className="space-y-4 p-4 rounded-lg bg-zinc-950/40 border border-zinc-800/80">
+                                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                                    <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                                        Multi-Language Mapping (Auto-Detect: EN, HI, BN)
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {['public', 'private'].map(channel => (
+                                        <div key={channel} className="space-y-3 p-3 rounded bg-zinc-950/60 border border-zinc-900">
+                                            <h4 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider pb-1 border-b border-zinc-800 flex items-center justify-between">
+                                                <span>{channel === 'public' ? 'Public (Bot)' : 'Private (Viewer)'}</span>
+                                                <span className="text-[9px] text-zinc-500 font-mono font-normal">Channel</span>
+                                            </h4>
+                                            {[
+                                                { key: 'en', label: 'English (EN)' },
+                                                { key: 'hi', label: 'Hindi / Hinglish (HI)' },
+                                                { key: 'bn', label: 'Bengali / Benglish (BN)' },
+                                                { key: 'default', label: 'Fallback Default' }
+                                            ].map(({ key: langKey, label }) => (
+                                                <div key={langKey} className="space-y-1">
+                                                    <label className="text-[10px] text-zinc-400 uppercase font-medium">{label}</label>
+                                                    <select
+                                                        className="w-full h-8 rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white focus:outline-none focus:border-zinc-700"
+                                                        value={autoVoices[channel]?.[langKey] || ''}
+                                                        onChange={(e) => {
+                                                            setAutoVoices(prev => ({
+                                                                ...prev,
+                                                                [channel]: { ...prev[channel], [langKey]: e.target.value }
+                                                            }))
+                                                            setHasChanges(true)
+                                                        }}
+                                                    >
+                                                        <option value="">-- Select Voice --</option>
+                                                        {LANGUAGES.flatMap(l => l.voices).map(v => (
+                                                            <option key={v.id} value={v.id}>{v.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
-                        <Button size="sm" variant="outline" onClick={handleSkip} className="w-full h-8 gap-2 border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs">
+                        {/* Shared Controls: Speech Rate, Volume & Priority Mode */}
+                        <div className="space-y-4 pt-2">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-zinc-400 uppercase">Speech Rate</label>
+                                <div className="flex items-center gap-3">
+                                    <Gauge className="h-4 w-4 text-zinc-500 shrink-0" />
+                                    <input
+                                        type="range"
+                                        min={-50}
+                                        max={100}
+                                        value={rate}
+                                        onChange={(e) => { setRate(parseInt(e.target.value)); setHasChanges(true); }}
+                                        className="flex-1 h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none"
+                                    />
+                                    <span className="text-xs font-mono text-zinc-300 w-14 text-right tabular-nums">
+                                        {rate >= 0 ? `+${rate}%` : `${rate}%`}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-zinc-400 uppercase">Volume</label>
+                                <div className="flex items-center gap-3">
+                                    <Volume2 className="h-4 w-4 text-zinc-500 shrink-0" />
+                                    <input
+                                        type="range"
+                                        min={-50}
+                                        max={100}
+                                        value={volume}
+                                        onChange={(e) => { setVolume(parseInt(e.target.value)); setHasChanges(true); }}
+                                        className="flex-1 h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-emerald-500 [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none"
+                                    />
+                                    <span className="text-xs font-mono text-zinc-300 w-14 text-right tabular-nums">
+                                        {volume >= 0 ? `+${volume}%` : `${volume}%`}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-zinc-400 uppercase">Active Priority Mode</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setActivePriorityMode('private'); setHasChanges(true); }}
+                                        className={cn(
+                                            "px-3 py-2 rounded-md text-xs font-bold border transition-all flex items-center justify-center gap-2",
+                                            activePriorityMode === 'private'
+                                                ? "bg-amber-500 text-zinc-950 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
+                                                : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
+                                        )}
+                                    >
+                                        <Zap className="h-3.5 w-3.5" />
+                                        Prioritize Private
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setActivePriorityMode('public'); setHasChanges(true); }}
+                                        className={cn(
+                                            "px-3 py-2 rounded-md text-xs font-bold border transition-all flex items-center justify-center gap-2",
+                                            activePriorityMode === 'public'
+                                                ? "bg-blue-500 text-white border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                                                : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300"
+                                        )}
+                                    >
+                                        <Volume2 className="h-3.5 w-3.5" />
+                                        Prioritize Public
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Playback & Status Box (Shared across both modes) */}
+                    <div className="bg-zinc-950 rounded-lg border border-zinc-800 p-4 space-y-4 flex flex-col justify-between">
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Playback Status</span>
+                                {safeStats.is_playing ? (
+                                    <span className="text-xs text-emerald-500 font-bold animate-pulse">SPEAKING</span>
+                                ) : (
+                                    <span className="text-xs text-zinc-500 font-bold">IDLE</span>
+                                )}
+                            </div>
+                            <div className="border-t border-zinc-900 pt-3">
+                                <div className="text-[10px] text-zinc-500 uppercase mb-1">Last Spoken</div>
+                                <p className="text-xs text-zinc-300 font-mono italic">
+                                    "{typeof safeStats.current_text === 'object' ? safeStats.current_text.text : (safeStats.current_text || "...")}"
+                                </p>
+                            </div>
+
+                            {/* Uptime display */}
+                            <div className="border-t border-zinc-900 pt-3">
+                                <div className="text-[10px] text-zinc-500 uppercase mb-1">Engine Uptime</div>
+                                <p className="text-sm text-zinc-200 font-mono">
+                                    {formatUptime(safeStats.uptime_seconds || 0)}
+                                </p>
+                            </div>
+
+                            {/* Temp dir indicator (Pi optimization check) */}
+                            {safeStats.temp_dir && (
+                                <div className="border-t border-zinc-900 pt-3">
+                                    <div className="text-[10px] text-zinc-500 uppercase mb-1">Temp Storage</div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className={cn(
+                                            "h-1.5 w-1.5 rounded-full",
+                                            safeStats.temp_dir.includes('/dev/shm') ? "bg-emerald-500" : "bg-zinc-600"
+                                        )} />
+                                        <span className="text-xs text-zinc-400 font-mono">{safeStats.temp_dir}</span>
+                                        {safeStats.temp_dir.includes('/dev/shm') && (
+                                            <span className="text-[9px] text-emerald-500 bg-emerald-500/10 px-1 rounded">RAM</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <Button size="sm" variant="outline" onClick={handleSkip} className="w-full h-8 gap-2 border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs mt-4">
                             <SkipForward className="h-3.5 w-3.5" /> Skip Current Phrase
                         </Button>
                     </div>
                 </CardContent>
-            </Card>
-
-            {/* Auto Voices Config */}
-            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row justify-between items-center">
-                    <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                        <Mic className="h-4 w-4 text-zinc-400" /> Auto Language Voices
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-zinc-400">Enable Auto-Language</label>
-                        <input 
-                            type="checkbox" 
-                            checked={autoVoices.enabled || false}
-                            onChange={(e) => {
-                                setAutoVoices({...autoVoices, enabled: e.target.checked})
-                                setHasChanges(true)
-                            }}
-                            className="h-4 w-4 rounded border-zinc-800 bg-zinc-950 text-emerald-500 focus:ring-emerald-500/20"
-                        />
-                    </div>
-                </CardHeader>
-                {autoVoices.enabled && (
-                    <CardContent className="pt-4 grid sm:grid-cols-2 gap-6">
-                        {['public', 'private'].map(channel => (
-                            <div key={channel} className="space-y-4">
-                                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-widest border-b border-zinc-800 pb-2">
-                                    {channel === 'public' ? 'Public (Bot)' : 'Private (Viewer)'} Voices
-                                </h3>
-                                {['en', 'hi', 'bn', 'default'].map(langKey => (
-                                    <div key={langKey} className="flex flex-col space-y-1">
-                                        <label className="text-[10px] text-zinc-500 uppercase">{langKey === 'default' ? 'Fallback' : langKey} Model</label>
-                                        <select
-                                            className="w-full h-8 rounded border border-zinc-800 bg-zinc-950/50 px-2 py-1 text-xs text-white"
-                                            value={autoVoices[channel]?.[langKey] || ''}
-                                            onChange={(e) => {
-                                                setAutoVoices(prev => ({
-                                                    ...prev,
-                                                    [channel]: { ...prev[channel], [langKey]: e.target.value }
-                                                }))
-                                                setHasChanges(true)
-                                            }}
-                                        >
-                                            <option value="">-- Select Voice --</option>
-                                            {LANGUAGES.flatMap(l => l.voices).map(v => (
-                                                <option key={v.id} value={v.id}>{v.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ))}
-                            </div>
-                        ))}
-                    </CardContent>
-                )}
             </Card>
 
             {/* Banned Words Manager */}

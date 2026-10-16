@@ -1574,6 +1574,13 @@ async def update_audio_config(payload: Dict[str, Any]):
     cfg = ConfigManager.get_config()
     audio_cfg = cfg.get("audio", {})
     
+    if "mode" in payload:
+        audio_cfg["mode"] = payload["mode"]
+    if "voice" in payload:
+        audio_cfg["voice"] = payload["voice"]
+    if "auto_voices" in payload:
+        if isinstance(payload["auto_voices"], dict):
+            audio_cfg["auto_voices"] = payload["auto_voices"]
     if "rate" in payload:
         audio_cfg["rate"] = payload["rate"]
     if "volume" in payload:
@@ -1587,6 +1594,9 @@ async def update_audio_config(payload: Dict[str, Any]):
     cfg["audio"] = audio_cfg
     ConfigManager.save_config(cfg)
     return {"status": "updated", "audio": {
+        "mode": audio_cfg.get("mode"),
+        "voice": audio_cfg.get("voice"),
+        "auto_voices": audio_cfg.get("auto_voices"),
         "rate": audio_cfg.get("rate"),
         "volume": audio_cfg.get("volume"),
         "max_play_duration": audio_cfg.get("max_play_duration", 30),

@@ -123,6 +123,7 @@
     },
     "audio": {
         "enabled": true,
+        "mode": "auto",
         "voice": "en-IN-PrabhatNeural",
         "rate": "+0%",
         "volume": "+0%",

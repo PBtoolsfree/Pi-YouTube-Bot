@@ -57,6 +57,88 @@ _DEFAULT_BANNED_WORDS = [
     "dick", "pussy", "asshole", "motherfucker",
 ]
 
+# ── Script detection regex patterns ─────────────────────────────────────────
+_DEVANAGARI_PATTERN = re.compile(r'[\u0900-\u097F]')
+_BENGALI_PATTERN = re.compile(r'[\u0980-\u09FF]')
+
+# ── Standard default voices for PiBot ───────────────────────────────────────
+_DEFAULT_VOICES = {"en-in-prabhatneural", "en-in-neerjaneural", "default", "none", ""}
+
+# ── Hinglish keywords (excluding standard English words) ────────────────────
+_HINGLISH_KEYWORDS = {
+    'hai', 'hain', 'kya', 'kaise', 'kaisa', 'kaisi', 'karna', 'karo', 'kare', 'karein',
+    'karenge', 'karta', 'karti', 'karte', 'raha', 'rahi', 'rahe', 'mera', 'meri', 'mere',
+    'mujhe', 'mujhko', 'nahi', 'nahin', 'bhi', 'bahut', 'achha', 'achhi', 'achhe',
+    'accha', 'acchi', 'acche', 'thik', 'theek', 'kaun', 'kahan', 'kaha', 'kab',
+    'gaya', 'gayi', 'gaye', 'aur', 'haan', 'bhai', 'bhaiya', 'yaar', 'kaam', 'baat',
+    'baatein', 'mein', 'pehli', 'baar', 'aaye', 'aaya', 'aayi', 'aao', 'bolo', 'hissa',
+    'jao', 'jaao', 'jaana', 'kal', 'aaj', 'phir', 'dinon', 'tum', 'tumhara', 'tumhari',
+    'tumhare', 'tumhe', 'aap', 'aapka', 'aapki', 'aapke', 'humein', 'humare', 'hamara',
+    'hamari', 'hamare', 'apna', 'apni', 'apne', 'sabko', 'dekh', 'dekho', 'dekhkar',
+    'dekha', 'khushi', 'hui', 'hua', 'hue', 'laute', 'lauta', 'badhai', 'shukriya',
+    'swagat', 'namaste', 'namaskar', 'kaafi', 'adhoori', 'chuke', 'chuka', 'chuki',
+    'shuru', 'banta', 'banata', 'banaye', 'kripya', 'dhanyawad', 'dost', 'samajh',
+    'samjha', 'bolna', 'suno', 'sunao', 'kuch', 'kuchh', 'kyun', 'kyu', 'kyuki',
+    'kyunki', 'lekin', 'magar', 'paas', 'dur', 'aage', 'piche', 'upar', 'niche',
+    'sath', 'saath', 'chahiye', 'sakta', 'sakti', 'sakte', 'pata', 'maloom', 'hoga',
+    'hogi', 'honge'
+}
+
+# ── Benglish keywords (excluding standard English words) ────────────────────
+_BENGLISH_KEYWORDS = {
+    'kemon', 'acho', 'achho', 'ami', 'tumi', 'tomar', 'tomake', 'amra', 'amader',
+    'korcho', 'korchho', 'kothay', 'kotha', 'hobe', 'jabo', 'valo', 'bhalo',
+    'khub', 'kore', 'korbo', 'korbe', 'amar', 'apni', 'apnar', 'apnake', 'tui',
+    'keno', 'khabe', 'naki', 'ache', 'achhe', 'nei', 'ekhon', 'dada', 'didi',
+    'kori', 'bolcho', 'bolchho', 'sotti', 'dhonnobad', 'shobai', 'bujhechi',
+    'bujhte', 'parchi', 'parbo', 'korchi', 'korte', 'dekho', 'dekhte', 'aamra',
+    'aami', 'kichu', 'kokhon', 'kirokom', 'bhalobashi', 'thako', 'thakbe',
+    'ashbo', 'eshob'
+}
+
+# ── Common English stopwords & terms (prevent false Indian language classification) ──
+_ENGLISH_COMMON_WORDS = {
+    'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
+    'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+    'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
+    'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what',
+    'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me',
+    'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know', 'take',
+    'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other',
+    'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also',
+    'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way',
+    'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us',
+    'is', 'are', 'was', 'were', 'am', 'been', 'being', 'has', 'had', 'did', 'does',
+    'please', 'thank', 'thanks', 'hello', 'hi', 'hey', 'welcome', 'stream', 'game',
+    'play', 'playing', 'video', 'watch', 'watching', 'chat', 'audio', 'bot', 'youtube',
+    'ban', 'lag', 'mat', 'din', 'hum', 'bro', 'sir'
+}
+
+
+def _is_default_voice(voice: Optional[str], configured_default: Optional[str] = None) -> bool:
+    """Check if a voice matches system/configured default or empty value."""
+    if not voice:
+        return True
+    v = voice.strip().lower()
+    if v in ("", "default", "none", "inherited", "auto"):
+        return True
+    if v in _DEFAULT_VOICES:
+        return True
+    if configured_default and v == configured_default.strip().lower():
+        return True
+    return False
+
+
+def _get_audio_mode(audio_cfg: dict) -> str:
+    """Return active mode: 'auto' or 'single'. Handles legacy configs without 'mode' key."""
+    mode = audio_cfg.get("mode")
+    if mode in ("auto", "single"):
+        return mode
+    if audio_cfg.get("auto_voices", {}).get("enabled", False):
+        return "auto"
+    return "single"
+
+
 
 def _ensure_log_dir() -> None:
     os.makedirs(os.path.dirname(_AUDIO_DEBUG_LOG), exist_ok=True)
@@ -266,63 +348,143 @@ class AudioService:
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         return cleaned
 
+    def _detect_language(self, text: str) -> str:
+        """
+        Detect language of text: 'hi', 'bn', 'en', or 'default'.
+        Order of precedence:
+        1. Devanagari script detection for Hindi.
+        2. Bengali script detection for Bengali.
+        3. Romanized script heuristics (Hinglish vs Benglish vs English stopwords).
+        4. langid classification as fallback.
+        5. 'default' when uncertain (preserves configured fallback voice).
+        """
+        if not text or not text.strip():
+            return "default"
+
+        # 1. Indic Native Scripts (checked before Romanized heuristics)
+        devanagari_count = len(_DEVANAGARI_PATTERN.findall(text))
+        bengali_count = len(_BENGALI_PATTERN.findall(text))
+
+        if devanagari_count > 0 or bengali_count > 0:
+            if devanagari_count >= bengali_count:
+                return "hi"
+            return "bn"
+
+        # 2. Romanized Script (Latin letters)
+        words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+        if not words:
+            return "default"
+
+        word_set = set(words)
+        hinglish_matches = word_set.intersection(_HINGLISH_KEYWORDS)
+        benglish_matches = word_set.intersection(_BENGLISH_KEYWORDS)
+        english_matches = word_set.intersection(_ENGLISH_COMMON_WORDS)
+
+        hinglish_score = len(hinglish_matches)
+        benglish_score = len(benglish_matches)
+        english_score = len(english_matches)
+
+        # Benglish dominates
+        if benglish_score > 0 and benglish_score > hinglish_score and benglish_score >= english_score:
+            return "bn"
+
+        # Hinglish dominates
+        if hinglish_score > 0 and hinglish_score > benglish_score and hinglish_score >= english_score:
+            return "hi"
+
+        # Normal English sentences with English stopwords and no Indic keywords
+        if english_score >= 1 and hinglish_score == 0 and benglish_score == 0:
+            return "en"
+
+        # Tied Indian language keywords
+        if hinglish_score > 0 and hinglish_score == benglish_score:
+            return "hi"
+
+        # 3. Fallback to langid classification
+        try:
+            lang_code, _ = langid.classify(text)
+            if lang_code in ['hi', 'mr', 'ne']:
+                return "hi"
+            elif lang_code in ['bn', 'as']:
+                return "bn"
+            elif lang_code == 'en':
+                return "en"
+        except Exception as e:
+            logger.debug("langid classification failed: %s", e)
+
+        return "default"
+
     def _determine_voice(self, text: str, override_voice: Optional[str], channel: str) -> str:
-        """Determine the correct voice based on config and auto-language detection."""
+        """Determine the correct voice based on config mode and auto-language detection."""
         cfg = ConfigManager.get_config()
         audio_cfg = cfg.get("audio", {})
-        
-        if override_voice:
-            return override_voice
-            
+
+        mode = _get_audio_mode(audio_cfg)
+        dashboard_voice = audio_cfg.get("voice", "en-IN-PrabhatNeural")
+
+        config_channel = "private" if channel in ("secret", "private") else "public"
         auto_voices = audio_cfg.get("auto_voices", {})
-        auto_enabled = auto_voices.get("enabled", False)
-        
-        if not auto_enabled:
-            return audio_cfg.get("voice", "en-IN-PrabhatNeural")
-            
-        lang_code = "unknown"
-        text_lower = text.lower()
-        words = set(re.findall(r'\b[a-z]+\b', text_lower))
-        
-        hinglish_keywords = {
-            'hai', 'kya', 'kaise', 'karna', 'kar', 'raha', 'rahi', 'mera', 'mujhe', 'nahi', 
-            'bhi', 'bahut', 'achha', 'thik', 'kaun', 'kahan', 'kab', 'ho', 'gaya', 'gayi', 
-            'ye', 'wo', 'aur', 'haan', 'mat', 'bhai', 'yaar', 'karo', 'kare', 'kaam', 'baat',
-            'mein', 'me', 'pehli', 'baar', 'aaye', 'aaya', 'aayi', 'bolo', 'hissa', 'ban', 
-            'jao', 'kal', 'aaj', 'phir', 'aa', 'gaye', 'din', 'dinon', 'se', 'tum', 'aap', 
-            'hum', 'humein', 'humare', 'apna', 'apne', 'sab', 'sabko', 'dekh', 'dekhkar', 
-            'khushi', 'hui', 'laute', 'lauta', 'badhai', 'shukriya', 'swagat', 'namaste', 
-            'kaafi', 'time', 'adhoori', 'lag', 'thi', 'tha', 'the', 'chuke', 'chuka', 'chuki', 
-            'bas', 'paas', 'hisa', 'shuru', 'banta', 'banata'
-        }
-        benglish_keywords = {'kemon', 'acho', 'ami', 'tumi', 'korcho', 'kothay', 'hobe', 'jabo', 'valo', 'bhalo', 'khub', 'kore', 'amar', 'tomar', 'apni', 'tui', 'keno', 'khabe', 'naki', 'ache', 'nei', 'ekhon', 'dada', 'kori', 'kotha', 'bolo', 'bolcho'}
+        channel_voices = auto_voices.get(config_channel, {})
+        channel_default = channel_voices.get("default") or dashboard_voice
 
-        hinglish_score = len(words.intersection(hinglish_keywords))
-        benglish_score = len(words.intersection(benglish_keywords))
+        # Check if an explicit non-default voice override was passed
+        is_default = _is_default_voice(override_voice, configured_default=dashboard_voice)
 
-        mapped_lang = "default"
-        if hinglish_score > 0 or benglish_score > 0:
-            if hinglish_score > benglish_score:
-                mapped_lang = "hi"
-            elif benglish_score > hinglish_score:
-                mapped_lang = "bn"
-            else:
-                mapped_lang = "hi"
+        if mode == "single":
+            # Single Language mode: Use exactly the voice selected in dashboard.
+            # Do not let an inherited or per-event default voice override it.
+            if not is_default and override_voice:
+                return override_voice
+            return dashboard_voice
         else:
-            lang_code, _ = langid.classify(text)
+            # Auto Multi-Language mode:
+            # Ensure a default voice passed through an event does not override language selection.
+            if not is_default and override_voice:
+                return override_voice
 
-            if lang_code in ['hi', 'mr', 'ne']:
-                mapped_lang = "hi"
-            elif lang_code in ['bn', 'as']:
-                mapped_lang = "bn"
-            elif lang_code == 'en':
-                mapped_lang = "en"
+            mapped_lang = self._detect_language(text)
+            selected_voice = (
+                channel_voices.get(mapped_lang)
+                or channel_default
+                or dashboard_voice
+                or "en-IN-PrabhatNeural"
+            )
+            logger.debug(
+                "Auto Voice [%s]: mapped_lang=%s, selected=%s (override_voice=%s)",
+                channel, mapped_lang, selected_voice, override_voice
+            )
+            return selected_voice
 
-        config_channel = "private" if channel == "secret" else "public"
-        voice_dict = auto_voices.get(config_channel, {})
-        voice = voice_dict.get(mapped_lang) or voice_dict.get("default") or audio_cfg.get("voice", "en-IN-PrabhatNeural")
-        logger.debug("Auto Voice [%s]: text_lang=%s, mapped=%s, selected=%s", channel, lang_code, mapped_lang, voice)
-        return voice
+    def _determine_fallback_lang(self, text: str, voice: str) -> str:
+        """Determine appropriate gTTS fallback language code ('en', 'hi', or 'bn')."""
+        # 1. Native Indic scripts in text always take highest priority
+        if text:
+            if _DEVANAGARI_PATTERN.search(text):
+                return "hi"
+            if _BENGALI_PATTERN.search(text):
+                return "bn"
+
+        # 2. Check if voice profile explicitly targets Hindi or Bengali
+        if voice:
+            v_lower = voice.lower()
+            if v_lower.startswith("hi-") or v_lower.startswith("hi_"):
+                return "hi"
+            if v_lower.startswith("bn-") or v_lower.startswith("bn_"):
+                return "bn"
+
+        # 3. Check Romanized / detected language heuristics
+        if text:
+            detected = self._detect_language(text)
+            if detected in ("hi", "bn"):
+                return detected
+
+        # 4. If voice is explicitly English, return 'en'
+        if voice:
+            v_lower = voice.lower()
+            if v_lower.startswith("en-") or v_lower.startswith("en_"):
+                return "en"
+
+        return "en"
 
     async def _pre_generate_tts(self, item: dict, channel: str) -> None:
         """Background task to generate TTS audio ahead of time to reduce latency."""
@@ -452,6 +614,7 @@ class AudioService:
     def get_status(self) -> dict:
         cfg = ConfigManager.get_config()
         audio_cfg = cfg.get("audio", {})
+        mode = _get_audio_mode(audio_cfg)
         return {
             "queues": {
                 "public": [{k: v for k, v in item.items() if k != "gen_task"} for item in self.queues["public"]],
@@ -463,10 +626,12 @@ class AudioService:
             "current_text": self.current_text,
             "metrics": self.metrics,
             "config": {
+                "mode": mode,
                 "voice": audio_cfg.get("voice", "en-IN-PrabhatNeural"),
                 "volume": audio_cfg.get("volume", "+0%"),
                 "rate": audio_cfg.get("rate", "+0%"),
                 "priority_mode": audio_cfg.get("priority_mode", "public"),
+                "auto_voices": audio_cfg.get("auto_voices", {}),
             },
             # ── Enhanced health data ──
             "health_status": self.health_status,
@@ -752,27 +917,39 @@ class AudioService:
                         pass
                 err_msg = f"{type(exc).__name__}: {exc}"
                 if attempt == 0:
-                    logger.warning("edge-tts attempt 1 failed for [%s]: %s — retrying in 1s", channel, err_msg)
-                    _append_audio_log(f"[{channel}] edge-tts attempt 1 FAILED: {err_msg} — retrying")
+                    logger.warning("edge-tts attempt 1 failed for [%s] (voice=%s): %s — retrying in 1s", channel, voice, err_msg)
+                    _append_audio_log(f"[{channel}] edge-tts attempt 1 FAILED (voice={voice}): {err_msg} — retrying")
                     await asyncio.sleep(1)  # Backoff before retry
                 else:
-                    logger.warning("edge-tts attempt 2 failed for [%s]: %s — trying gTTS fallback", channel, err_msg)
-                    _append_audio_log(f"[{channel}] edge-tts attempt 2 FAILED: {err_msg}")
+                    logger.warning("edge-tts attempt 2 failed for [%s] (voice=%s): %s — trying gTTS fallback", channel, voice, err_msg)
+                    _append_audio_log(f"[{channel}] edge-tts attempt 2 FAILED (voice={voice}): {err_msg}")
                     self.metrics["edge_tts_failures"] += 1
 
         # ── Attempt 2: gTTS fallback ──────────────────────────────────────────
+        gtts_lang = self._determine_fallback_lang(text, voice)
         try:
             from gtts import gTTS  # lazy import — optional dependency
             fd, tmp_path = tempfile.mkstemp(prefix="pibot_tts_", suffix=".mp3", dir=temp_dir)
             os.close(fd)
 
             def _gtts_generate() -> None:
-                tts = gTTS(text=text, lang="en", slow=False)
-                tts.save(tmp_path)
+                try:
+                    tts = gTTS(text=text, lang=gtts_lang, slow=False)
+                    tts.save(tmp_path)
+                except Exception as gtts_err:
+                    if gtts_lang != "en":
+                        logger.warning(
+                            "gTTS fallback failed with lang=%s (%s) — retrying with safe fallback lang=en",
+                            gtts_lang, gtts_err
+                        )
+                        tts = gTTS(text=text, lang="en", slow=False)
+                        tts.save(tmp_path)
+                    else:
+                        raise
 
             await loop.run_in_executor(None, _gtts_generate)
             if os.path.getsize(tmp_path) > 0:
-                _append_audio_log(f"[{channel}] gTTS fallback OK → {os.path.basename(tmp_path)}")
+                _append_audio_log(f"[{channel}] gTTS fallback OK (lang={gtts_lang}) → {os.path.basename(tmp_path)}")
                 self.metrics["gtts_fallbacks"] += 1
                 return tmp_path
             os.unlink(tmp_path)
@@ -784,8 +961,8 @@ class AudioService:
                 except OSError:
                     pass
             err_msg2 = f"{type(exc2).__name__}: {exc2}"
-            logger.error("gTTS fallback also failed for [%s]: %s", channel, err_msg2)
-            _append_audio_log(f"[{channel}] gTTS FAILED: {err_msg2}")
+            logger.error("gTTS fallback also failed for [%s] (lang=%s): %s", channel, gtts_lang, err_msg2)
+            _append_audio_log(f"[{channel}] gTTS FAILED (lang={gtts_lang}): {err_msg2}")
             return None
 
     def _update_metrics(self, latency: float) -> None:
