@@ -134,7 +134,7 @@ export default function PokemonOverlay() {
 
                         playPokemonCry(poke.name)
                         startCountdown(rem)
-                    } 
+                    }
                     else if (action === 'despawn') {
                         if (timerRef.current) clearInterval(timerRef.current)
                         setSpawnedPokemon(null)
@@ -170,6 +170,20 @@ export default function PokemonOverlay() {
                         setBattleData(null)
                         setTimeout(() => setSpawnedPokemon(null), 8000)
                     }
+                    else if (action === 'summon') {
+                        setSpawnedPokemon({
+                            name: socketData.pokemon.name,
+                            sprite: socketData.pokemon.sprite,
+                            type: socketData.pokemon.type,
+                            power: socketData.pokemon.power,
+                            isSummon: true,
+                            user: socketData.user
+                        })
+                        setCatchEvent(null)
+                        setBattleData(null)
+                        playPokemonCry(socketData.pokemon.name)
+                        setTimeout(() => setSpawnedPokemon(null), 8000)
+                    }
                 } catch (e) {
                     console.debug("[OBS Pokemon Overlay] WS message parse error:", e)
                 }
@@ -201,7 +215,7 @@ export default function PokemonOverlay() {
 
     return (
         <div className="w-screen h-screen overflow-hidden bg-transparent pointer-events-none relative flex flex-col items-center justify-end pb-16 font-sans select-none">
-            
+
             <AnimatePresence>
                 {/* 1. Wild Pokemon Spawn & Show */}
                 {spawnedPokemon && !catchEvent && !battleData && (
@@ -212,16 +226,18 @@ export default function PokemonOverlay() {
                         exit={{ y: 150, opacity: 0, scale: 0.9 }}
                         transition={{ type: "spring", stiffness: 350, damping: 28 }}
                         className={`border-2 rounded-3xl p-6 flex flex-col items-center backdrop-blur-xl shadow-2xl relative ${
-                            spawnedPokemon.isShow 
-                                ? 'bg-zinc-950/90 border-fuchsia-500 shadow-[0_0_50px_rgba(217,70,239,0.45)]' 
-                                : spawnedPokemon.is_test
-                                    ? 'bg-zinc-950/90 border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.45)]'
-                                    : 'bg-zinc-950/90 border-emerald-500 shadow-[0_0_50px_rgba(16,185,129,0.4)]'
+                            spawnedPokemon.isSummon
+                                ? 'bg-zinc-950/90 border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.45)]'
+                                : spawnedPokemon.isShow
+                                    ? 'bg-zinc-950/90 border-fuchsia-500 shadow-[0_0_50px_rgba(217,70,239,0.45)]'
+                                    : spawnedPokemon.is_test
+                                        ? 'bg-zinc-950/90 border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.45)]'
+                                        : 'bg-zinc-950/90 border-emerald-500 shadow-[0_0_50px_rgba(16,185,129,0.4)]'
                         }`}
                         style={{ minWidth: '340px', maxWidth: '440px' }}
                     >
                         {/* Test Spawn or Show Badge */}
-                        {spawnedPokemon.is_test && !spawnedPokemon.isShow && (
+                        {spawnedPokemon.is_test && !spawnedPokemon.isShow && !spawnedPokemon.isSummon && (
                             <div className="mb-2 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-black text-xs uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
                                 <span className="animate-pulse">⚡</span> TEST SPAWN
                             </div>
@@ -229,15 +245,19 @@ export default function PokemonOverlay() {
 
                         {/* Title Header */}
                         <h2 className={`font-black text-2xl uppercase tracking-wider text-center drop-shadow-md ${
-                            spawnedPokemon.isShow 
-                                ? 'text-fuchsia-400' 
-                                : spawnedPokemon.is_test
-                                    ? 'text-amber-300'
-                                    : 'text-emerald-400 animate-pulse'
+                            spawnedPokemon.isSummon
+                                ? 'text-amber-300'
+                                : spawnedPokemon.isShow
+                                    ? 'text-fuchsia-400'
+                                    : spawnedPokemon.is_test
+                                        ? 'text-amber-300'
+                                        : 'text-emerald-400 animate-pulse'
                         }`}>
-                            {spawnedPokemon.isShow 
-                                ? `@${spawnedPokemon.user} showed ${spawnedPokemon.name}!` 
-                                : `Wild ${spawnedPokemon.name} appeared!`}
+                            {spawnedPokemon.isSummon
+                                ? `⭐ @${spawnedPokemon.user} summoned ${spawnedPokemon.name}!`
+                                : spawnedPokemon.isShow
+                                    ? `@${spawnedPokemon.user} showed ${spawnedPokemon.name}!`
+                                    : `Wild ${spawnedPokemon.name} appeared!`}
                         </h2>
 
                         {/* Type & Power Chips */}
@@ -260,11 +280,11 @@ export default function PokemonOverlay() {
                         {gameSettings.enable_images ? (
                             <div className="relative w-44 h-44 flex items-center justify-center my-1">
                                 {!imageError && spawnedPokemon.sprite ? (
-                                    <img 
-                                        src={spawnedPokemon.sprite} 
+                                    <img
+                                        src={spawnedPokemon.sprite}
                                         alt={spawnedPokemon.name}
                                         onError={() => setImageError(true)}
-                                        className="w-44 h-44 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.45)] transform hover:scale-105 transition-transform" 
+                                        className="w-44 h-44 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.45)] transform hover:scale-105 transition-transform"
                                     />
                                 ) : (
                                     <div className="w-36 h-36 rounded-full bg-zinc-900 border-2 border-zinc-700 flex flex-col items-center justify-center shadow-inner">
@@ -280,7 +300,7 @@ export default function PokemonOverlay() {
                         )}
 
                         {/* Call to action & timer */}
-                        {!spawnedPokemon.isShow && (
+                        {!spawnedPokemon.isShow && !spawnedPokemon.isSummon && (
                             <div className="w-full mt-3 flex flex-col items-center gap-2">
                                 <div className="text-zinc-200 font-bold text-sm bg-zinc-900/90 px-4 py-1.5 rounded-xl border border-zinc-800 flex items-center gap-2 shadow-inner">
                                     Type <span className="text-emerald-400 font-extrabold font-mono">!catch</span> to capture
@@ -315,10 +335,10 @@ export default function PokemonOverlay() {
                             @{catchEvent.user} caught {catchEvent.pokemon.name}!
                         </h2>
                         {catchEvent.pokemon.sprite && (
-                            <img 
-                                src={catchEvent.pokemon.sprite} 
-                                alt={catchEvent.pokemon.name} 
-                                className="w-32 h-32 object-contain mt-2 drop-shadow-[0_0_15px_rgba(6,182,212,0.4)]" 
+                            <img
+                                src={catchEvent.pokemon.sprite}
+                                alt={catchEvent.pokemon.name}
+                                className="w-32 h-32 object-contain mt-2 drop-shadow-[0_0_15px_rgba(6,182,212,0.4)]"
                             />
                         )}
                         <span className="mt-3 text-xs font-bold text-zinc-400 uppercase tracking-widest">
@@ -340,38 +360,38 @@ export default function PokemonOverlay() {
                         <h1 className="text-3xl font-black text-rose-500 uppercase tracking-widest mb-6 animate-pulse drop-shadow-lg">
                             POKÉMON DUEL ({battleData.bet} PTS)
                         </h1>
-                        
+
                         <div className="flex items-center justify-between w-full px-6">
                             {/* Challenger */}
                             <div className="flex flex-col items-center w-48">
                                 <span className="text-zinc-300 font-bold mb-1 text-sm truncate max-w-[160px]">@{battleData.challenger.name}</span>
-                                <img 
-                                    src={battleData.challenger.pokemon.sprite} 
+                                <img
+                                    src={battleData.challenger.pokemon.sprite}
                                     alt={battleData.challenger.pokemon.name}
                                     className={`w-36 h-36 object-contain ${
-                                        battleData.winner === battleData.challenger.name 
-                                            ? 'drop-shadow-[0_0_30px_rgba(16,185,129,1)] scale-105' 
+                                        battleData.winner === battleData.challenger.name
+                                            ? 'drop-shadow-[0_0_30px_rgba(16,185,129,1)] scale-105'
                                             : 'opacity-40 grayscale'
-                                    }`} 
+                                    }`}
                                 />
                                 <span className="text-emerald-400 font-bold mt-1 text-base">
                                     {battleData.challenger.pokemon.name}
                                 </span>
                             </div>
-                            
+
                             <div className="text-5xl font-black text-rose-500 italic px-4 select-none">VS</div>
-                            
+
                             {/* Target */}
                             <div className="flex flex-col items-center w-48">
                                 <span className="text-zinc-300 font-bold mb-1 text-sm truncate max-w-[160px]">@{battleData.target.name}</span>
-                                <img 
-                                    src={battleData.target.pokemon.sprite} 
+                                <img
+                                    src={battleData.target.pokemon.sprite}
                                     alt={battleData.target.pokemon.name}
                                     className={`w-36 h-36 object-contain transform -scale-x-100 ${
-                                        battleData.winner === battleData.target.name 
-                                            ? 'drop-shadow-[0_0_30px_rgba(16,185,129,1)] scale-105' 
+                                        battleData.winner === battleData.target.name
+                                            ? 'drop-shadow-[0_0_30px_rgba(16,185,129,1)] scale-105'
                                             : 'opacity-40 grayscale'
-                                    }`} 
+                                    }`}
                                 />
                                 <span className="text-emerald-400 font-bold mt-1 text-base">
                                     {battleData.target.pokemon.name}
@@ -387,7 +407,7 @@ export default function PokemonOverlay() {
                     </motion.div>
                 )}
             </AnimatePresence>
-            
+
         </div>
     )
 }

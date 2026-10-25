@@ -4,6 +4,7 @@ import os
 import json
 import time
 import asyncio
+from typing import Optional, Dict, Any, List, Union
 
 # We will load the list of pokemons dynamically from a JSON file.
 POKEMON_LIST_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pokemon_list.json")
@@ -50,6 +51,8 @@ class PokemonService:
         self.users_data = {}
         self.active_wild_pokemon = None
         self.pending_battles = {} # challenger -> { target, bet, timeout_task }
+        self.active_summoned = {} # user -> pokemon dict
+        self.attack_cooldowns = {} # user -> last attack timestamp
         
         self.load_data()
         
@@ -474,65 +477,318 @@ class PokemonService:
 
         return f"⚔️ @{winner} won the battle against @{loser}!"
 
-    async def handle_check_pokemon(self, user):
+    @staticmethod
+    def normalize_pokemon(entry) -> dict:
+        """Safely normalizes either a legacy string entry or dict entry into a standard pokemon dict.
+        Fills missing metadata from catalog without altering or losing existing attributes.
+        """
+        if not entry:
+            return {"name": "Unknown", "power": 10, "sprite": "", "type": "Normal"}
+        if isinstance(entry, str):
+            name = entry.strip()
+            found = next((p for p in POKEMON_LIST if p.get("name", "").lower() == name.lower()), None)
+            if found:
+                return {
+                    "name": found["name"],
+                    "power": int(found.get("power", 10)),
+                    "sprite": found.get("sprite", ""),
+                    "type": found.get("type", "Normal")
+                }
+            return {"name": name, "power": 10, "sprite": "", "type": "Normal"}
+        elif isinstance(entry, dict):
+            name = str(entry.get("name", "Unknown")).strip()
+            found = next((p for p in POKEMON_LIST if p.get("name", "").lower() == name.lower()), None)
+            base_pwr = found.get("power", 10) if found else 10
+            base_sprite = found.get("sprite", "") if found else ""
+            base_type = found.get("type", "Normal") if found else "Normal"
+
+            try:
+                pwr = int(entry.get("power", base_pwr))
+            except (ValueError, TypeError):
+                pwr = base_pwr
+
+            res = {
+                "name": entry.get("name") or (found.get("name") if found else name),
+                "power": pwr,
+                "sprite": entry.get("sprite") or base_sprite,
+                "type": entry.get("type") or base_type
+            }
+            if entry.get("is_custom"):
+                res["is_custom"] = True
+            return res
+        return {"name": str(entry), "power": 10, "sprite": "", "type": "Normal"}
+
+    def get_user_inventory(self, user: str) -> list:
+        """Retrieves and normalizes user's pokemon collection without mutating on-disk data."""
+        user_data = self.users_data.get(user)
+        if not user_data:
+            for u, data in self.users_data.items():
+                if u.lower() == user.lower():
+                    user_data = data
+                    break
+        if not user_data and self.bot and hasattr(self.bot, "viewers"):
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            user_data = viewers_map.get(user)
+            if not user_data:
+                for u, data in viewers_map.items():
+                    if u.lower() == user.lower():
+                        user_data = data
+                        break
+        if not user_data:
+            return []
+
+        raw_list = user_data.get("pokemons", [])
+        if not raw_list and user_data.get("pokemon"):
+            raw_list = [user_data["pokemon"]]
+        return [self.normalize_pokemon(p) for p in raw_list]
+
+    def get_active_pokemon(self, user: str) -> Optional[dict]:
+        """Gets currently summoned active pokemon, or active_pokemon from users_data, or falls back to strongest owned."""
+        for u, poke in self.active_summoned.items():
+            if u.lower() == user.lower():
+                return poke
+
+        inv = self.get_user_inventory(user)
+        if not inv:
+            return None
+
         user_data = self.users_data.get(user, {})
-        pokemons = user_data.get("pokemons", [])
-        if not pokemons and user_data.get("pokemon"):
-            pokemons = [user_data["pokemon"]]
-            
-        if not pokemons:
-            return f"@{user}, you don't have any Pokemons! Wait for a wild spawn and type !catch."
-            
+        saved_active = user_data.get("active_pokemon")
+        if saved_active:
+            match = next((p for p in inv if p["name"].lower() == str(saved_active).lower()), None)
+            if match:
+                self.active_summoned[user] = match
+                return match
+
+        strongest = max(inv, key=lambda p: p.get("power", 0))
+        return strongest
+
+    async def handle_my_pokemon(self, user: str) -> str:
+        """Formats caller's pokemon collection with count, duplicate display (e.g. Pikachu ×2), and stats."""
+        inv = self.get_user_inventory(user)
+        if not inv:
+            return f"@{user}, you don't own any Pokémon yet! Wait for a wild spawn on stream and type !catch."
+
+        counts = {}
+        first_seen = {}
+        for p in inv:
+            name = p["name"]
+            counts[name] = counts.get(name, 0) + 1
+            if name not in first_seen:
+                first_seen[name] = p
+
+        formatted_items = []
+        for name, count in counts.items():
+            poke = first_seen[name]
+            pwr = poke.get("power", 10)
+            ptype = poke.get("type")
+            type_str = f"/{ptype}" if ptype and ptype != "Normal" else ""
+            if count > 1:
+                formatted_items.append(f"{name} ×{count} (PWR {pwr}{type_str})")
+            else:
+                formatted_items.append(f"{name} (PWR {pwr}{type_str})")
+
+        user_data = self.users_data.get(user, {})
         wins = user_data.get("wins", 0)
         losses = user_data.get("losses", 0)
-        poke_list = ", ".join(pokemons)
-        return f"@{user}'s Pokemons ({wins}W-{losses}L): {poke_list}. Use !battle @user <bet> <pokemon_name> to fight!"
+        total_count = len(inv)
+
+        active = self.get_active_pokemon(user)
+        active_str = f" [Active: {active['name']}]" if active else ""
+
+        items_str = ", ".join(formatted_items)
+        if len(items_str) > 350:
+            items_str = items_str[:347] + "..."
+
+        return f"🎒 @{user}'s Pokémon ({total_count} total | {wins}W-{losses}L){active_str}: {items_str}. Commands: !summon <name> | !attack <@user>"
+
+    async def handle_view_pokemon(self, caller: str, target: str) -> str:
+        """Displays another viewer's public pokemon collection."""
+        clean_target = target.replace("@", "").strip()
+        if not clean_target or clean_target.lower() == caller.lower():
+            return await self.handle_my_pokemon(caller)
+
+        inv = self.get_user_inventory(clean_target)
+        if not inv:
+            return f"@{caller}, {clean_target} doesn't own any Pokémon yet!"
+
+        counts = {}
+        first_seen = {}
+        for p in inv:
+            name = p["name"]
+            counts[name] = counts.get(name, 0) + 1
+            if name not in first_seen:
+                first_seen[name] = p
+
+        formatted_items = []
+        for name, count in counts.items():
+            poke = first_seen[name]
+            pwr = poke.get("power", 10)
+            if count > 1:
+                formatted_items.append(f"{name} ×{count} (PWR {pwr})")
+            else:
+                formatted_items.append(f"{name} (PWR {pwr})")
+
+        user_data = self.users_data.get(clean_target, {})
+        wins = user_data.get("wins", 0)
+        losses = user_data.get("losses", 0)
+        total_count = len(inv)
+
+        active = self.get_active_pokemon(clean_target)
+        active_str = f" [Active: {active['name']}]" if active else ""
+
+        items_str = ", ".join(formatted_items)
+        if len(items_str) > 350:
+            items_str = items_str[:347] + "..."
+
+        return f"🎒 @{clean_target}'s Pokémon ({total_count} total | {wins}W-{losses}L){active_str}: {items_str}"
+
+    async def handle_summon(self, user: str, pokemon_name: str) -> str:
+        """Allows a viewer to summon an owned Pokemon to be their active battle buddy on stream."""
+        inv = self.get_user_inventory(user)
+        if not inv:
+            return f"@{user}, you don't have any Pokémon to summon! Wait for a wild spawn and type !catch."
+
+        if not pokemon_name or not pokemon_name.strip():
+            active = self.get_active_pokemon(user)
+            if active:
+                return f"@{user}, your active Pokémon is {active['name']} (PWR {active.get('power', 10)})! To switch, type: !summon <pokemon_name>"
+            return f"@{user}, please specify which Pokémon to summon! e.g. !summon Pikachu. Use !mypokemon to see your collection."
+
+        clean_name = pokemon_name.strip().lower()
+        match = next((p for p in inv if p["name"].lower() == clean_name), None)
+        if not match:
+            match = next((p for p in inv if clean_name in p["name"].lower()), None)
+
+        if not match:
+            return f"@{user}, you don't own a Pokémon named '{pokemon_name}'! Type !mypokemon to view your collection."
+
+        self.active_summoned[user] = match
+        if user not in self.users_data:
+            self.users_data[user] = {"pokemons": inv, "wins": 0, "losses": 0}
+        self.users_data[user]["active_pokemon"] = match["name"]
+        self.save_data()
+
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            try:
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "summon",
+                    "user": user,
+                    "pokemon": match
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast summon event: {b_err}")
+
+        ptype = match.get("type", "Normal")
+        return f"⭐ @{user} summoned {match['name']}! (Power: {match['power']} | Type: {ptype}). Ready for action!"
+
+    async def handle_attack(self, attacker: str, target_user: str) -> str:
+        """Direct attack skirmish between viewer's active Pokemon and target viewer's Pokemon."""
+        if not target_user:
+            return f"@{attacker}, Usage: !attack @username"
+
+        clean_target = target_user.replace("@", "").strip()
+        if not clean_target:
+            return f"@{attacker}, please specify an opponent! Usage: !attack @username"
+
+        if clean_target.lower() == attacker.lower():
+            return f"@{attacker}, you cannot attack yourself! Challenge another viewer."
+
+        attacker_poke = self.get_active_pokemon(attacker)
+        if not attacker_poke:
+            return f"@{attacker}, you don't own any Pokémon to attack with! Catch one with !catch."
+
+        target_poke = self.get_active_pokemon(clean_target)
+        if not target_poke:
+            return f"@{attacker}, {clean_target} doesn't own any Pokémon to battle!"
+
+        now = time.time()
+        last_attack = self.attack_cooldowns.get(attacker, 0)
+        cooldown_duration = 30
+        if now - last_attack < cooldown_duration:
+            rem = int(cooldown_duration - (now - last_attack))
+            return f"@{attacker}, your {attacker_poke['name']} is recovering! You can attack again in {rem}s."
+
+        self.attack_cooldowns[attacker] = now
+
+        att_pwr = attacker_poke.get("power", 10)
+        def_pwr = target_poke.get("power", 10)
+
+        power_diff = att_pwr - def_pwr
+        win_chance = max(0.20, min(0.80, 0.50 + (power_diff * 0.02)))
+        attacker_won = (random.random() < win_chance)
+
+        winner = attacker if attacker_won else clean_target
+        loser = clean_target if attacker_won else attacker
+        winner_poke = attacker_poke if attacker_won else target_poke
+        loser_poke = target_poke if attacker_won else attacker_poke
+
+        if attacker not in self.users_data:
+            self.users_data[attacker] = {"pokemons": self.get_user_inventory(attacker), "wins": 0, "losses": 0}
+        if clean_target not in self.users_data:
+            self.users_data[clean_target] = {"pokemons": self.get_user_inventory(clean_target), "wins": 0, "losses": 0}
+
+        self.users_data[winner]["wins"] = self.users_data[winner].get("wins", 0) + 1
+        self.users_data[loser]["losses"] = self.users_data[loser].get("losses", 0) + 1
+        self.save_data()
+
+        win_bonus = 25
+        if self.bot and hasattr(self.bot, "viewers") and hasattr(self.bot.viewers, "add_points"):
+            try:
+                self.bot.viewers.add_points(winner, win_bonus)
+            except Exception as pe:
+                self.logger.warning(f"Failed to award attack points: {pe}")
+
+        if self.bot and getattr(self.bot, "broadcast_func", None):
+            try:
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "battle",
+                    "challenger": {"name": attacker, "pokemon": attacker_poke},
+                    "target": {"name": clean_target, "pokemon": target_poke},
+                    "winner": winner,
+                    "reward": win_bonus
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast attack event: {b_err}")
+
+        return f"⚔️ @{attacker}'s {attacker_poke['name']} (PWR {att_pwr}) attacked @{clean_target}'s {target_poke['name']} (PWR {def_pwr})! 🏆 @{winner} won! (+{win_bonus} pts)"
+
+    async def handle_check_pokemon(self, user):
+        return await self.handle_my_pokemon(user)
 
     def get_user_pokemon(self, user, pokemon_name=None):
-        user_data = self.users_data.get(user)
-        if not user_data and self.bot and hasattr(self.bot, "viewers"):
-            # Check viewer service records as fallback
-            viewers_map = getattr(self.bot.viewers, "viewers", {})
-            user_data = viewers_map.get(user, {})
-        if not user_data:
-            return None
-            
-        pokemons = user_data.get("pokemons", [])
-        if not pokemons and user_data.get("pokemon"):
-            pokemons = [user_data["pokemon"]]
-            
-        if not pokemons:
+        inv = self.get_user_inventory(user)
+        if not inv:
             return None
 
-        def extract_name(item):
-            if isinstance(item, dict):
-                return item.get("name", "")
-            return str(item)
-            
         if pokemon_name:
-            matching = next((p for p in pokemons if extract_name(p).lower() == pokemon_name.lower()), None)
-            if not matching:
-                return None
-            target_name = extract_name(matching)
-        else:
-            if len(pokemons) >= 1:
-                target_name = extract_name(pokemons[0])
-            else:
-                return None
-                
-        found = next((p for p in POKEMON_LIST if p["name"].lower() == target_name.lower()), None)
-        if found:
-            return found
-        return {"name": target_name, "power": 50, "sprite": ""}
+            match = next((p for p in inv if p["name"].lower() == pokemon_name.strip().lower()), None)
+            if not match:
+                match = next((p for p in inv if pokemon_name.strip().lower() in p["name"].lower()), None)
+            return match
+
+        return self.get_active_pokemon(user)
 
     async def handle_show_pokemon(self, user, pokemon_name):
         pokemon = self.get_user_pokemon(user, pokemon_name)
         if not pokemon:
             return f"@{user}, you don't own a Pokemon named {pokemon_name}!"
             
-        if self.bot.broadcast_func:
+        if self.bot and getattr(self.bot, "broadcast_func", None):
             await self.bot.broadcast_func({
                 "type": "POKEMON_EVENT",
+                "action": "show",
+                "user": user,
+                "pokemon": pokemon
+            })
+            await self.bot.broadcast_func({
+                "type": "pokemon_event",
                 "action": "show",
                 "user": user,
                 "pokemon": pokemon
@@ -694,3 +950,6 @@ class PokemonService:
         
         bonus_msg = f" (+{duel_reward} bonus)" if duel_reward > 0 else ""
         return f"🏆 BATTLE RESULTS: @{winner}'s {winner_poke['name']} defeated @{loser}'s {loser_poke['name']} and won {bet}{bonus_msg} points!"
+
+
+normalize_pokemon = PokemonService.normalize_pokemon

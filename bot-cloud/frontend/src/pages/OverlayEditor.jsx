@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
-import { Save, Plus, Trash2, ArrowLeft, MousePointer2, Layers } from 'lucide-react'
+import { Save, Plus, Trash2, ArrowLeft, MousePointer2, Layers, Eye, EyeOff } from 'lucide-react'
 import { Button, Input } from '@/components/ui'
+import TickerOverlay from './TickerOverlay'
 
 const RESOLUTIONS = [
     { label: 'Standard 1080p (1920x1080)', w: 1920, h: 1080 },
@@ -36,7 +37,7 @@ export default function OverlayEditor() {
     const [error, setError] = useState(null)
     const [scale, setScale] = useState(1)
     const [selectedWidgetId, setSelectedWidgetId] = useState(null)
-    
+
     const API_URL = import.meta.env?.VITE_API_URL || "/api"
     const canvasRef = useRef(null)
 
@@ -45,10 +46,10 @@ export default function OverlayEditor() {
         const handleResize = () => {
             const availableWidth = window.innerWidth - 320 - 80 // 320 for sidebar, 80 padding
             const availableHeight = window.innerHeight - 64 - 80
-            
+
             const scaleX = availableWidth / resolution.w
             const scaleY = availableHeight / resolution.h
-            
+
             setScale(Math.min(scaleX, scaleY, 1)) // Don't scale up past 1x
         }
         window.addEventListener('resize', handleResize)
@@ -106,7 +107,9 @@ export default function OverlayEditor() {
             width: wt.defaultW,
             height: wt.defaultH,
             scale: 1,
-            opacity: 1
+            opacity: 1,
+            visible: true,
+            ...(wt.type === 'ticker' ? { tickerTitle: 'LIVE STATS', tickerSpeed: 30, tickerColor: '#00f0ff', customText: '' } : {})
         }
         setWidgets([...widgets, newWidget])
         setSelectedWidgetId(newWidget.id)
@@ -179,14 +182,14 @@ export default function OverlayEditor() {
                         <ArrowLeft className="w-4 h-4 mr-2" /> Back
                     </Button>
                     <div className="h-6 w-px bg-zinc-700"></div>
-                    <Input 
-                        value={name} 
-                        onChange={e => setName(e.target.value)} 
+                    <Input
+                        value={name}
+                        onChange={e => setName(e.target.value)}
                         className="bg-zinc-950 border-zinc-800 font-bold w-64 text-sm"
                         placeholder="Overlay Name"
                     />
-                    <select 
-                        value={JSON.stringify(resolution)} 
+                    <select
+                        value={JSON.stringify(resolution)}
                         onChange={e => setResolution(JSON.parse(e.target.value))}
                         className="bg-zinc-950 border border-zinc-800 text-sm rounded-md px-3 py-2 text-zinc-300 outline-none focus:border-emerald-500"
                     >
@@ -205,14 +208,14 @@ export default function OverlayEditor() {
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar */}
                 <div className="w-[320px] bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 z-20 shadow-xl overflow-hidden">
-                    
+
                     {/* Add Widgets */}
                     <div className="p-4 border-b border-zinc-800 shrink-0">
                         <h3 className="font-semibold text-sm mb-1 flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500"/> Add Widgets</h3>
                     </div>
                     <div className="p-3 grid grid-cols-2 gap-2 overflow-y-auto shrink-0 max-h-[30vh] custom-scrollbar">
                         {WIDGET_TYPES.map(wt => (
-                            <div 
+                            <div
                                 key={wt.type}
                                 onClick={() => addWidget(wt)}
                                 className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg hover:border-emerald-500/50 hover:bg-emerald-500/10 cursor-pointer transition-colors flex flex-col justify-center items-center gap-1 text-center"
@@ -236,32 +239,45 @@ export default function OverlayEditor() {
                             {[...widgets].reverse().map((w, reverseIndex) => {
                                 const i = widgets.length - 1 - reverseIndex
                                 const isSel = selectedWidgetId === w.id
+                                const isVis = w.visible !== false
                                 return (
-                                    <div 
+                                    <div
                                         key={w.id}
                                         onClick={() => setSelectedWidgetId(w.id)}
-                                        className={`flex items-center justify-between p-2 rounded-md text-xs cursor-pointer border transition-all ${isSel ? 'border-purple-500/50 bg-purple-500/10 text-purple-300 shadow-inner' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 text-zinc-400'}`}
+                                        className={`flex items-center justify-between p-2 rounded-md text-xs cursor-pointer border transition-all ${isSel ? 'border-purple-500/50 bg-purple-500/10 text-purple-300 shadow-inner' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 text-zinc-400'} ${!isVis ? 'opacity-60' : ''}`}
                                     >
                                         <div className="flex items-center gap-2 overflow-hidden">
                                             <span className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 rounded">{i}</span>
                                             <span className="truncate font-medium">{w.type}</span>
+                                            {!isVis && <span className="text-[9px] bg-zinc-800 text-amber-500 px-1 rounded">hidden</span>}
                                         </div>
-                                        <div className="flex gap-1 shrink-0">
-                                            <button 
-                                                onClick={(e) => moveWidgetUp(e, i)} 
-                                                disabled={i === widgets.length - 1} 
+                                        <div className="flex gap-1 shrink-0 items-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    updateWidget(w.id, { visible: !isVis })
+                                                }}
+                                                className={`p-1 hover:bg-zinc-700 rounded transition-colors ${isVis ? 'text-emerald-400' : 'text-zinc-500'}`}
+                                                title={isVis ? "Hide Layer" : "Show Layer"}
+                                            >
+                                                {isVis ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                            </button>
+                                            <div className="w-px h-3.5 bg-zinc-800 mx-0.5 my-auto"></div>
+                                            <button
+                                                onClick={(e) => moveWidgetUp(e, i)}
+                                                disabled={i === widgets.length - 1}
                                                 className="p-1 hover:bg-zinc-700 rounded text-zinc-300 disabled:opacity-20 transition-colors"
                                                 title="Bring Forward"
                                             >▲</button>
-                                            <button 
-                                                onClick={(e) => moveWidgetDown(e, i)} 
-                                                disabled={i === 0} 
+                                            <button
+                                                onClick={(e) => moveWidgetDown(e, i)}
+                                                disabled={i === 0}
                                                 className="p-1 hover:bg-zinc-700 rounded text-zinc-300 disabled:opacity-20 transition-colors"
                                                 title="Send Backward"
                                             >▼</button>
-                                            <div className="w-px h-4 bg-zinc-700 mx-0.5 my-auto"></div>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); removeWidget(w.id) }} 
+                                            <div className="w-px h-3.5 bg-zinc-800 mx-0.5 my-auto"></div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); removeWidget(w.id) }}
                                                 className="p-1 hover:bg-rose-500/20 text-rose-400 rounded transition-colors"
                                             >✕</button>
                                         </div>
@@ -283,40 +299,40 @@ export default function OverlayEditor() {
                                 <h3 className="font-semibold text-sm mb-4 text-emerald-400 flex items-center gap-2">
                                     <MousePointer2 className="w-4 h-4" /> Properties ({selectedWidget.type})
                                 </h3>
-                                
+
                                 <div className="grid grid-cols-2 gap-3 mb-4">
                                     <div>
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">X Position</label>
-                                        <Input 
-                                            type="number" 
-                                            value={selectedWidget.x} 
+                                        <Input
+                                            type="number"
+                                            value={selectedWidget.x}
                                             onChange={e => updateWidget(selectedWidget.id, { x: parseInt(e.target.value) || 0 })}
                                             className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                         />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Y Position</label>
-                                        <Input 
-                                            type="number" 
-                                            value={selectedWidget.y} 
+                                        <Input
+                                            type="number"
+                                            value={selectedWidget.y}
                                             onChange={e => updateWidget(selectedWidget.id, { y: parseInt(e.target.value) || 0 })}
                                             className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                         />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Width (Resize)</label>
-                                        <Input 
-                                            type="number" 
-                                            value={selectedWidget.width} 
+                                        <Input
+                                            type="number"
+                                            value={selectedWidget.width}
                                             onChange={e => updateWidget(selectedWidget.id, { width: parseInt(e.target.value) || 100 })}
                                             className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
                                         />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Height (Resize)</label>
-                                        <Input 
-                                            type="number" 
-                                            value={selectedWidget.height} 
+                                        <Input
+                                            type="number"
+                                            value={selectedWidget.height}
                                             onChange={e => updateWidget(selectedWidget.id, { height: parseInt(e.target.value) || 100 })}
                                             className="h-8 bg-zinc-900 border-zinc-800 text-xs text-emerald-400"
                                         />
@@ -324,11 +340,11 @@ export default function OverlayEditor() {
                                     <div className="col-span-2">
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Scale/Zoom (%)</label>
                                         <div className="flex gap-2">
-                                            <input 
-                                                type="range" 
-                                                min="10" 
-                                                max="300" 
-                                                value={Math.round((selectedWidget.scale || 1) * 100)} 
+                                            <input
+                                                type="range"
+                                                min="10"
+                                                max="300"
+                                                value={Math.round((selectedWidget.scale || 1) * 100)}
                                                 onChange={e => updateWidget(selectedWidget.id, { scale: parseInt(e.target.value) / 100 })}
                                                 className="flex-1 accent-emerald-500"
                                             />
@@ -338,11 +354,11 @@ export default function OverlayEditor() {
                                     <div className="col-span-2">
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Opacity (%)</label>
                                         <div className="flex gap-2">
-                                            <input 
-                                                type="range" 
-                                                min="0" 
-                                                max="100" 
-                                                value={Math.round((selectedWidget.opacity ?? 1) * 100)} 
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={Math.round((selectedWidget.opacity ?? 1) * 100)}
                                                 onChange={e => updateWidget(selectedWidget.id, { opacity: parseInt(e.target.value) / 100 })}
                                                 className="flex-1 accent-emerald-500"
                                             />
@@ -353,90 +369,144 @@ export default function OverlayEditor() {
                                         <label className="text-xs text-zinc-300 font-medium cursor-pointer flex-1" htmlFor="bgToggle">
                                             Enable Dark Background
                                         </label>
-                                        <input 
+                                        <input
                                             id="bgToggle"
-                                            type="checkbox" 
-                                            checked={!!selectedWidget.hasBackground} 
+                                            type="checkbox"
+                                            checked={!!selectedWidget.hasBackground}
                                             onChange={e => updateWidget(selectedWidget.id, { hasBackground: e.target.checked })}
                                             className="w-4 h-4 accent-emerald-500 rounded bg-zinc-800 border-zinc-700 cursor-pointer"
                                         />
                                     </div>
-                                    
+
                                     <div className="col-span-2 mt-2 pt-2 border-t border-zinc-800">
                                         <label className="text-[10px] text-zinc-500 uppercase font-bold mb-2 block">Crop (Pixels)</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label className="text-[9px] text-zinc-600 block mb-1">Top</label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={selectedWidget.cropTop || 0} 
+                                                <Input
+                                                    type="number"
+                                                    value={selectedWidget.cropTop || 0}
                                                     onChange={e => updateWidget(selectedWidget.id, { cropTop: parseInt(e.target.value) || 0 })}
                                                     className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] text-zinc-600 block mb-1">Bottom</label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={selectedWidget.cropBottom || 0} 
+                                                <Input
+                                                    type="number"
+                                                    value={selectedWidget.cropBottom || 0}
                                                     onChange={e => updateWidget(selectedWidget.id, { cropBottom: parseInt(e.target.value) || 0 })}
                                                     className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] text-zinc-600 block mb-1">Left</label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={selectedWidget.cropLeft || 0} 
+                                                <Input
+                                                    type="number"
+                                                    value={selectedWidget.cropLeft || 0}
                                                     onChange={e => updateWidget(selectedWidget.id, { cropLeft: parseInt(e.target.value) || 0 })}
                                                     className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] text-zinc-600 block mb-1">Right</label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={selectedWidget.cropRight || 0} 
+                                                <Input
+                                                    type="number"
+                                                    value={selectedWidget.cropRight || 0}
                                                     onChange={e => updateWidget(selectedWidget.id, { cropRight: parseInt(e.target.value) || 0 })}
                                                     className="h-8 bg-zinc-900 border-zinc-800 text-xs"
                                                 />
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {selectedWidget.type === 'custom_media' && (
                                         <div className="col-span-2 mt-2 p-3 bg-zinc-900 rounded-lg border border-zinc-800">
                                             <label className="text-[10px] text-zinc-500 uppercase font-bold mb-1 block">Media URL</label>
-                                            <Input 
-                                                type="text" 
-                                                value={selectedWidget.url || ''} 
+                                            <Input
+                                                type="text"
+                                                value={selectedWidget.url || ''}
                                                 onChange={e => updateWidget(selectedWidget.id, { url: e.target.value })}
                                                 placeholder="https://... or choose local file"
                                                 className="w-full bg-zinc-950 border-zinc-800 text-xs mb-2"
                                             />
                                             <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="file" 
+                                                <input
+                                                    type="file"
                                                     id="localMediaUpload"
-                                                    accept="image/*,video/webm" 
+                                                    accept="image/*,video/webm"
                                                     className="hidden"
                                                     onChange={e => {
                                                         const file = e.target.files[0]
                                                         if (file) {
                                                             const reader = new FileReader()
                                                             reader.onload = (ev) => {
-                                                                updateWidget(selectedWidget.id, { url: ev.target.result })
+                                                                 updateWidget(selectedWidget.id, { url: ev.target.result })
                                                             }
                                                             reader.readAsDataURL(file)
                                                         }
                                                     }}
                                                 />
-                                                <Button 
+                                                <Button
                                                     onClick={() => document.getElementById('localMediaUpload').click()}
                                                     className="w-full bg-purple-600 hover:bg-purple-500 text-xs py-1"
                                                 >
                                                     Upload Local File (Image)
                                                 </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedWidget.type === 'ticker' && (
+                                        <div className="col-span-2 mt-2 p-3 bg-zinc-900 rounded-lg border border-zinc-800 space-y-2">
+                                            <label className="text-[10px] text-cyan-400 uppercase font-bold block">Ticker Settings</label>
+                                            <div>
+                                                <label className="text-[9px] text-zinc-500 block mb-1">Badge Title</label>
+                                                <Input
+                                                    type="text"
+                                                    value={selectedWidget.tickerTitle || 'LIVE STATS'}
+                                                    onChange={e => updateWidget(selectedWidget.id, { tickerTitle: e.target.value })}
+                                                    placeholder="LIVE STATS"
+                                                    className="h-8 bg-zinc-950 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] text-zinc-500 block mb-1">Custom Announcement Text</label>
+                                                <Input
+                                                    type="text"
+                                                    value={selectedWidget.customText || ''}
+                                                    onChange={e => updateWidget(selectedWidget.id, { customText: e.target.value })}
+                                                    placeholder="e.g. SPECIAL EVENT TODAY!"
+                                                    className="h-8 bg-zinc-950 border-zinc-800 text-xs"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[9px] text-zinc-500 block mb-1">Scroll Speed (Seconds)</label>
+                                                    <Input
+                                                        type="number"
+                                                        value={selectedWidget.tickerSpeed || 30}
+                                                        onChange={e => updateWidget(selectedWidget.id, { tickerSpeed: parseInt(e.target.value) || 30 })}
+                                                        className="h-8 bg-zinc-950 border-zinc-800 text-xs"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] text-zinc-500 block mb-1">Accent Color</label>
+                                                    <div className="flex gap-1 items-center">
+                                                        <input
+                                                            type="color"
+                                                            value={selectedWidget.tickerColor || '#00f0ff'}
+                                                            onChange={e => updateWidget(selectedWidget.id, { tickerColor: e.target.value })}
+                                                            className="w-8 h-8 rounded border border-zinc-800 bg-transparent cursor-pointer shrink-0"
+                                                        />
+                                                        <Input
+                                                            type="text"
+                                                            value={selectedWidget.tickerColor || '#00f0ff'}
+                                                            onChange={e => updateWidget(selectedWidget.id, { tickerColor: e.target.value })}
+                                                            className="h-8 bg-zinc-950 border-zinc-800 text-xs font-mono"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -451,12 +521,12 @@ export default function OverlayEditor() {
                 </div>
 
                 {/* Canvas Area */}
-                <div 
+                <div
                     className="flex-1 bg-zinc-950 relative overflow-auto flex items-center justify-center p-10 custom-scrollbar z-10"
                     onClick={() => setSelectedWidgetId(null)}
                 >
                     {/* SCALED WRAPPER to prevent massive scrollbars and keep centered */}
-                    <div 
+                    <div
                         style={{
                             width: resolution.w * scale,
                             height: resolution.h * scale,
@@ -464,14 +534,14 @@ export default function OverlayEditor() {
                         className="relative shrink-0"
                     >
                         {/* The actual Canvas */}
-                        <div 
+                        <div
                             ref={canvasRef}
                             style={{
                                 width: resolution.w,
                                 height: resolution.h,
                                 transform: `scale(${scale})`,
                                 transformOrigin: 'top left',
-                                backgroundColor: '#0a0a0a', 
+                                backgroundColor: '#0a0a0a',
                                 backgroundImage: 'linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b), linear-gradient(45deg, #18181b 25%, transparent 25%, transparent 75%, #18181b 75%, #18181b)',
                                 backgroundSize: '20px 20px',
                                 backgroundPosition: '0 0, 10px 10px',
@@ -484,7 +554,7 @@ export default function OverlayEditor() {
                             <div className="absolute top-[5%] bottom-[5%] left-[5%] right-[5%] pointer-events-none z-0 border border-dashed border-zinc-500/30">
                                 <span className="absolute bottom-1 right-2 text-zinc-500/50 text-[12px] font-bold tracking-widest">SAFE ZONE (5%)</span>
                             </div>
-                            
+
                             {/* Resolution watermark */}
                             <div className="absolute top-6 left-6 pointer-events-none z-0 text-zinc-600/30 font-bold text-5xl select-none tracking-tighter">
                                 {resolution.w} × {resolution.h}
@@ -492,7 +562,7 @@ export default function OverlayEditor() {
 
                             {/* Widgets rendered in array order (natural z-index) */}
                             {widgets.map((w, index) => (
-                                <DraggableWidget 
+                                <DraggableWidget
                                     key={w.id}
                                     widget={w}
                                     isSelected={selectedWidgetId === w.id}
@@ -513,7 +583,7 @@ export default function OverlayEditor() {
 
 function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, scale, baseZIndex }) {
     const [activeAction, setActiveAction] = useState(null)
-    
+
     // For drag/resize/crop delta calculations
     const startPos = useRef({ x: 0, y: 0, w: 0, h: 0, mx: 0, my: 0, cropT: 0, cropR: 0, cropB: 0, cropL: 0 })
 
@@ -538,10 +608,10 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
     useEffect(() => {
         const handleMouseMove = (e) => {
             if (!activeAction) return
-            
+
             const dx = (e.clientX - startPos.current.mx) / scale
             const dy = (e.clientY - startPos.current.my) / scale
-            
+
             if (activeAction === 'drag') {
                 onUpdate({
                     x: Math.round(startPos.current.x + dx),
@@ -586,7 +656,7 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
     const computedZIndex = baseZIndex * 10 + (isSelected ? 5 : 0)
 
     return (
-        <div 
+        <div
             style={{
                 position: 'absolute',
                 left: widget.x,
@@ -595,8 +665,8 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                 height: widget.height,
                 transform: `scale(${widget.scale || 1})`,
                 transformOrigin: 'top left',
-                opacity: widget.opacity ?? 1,
-                border: isSelected ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.2)', // Purple border for selection
+                opacity: widget.visible === false ? (widget.opacity ?? 1) * 0.35 : (widget.opacity ?? 1),
+                border: isSelected ? '2px solid #a855f7' : (widget.visible === false ? '1px dashed rgba(255,165,0,0.5)' : '1px solid rgba(255,255,255,0.2)'),
                 backgroundColor: isSelected ? 'rgba(168, 85, 247, 0.1)' : (widget.hasBackground ? 'rgba(10, 10, 15, 0.85)' : 'transparent'),
                 backdropFilter: widget.hasBackground ? 'blur(10px)' : 'none',
                 borderRadius: widget.hasBackground ? '16px' : '0px',
@@ -607,31 +677,42 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             className="group hover:!border-purple-400/50 transition-colors"
         >
             <div style={{ width: '100%', height: '100%', clipPath: `inset(${widget.cropTop || 0}px ${widget.cropRight || 0}px ${widget.cropBottom || 0}px ${widget.cropLeft || 0}px)` }}>
-                {/* Custom Media or iFrame */}
+                {/* Custom Media, Ticker, or iFrame */}
                 {widget.type === 'custom_media' ? (
                     widget.url?.match(/\.(mp4|webm)$/i) ? (
                         <video src={widget.url} autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                     ) : widget.url?.startsWith('data:image') || widget.url?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
                         <img src={widget.url} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                     ) : (
-                        <iframe 
+                        <iframe
                             src={widget.url || 'about:blank'}
-                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                            allowTransparency="true"
+                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none', backgroundColor: 'transparent' }}
                             title="Preview"
                         />
                     )
+                ) : widget.type === 'ticker' ? (
+                    <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
+                        <TickerOverlay
+                            customText={widget.customText}
+                            title={widget.tickerTitle}
+                            speed={widget.tickerSpeed}
+                            color={widget.tickerColor}
+                        />
+                    </div>
                 ) : (
-                    <iframe 
+                    <iframe
                         src={previewUrl}
-                        style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                        allowTransparency="true"
+                        style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none', backgroundColor: 'transparent' }}
                         title="Preview"
                     />
                 )}
             </div>
-            
+
             {/* Label overlay */}
             {(isSelected || true) && (
-                <div 
+                <div
                     className="absolute top-0 left-0 bg-zinc-900/90 text-xs font-mono text-zinc-300 px-2 py-1 select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap overflow-hidden"
                     style={{ transform: `scale(${1 / (widget.scale || 1)})`, transformOrigin: 'top left' }}
                 >
@@ -641,10 +722,10 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
 
             {/* Resize handle */}
             {isSelected && (
-                <div 
+                <div
                     className="absolute bottom-0 right-0 w-6 h-6 bg-purple-500 cursor-se-resize rounded-tl flex items-center justify-center text-white shadow-lg z-50"
-                    style={{ 
-                        right: -2, 
+                    style={{
+                        right: -2,
                         bottom: -2,
                         transform: `scale(${1 / (widget.scale || 1)})`,
                         transformOrigin: 'bottom right'
@@ -659,9 +740,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
             {isSelected && (
                 <>
                     {/* Top Crop */}
-                    <div 
+                    <div
                         className="absolute left-1/2 w-8 h-3 bg-emerald-500 cursor-ns-resize shadow-md z-40 rounded-full"
-                        style={{ 
+                        style={{
                             top: widget.cropTop || 0,
                             transform: `translate(-50%, -50%) scale(${1 / (widget.scale || 1)})`,
                         }}
@@ -669,9 +750,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                         title="Crop Top"
                     />
                     {/* Bottom Crop */}
-                    <div 
+                    <div
                         className="absolute left-1/2 w-8 h-3 bg-emerald-500 cursor-ns-resize shadow-md z-40 rounded-full"
-                        style={{ 
+                        style={{
                             bottom: widget.cropBottom || 0,
                             transform: `translate(-50%, 50%) scale(${1 / (widget.scale || 1)})`,
                         }}
@@ -679,9 +760,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                         title="Crop Bottom"
                     />
                     {/* Left Crop */}
-                    <div 
+                    <div
                         className="absolute top-1/2 w-3 h-8 bg-emerald-500 cursor-ew-resize shadow-md z-40 rounded-full"
-                        style={{ 
+                        style={{
                             left: widget.cropLeft || 0,
                             transform: `translate(-50%, -50%) scale(${1 / (widget.scale || 1)})`,
                         }}
@@ -689,9 +770,9 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                         title="Crop Left"
                     />
                     {/* Right Crop */}
-                    <div 
+                    <div
                         className="absolute top-1/2 w-3 h-8 bg-emerald-500 cursor-ew-resize shadow-md z-40 rounded-full"
-                        style={{ 
+                        style={{
                             right: widget.cropRight || 0,
                             transform: `translate(50%, -50%) scale(${1 / (widget.scale || 1)})`,
                         }}

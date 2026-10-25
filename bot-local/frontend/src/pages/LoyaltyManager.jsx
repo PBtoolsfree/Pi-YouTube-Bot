@@ -568,15 +568,23 @@ export default function LoyaltyManagerPage() {
                                         <div className="relative bg-zinc-950/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 h-full">
                                             <div className="flex flex-wrap items-center gap-1.5 mb-2">
                                                 <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!catch</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!mypokemon</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!pokemon [@user]</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!summon &lt;name&gt;</div>
+                                                <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!attack &lt;@user&gt;</div>
                                                 <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!battle [@user] &lt;amt&gt;</div>
                                                 <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!accept</div>
                                                 <div className="font-bold text-rose-500 text-[10px] font-mono tracking-tight bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">!showpokemon &lt;name&gt;</div>
                                             </div>
-                                            <p className="text-[11px] text-zinc-400 mb-1">Catch wild Pokémon and use them to duel others!</p>
+                                            <p className="text-[11px] text-zinc-400 mb-1">Catch wild Pokémon, summon partners, inspect collections, and duel others!</p>
                                             <ul className="list-disc ml-4 text-[10px] space-y-0.5 text-zinc-500">
                                                 <li>When a Pokémon appears, type <code>!catch</code> to capture it.</li>
-                                                <li>Type <code>!battle &lt;amount&gt;</code> to challenge randomly, or tag someone.</li>
-                                                <li>Type <code>!showpokemon &lt;name&gt;</code> to flex your Pokemon on stream!</li>
+                                                <li>Type <code>!mypokemon</code> to view your caught Pokémon and power levels.</li>
+                                                <li>Type <code>!pokemon @user</code> to inspect another viewer's Pokémon collection.</li>
+                                                <li>Type <code>!summon &lt;name&gt;</code> to summon and set your active partner Pokémon on stream.</li>
+                                                <li>Type <code>!attack &lt;@user&gt;</code> (or <code>!pokeattack</code>) to duel another trainer with your active Pokémon!</li>
+                                                <li>Type <code>!battle &lt;amount&gt;</code> to challenge randomly, or tag someone for a wager duel.</li>
+                                                <li>Type <code>!showpokemon &lt;name&gt;</code> to flex your Pokémon on stream!</li>
                                             </ul>
                                         </div>
                                     </div>

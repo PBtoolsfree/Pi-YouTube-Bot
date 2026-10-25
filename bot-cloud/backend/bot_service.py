@@ -1964,10 +1964,29 @@ class BotService:
             result = await self.pokemon.handle_accept(author, poke_name)
             await self._send_chat(result)
 
+        elif cmd == "!mypokemon":
+            if not getattr(self, "pokemon", None):
+                return
+            result = await self.pokemon.handle_my_pokemon(author)
+            await self._send_chat(result)
+
         elif cmd in ["!pokemon", "!pokemons"]:
             if not getattr(self, "pokemon", None):
                 return
-            result = await self.pokemon.handle_check_pokemon(author)
+            if args:
+                result = await self.pokemon.handle_view_pokemon(author, args[0])
+            else:
+                result = await self.pokemon.handle_my_pokemon(author)
+            await self._send_chat(result)
+
+        elif cmd == "!summon":
+            if not getattr(self, "pokemon", None):
+                return
+            if not args:
+                await self._send_chat(f"@{author} Usage: !summon <pokemon_name>")
+                return
+            poke_name = " ".join(args)
+            result = await self.pokemon.handle_summon(author, poke_name)
             await self._send_chat(result)
 
         elif cmd == "!showpokemon":
@@ -2243,12 +2262,36 @@ class BotService:
             await self._send_chat(result["message"])
                 
 
+        elif cmd in ["!pokeattack", "!pattack"]:
+            if not getattr(self, "pokemon", None):
+                return
+            if not args:
+                await self._send_chat(f"@{author} Usage: !pokeattack <@target>")
+                return
+            result = await self.pokemon.handle_attack(author, args[0])
+            await self._send_chat(result)
+
         elif cmd == "!attack":
             if not args:
-                await self._send_chat(f"@{author} Usage: !attack <amount>")
+                await self._send_chat(f"@{author} Usage: !attack <amount> (Boss Fight) or !attack <@target> (Pokemon Duel)")
                 return
+
+            # Check if targeting another player with Pokémon
+            is_numeric = False
             try:
                 amount = int(args[0])
+                is_numeric = True
+            except ValueError:
+                is_numeric = False
+
+            if not is_numeric or args[0].startswith("@"):
+                if not getattr(self, "pokemon", None):
+                    return
+                result = await self.pokemon.handle_attack(author, args[0])
+                await self._send_chat(result)
+                return
+
+            try:
                 total_points = self.viewers.get_total_points(author)
                 result = self.boss_fight.attack_boss(author, amount, total_points, self.viewers)
                 

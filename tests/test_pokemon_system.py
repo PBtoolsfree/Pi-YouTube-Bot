@@ -7,12 +7,8 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 # Ensure bot-cloud backend is isolated and used rather than bot-local
 cloud_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'bot-cloud'))
-for mod in list(sys.modules.keys()):
-    if mod == "backend" or mod.startswith("backend."):
-        del sys.modules[mod]
-
-sys.path = [p for p in sys.path if "bot-local" not in p and "bot-cloud" not in p]
-sys.path.insert(0, cloud_dir)
+if cloud_dir not in sys.path:
+    sys.path.insert(0, cloud_dir)
 
 from backend.services.pokemon_service import PokemonService
 from backend.bot_service import BotService as CloudBotService

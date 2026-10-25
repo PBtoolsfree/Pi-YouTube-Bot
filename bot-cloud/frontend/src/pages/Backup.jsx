@@ -108,8 +108,13 @@ export default function Backup() {
 
     // ─── IMPORT ───────────────────────────────────────────────────────────
     const handleImportFile = async (file) => {
-        if (!file || !file.name.endsWith('.zip')) {
+        if (!file || !file.name.toLowerCase().endsWith('.zip')) {
             addToast('error', 'Please upload a valid .zip backup file')
+            return
+        }
+        const maxBytes = 100 * 1024 * 1024
+        if (file.size > maxBytes) {
+            addToast('error', `Backup file is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed size is 100 MB.`)
             return
         }
         setImportLoading(true)
@@ -120,8 +125,13 @@ export default function Backup() {
                 headers: { 'Content-Type': 'multipart/form-data' }
             })
             addToast('success', `✅ Backup "${file.name}" imported! Bot config has been restored.`)
+            loadBackups()
         } catch (e) {
-            addToast('error', `Import failed: ${e.response?.data?.detail || e.message}`)
+            if (e.response?.status === 413) {
+                addToast('error', 'Import failed (HTTP 413 Payload Too Large): Backup exceeds maximum upload size (100 MB). If running behind NGINX, check client_max_body_size.')
+            } else {
+                addToast('error', `Import failed: ${e.response?.data?.detail || e.message}`)
+            }
         } finally {
             setImportLoading(false)
         }

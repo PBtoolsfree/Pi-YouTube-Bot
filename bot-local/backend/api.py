@@ -296,6 +296,16 @@ active_pi_websockets: List[WebSocket] = []
 class ConfigUpdate(BaseModel):
     config: Dict[str, Any]
 
+class CustomOverlayCreate(BaseModel):
+    name: str
+    widgets: Optional[list] = None
+    resolution: Optional[Dict[str, Any]] = None
+
+class CustomOverlayUpdate(BaseModel):
+    name: Optional[str] = None
+    widgets: Optional[list] = None
+    resolution: Optional[Dict[str, Any]] = None
+
 class SpeakRequest(BaseModel):
     text: str
     channel: str = "public"
@@ -331,6 +341,38 @@ async def broadcast_log(data: dict):
 @app.get("/api/logs/history")
 async def get_log_history():
     return list(log_history)
+
+# --- CUSTOM OVERLAYS ---
+from .services.custom_overlay_service import CustomOverlayService
+
+@app.get("/api/custom-overlays")
+async def get_custom_overlays():
+    return CustomOverlayService.get_all()
+
+@app.get("/api/custom-overlays/{overlay_id}")
+async def get_custom_overlay(overlay_id: str):
+    overlay = CustomOverlayService.get_by_id(overlay_id)
+    if not overlay:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return overlay
+
+@app.post("/api/custom-overlays")
+async def create_custom_overlay(payload: CustomOverlayCreate):
+    return CustomOverlayService.create(payload.name, payload.resolution, payload.widgets)
+
+@app.put("/api/custom-overlays/{overlay_id}")
+async def update_custom_overlay(overlay_id: str, payload: CustomOverlayUpdate):
+    overlay = CustomOverlayService.update(overlay_id, payload.dict(exclude_unset=True))
+    if not overlay:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return overlay
+
+@app.delete("/api/custom-overlays/{overlay_id}")
+async def delete_custom_overlay(overlay_id: str):
+    success = CustomOverlayService.delete(overlay_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Overlay not found")
+    return {"success": True}
 
 async def broadcast_to_pi_clients(event: dict):
     if not active_pi_websockets:
@@ -2141,6 +2183,10 @@ import io
 _PROJECT_ROOT_BACKUP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Files and directories to include in a backup zip
+DEFAULT_MAX_BACKUP_SIZE_MB = 100
+MAX_UNCOMPRESSED_TOTAL_BYTES = 500 * 1024 * 1024  # 500 MB
+MAX_COMPRESSION_RATIO = 100  # Avoid zip bombs
+
 _BACKUP_FILES = [
     "config.json",
     "client_secret.json",
@@ -2152,8 +2198,67 @@ _BACKUP_FILES = [
     "viewers.json",
     "viewers.json.bak",
     "subscriber_count.json",
+    "custom_overlays.json",
 ]
-_BACKUP_DIRS = []
+_BACKUP_DIRS = [
+    "data",
+]
+
+def _verify_admin_access(request: Request):
+    """Authenticate and authorize backup operations using existing security model."""
+    cfg = _get_config()
+    db_password = cfg.get("security", {}).get("dashboard_password") or os.environ.get("DASHBOARD_PASSWORD")
+    if not db_password:
+        return True
+
+    auth_header = request.headers.get("authorization") if request else None
+    if auth_header and auth_header.startswith("Basic "):
+        try:
+            import base64
+            encoded = auth_header.split(" ", 1)[1]
+            decoded = base64.b64decode(encoded).decode("utf-8")
+            if ":" in decoded:
+                user, pwd = decoded.split(":", 1)
+                if user == "admin" and pwd == db_password:
+                    return True
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
+        detail="Admin authentication required"
+    )
+
+def _get_max_backup_size_bytes() -> int:
+    cfg = _get_config()
+    mb = cfg.get("backup", {}).get("max_upload_size_mb", DEFAULT_MAX_BACKUP_SIZE_MB)
+    try:
+        mb = int(mb)
+    except (ValueError, TypeError):
+        mb = DEFAULT_MAX_BACKUP_SIZE_MB
+    if mb <= 0:
+        mb = DEFAULT_MAX_BACKUP_SIZE_MB
+    return mb * 1024 * 1024
+
+def _close_db_connections():
+    """Safely close active SQLite connections before replacing database files."""
+    try:
+        if hasattr(bot, "viewers") and hasattr(bot.viewers, "close"):
+            bot.viewers.close()
+    except Exception as e:
+        logger.warning(f"Closing viewers db: {e}")
+    try:
+        if hasattr(bot, "brain") and hasattr(bot.brain, "close_conn"):
+            bot.brain.close_conn()
+    except Exception as e:
+        logger.warning(f"Closing brain db: {e}")
+    try:
+        from backend.services import youtube_memory
+        if hasattr(youtube_memory, "close_conn"):
+            youtube_memory.close_conn()
+    except Exception as e:
+        logger.warning(f"Closing youtube_memory db: {e}")
 
 def _get_backups_dir() -> str:
     d = os.path.join(_PROJECT_ROOT_BACKUP, "backups")
@@ -2181,40 +2286,154 @@ def _create_backup_zip(buf: io.BytesIO):
                         rel_f = os.path.relpath(abs_f, _PROJECT_ROOT_BACKUP)
                         zf.write(abs_f, rel_f)
 
-def _restore_backup_zip(zip_bytes: bytes):
-    """Extract a backup zip back to the project root."""
-    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
-        for member in zf.namelist():
-            # Only allow whitelisted paths for security
-            safe = any(
-                member == f or member.startswith(d + "/") or member.startswith(d + "\\")
-                for f in _BACKUP_FILES
-                for d in _BACKUP_DIRS
-                # also allow the directory entries themselves
-            ) or any(
-                member.startswith(d + "/") or member.startswith(d + "\\")
-                for d in _BACKUP_DIRS
-            ) or member in _BACKUP_FILES
-            if safe:
+def _create_pre_restore_snapshot() -> Optional[str]:
+    """Create a recoverable snapshot before modifying any persistent data."""
+    try:
+        ts = f"{time.strftime('%Y%m%d_%H%M%S')}_{int(time.time()*1000)%1000:03d}"
+        filename = f"pre_restore_snapshot_{ts}.zip"
+        dest = os.path.join(_get_backups_dir(), filename)
+        buf = io.BytesIO()
+        _create_backup_zip(buf)
+        with open(dest, "wb") as f:
+            f.write(buf.getvalue())
+        logger.info(f"Created pre-restore snapshot: {filename}")
+        return dest
+    except Exception as e:
+        logger.error(f"Failed to create pre-restore snapshot: {e}")
+        return None
+
+def _emergency_rollback(snapshot_path: str):
+    """Roll back from a pre-restore snapshot if a restore step fails."""
+    if not snapshot_path or not os.path.exists(snapshot_path):
+        return
+    try:
+        logger.warning(f"Executing emergency rollback from {snapshot_path}")
+        with zipfile.ZipFile(snapshot_path, "r") as zf:
+            for member in zf.namelist():
                 dest = os.path.join(_PROJECT_ROOT_BACKUP, member)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with zf.open(member) as src, open(dest, "wb") as dst:
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst)
+        logger.info("Emergency rollback completed successfully.")
+    except Exception as e:
+        logger.error(f"Emergency rollback failed: {e}")
 
-                # Local node safety check: Preserve is_cloud=False
-                if member == "config.json" and os.environ.get("RUN_MODE") != "cloud":
+def _restore_backup_zip(zip_bytes: bytes):
+    """Extract a backup zip with strict validation, staging, and atomic rollback."""
+    # 1. Archive integrity check
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Invalid ZIP archive: file is corrupted or not a zip file.")
+
+    bad_member = zf.testzip()
+    if bad_member:
+        raise HTTPException(400, f"Corrupted file inside backup archive: {bad_member}")
+
+    # 2. Member validation and path traversal prevention
+    total_uncompressed = 0
+    safe_members = []
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/") or name.startswith("\\") or ".." in name.split("/"):
+            raise HTTPException(400, f"Unsafe entry in ZIP archive: '{info.filename}' contains invalid path characters.")
+        if ":" in name or "\x00" in name:
+            raise HTTPException(400, f"Unsafe entry in ZIP archive: '{info.filename}' contains invalid characters.")
+
+        # Check for symlinks or special devices
+        is_symlink = (info.external_attr >> 16) & 0o120000 == 0o120000
+        if is_symlink:
+            raise HTTPException(400, "Unsafe entry in ZIP archive: symlinks are not allowed.")
+
+        # Whitelist path check
+        norm_name = os.path.normpath(name).replace("\\", "/")
+        if info.is_dir():
+            if not any(norm_name == d or norm_name.startswith(d + "/") for d in _BACKUP_DIRS):
+                raise HTTPException(400, f"Unsafe directory in backup archive: '{norm_name}' is not in allowed directories.")
+            continue
+
+        safe = any(
+            norm_name == f or any(norm_name.startswith(d + "/") for d in _BACKUP_DIRS)
+            for f in _BACKUP_FILES
+        )
+        if not safe:
+            raise HTTPException(400, f"Unrecognized or unauthorized file in backup archive: '{norm_name}'.")
+
+        # Compression ratio / zip bomb check
+        total_uncompressed += info.file_size
+        if total_uncompressed > MAX_UNCOMPRESSED_TOTAL_BYTES:
+            raise HTTPException(400, f"Backup uncompressed size exceeds maximum safety limit ({MAX_UNCOMPRESSED_TOTAL_BYTES // (1024*1024)} MB).")
+        if info.file_size > 1024 and info.compress_size > 0:
+            if info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+                raise HTTPException(400, f"Suspicious compression ratio for '{info.filename}'.")
+
+        safe_members.append(info)
+
+    if not safe_members:
+        raise HTTPException(400, "Backup archive contains no valid restore files.")
+
+    # 3. Create a pre-restore snapshot before modifying anything
+    snapshot_path = _create_pre_restore_snapshot()
+
+    # 4. Extract and validate in a staging temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            for info in safe_members:
+                dest = os.path.join(temp_dir, info.filename)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with zf.open(info) as src, open(dest, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+                # Validate JSON files
+                if info.filename.endswith(".json"):
                     try:
-                        with open(dest, "r") as f:
-                            cfg = json.load(f)
-                        cfg["is_cloud"] = False
-                        with open(dest, "w") as f:
-                            json.dump(cfg, f, indent=4)
-                    except BaseException as e:
-                        logger.error(f"Failed to enforce is_cloud=False on restore: {e}")
+                        with open(dest, "r", encoding="utf-8") as jf:
+                            json.load(jf)
+                    except Exception as je:
+                        raise HTTPException(400, f"Invalid JSON in backup file '{info.filename}': {je}")
+
+                # Validate SQLite DB files
+                if info.filename.endswith(".db"):
+                    with open(dest, "rb") as dbf:
+                        header = dbf.read(16)
+                        if len(header) == 16 and not header.startswith(b"SQLite format 3\x00"):
+                            raise HTTPException(400, f"Invalid SQLite database in backup file '{info.filename}'.")
+
+            # Preserve node-specific mode (is_cloud) in config.json
+            cfg_path = os.path.join(temp_dir, "config.json")
+            if os.path.exists(cfg_path):
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    cfg["is_cloud"] = (os.environ.get("RUN_MODE") == "cloud")
+                    with open(cfg_path, "w", encoding="utf-8") as f:
+                        json.dump(cfg, f, indent=4)
+                except Exception as e:
+                    logger.error(f"Failed to enforce is_cloud flag on restore: {e}")
+
+            # 5. Close DB connections and copy staged files to destination
+            _close_db_connections()
+
+            for root, _, files in os.walk(temp_dir):
+                for f in files:
+                    src_f = os.path.join(root, f)
+                    rel_f = os.path.relpath(src_f, temp_dir)
+                    dst_f = os.path.join(_PROJECT_ROOT_BACKUP, rel_f)
+                    os.makedirs(os.path.dirname(dst_f), exist_ok=True)
+                    shutil.copy2(src_f, dst_f)
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Error during backup extraction/copy")
+            if snapshot_path:
+                _emergency_rollback(snapshot_path)
+            raise HTTPException(500, f"Restore failed during file extraction: {exc}. Previous state was preserved.")
 
 @app.get("/api/backup/export")
-async def backup_export():
+async def backup_export(request: Request):
     """Download a full backup of all critical files as a zip."""
+    _verify_admin_access(request)
     try:
         buf = io.BytesIO()
         _create_backup_zip(buf)
@@ -2231,12 +2450,12 @@ async def backup_export():
         raise HTTPException(500, f"Backup failed: {e}")
 
 @app.post("/api/backup/save")
-async def backup_save(payload: Dict[str, Any]):
+async def backup_save(payload: Dict[str, Any], request: Request):
     """Save a named backup to the server-side backups/ directory."""
+    _verify_admin_access(request)
     name = payload.get("name", "").strip()
     if not name:
         raise HTTPException(400, "Backup name is required")
-    # Sanitize name
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name)
     try:
         buf = io.BytesIO()
@@ -2252,8 +2471,9 @@ async def backup_save(payload: Dict[str, Any]):
         raise HTTPException(500, f"Save failed: {e}")
 
 @app.get("/api/backup/list")
-async def backup_list():
+async def backup_list(request: Request):
     """List all server-side saved backups."""
+    _verify_admin_access(request)
     try:
         d = _get_backups_dir()
         backups = []
@@ -2271,9 +2491,9 @@ async def backup_list():
         raise HTTPException(500, str(e))
 
 @app.post("/api/backup/restore/{filename}")
-async def backup_restore(filename: str):
+async def backup_restore(filename: str, request: Request):
     """Restore a saved server-side backup by filename."""
-    # Sanitize and validate
+    _verify_admin_access(request)
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     fpath = os.path.join(_get_backups_dir(), filename)
@@ -2282,18 +2502,20 @@ async def backup_restore(filename: str):
     try:
         with open(fpath, "rb") as f:
             _restore_backup_zip(f.read())
-        # Reload config after restore
         ConfigManager.get_config(force_reload=True)
-        # Close SQLite database connections & reload memory
-        bot.viewers.reload()
+        if hasattr(bot, "viewers") and hasattr(bot.viewers, "reload"):
+            bot.viewers.reload()
         return {"status": "restored", "filename": filename}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Backup restore failed")
         raise HTTPException(500, f"Restore failed: {e}")
 
 @app.delete("/api/backup/delete/{filename}")
-async def backup_delete(filename: str):
+async def backup_delete(filename: str, request: Request):
     """Delete a saved server-side backup."""
+    _verify_admin_access(request)
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     fpath = os.path.join(_get_backups_dir(), filename)
@@ -2303,17 +2525,48 @@ async def backup_delete(filename: str):
     return {"status": "deleted", "filename": filename}
 
 @app.post("/api/backup/import")
-async def backup_import(file: UploadFile = File(...)):
+async def backup_import(request: Request, file: UploadFile = File(...)):
     """Upload a backup zip file and restore it immediately."""
-    if not file.filename.endswith(".zip"):
+    _verify_admin_access(request)
+    if not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "Only .zip backup files are supported")
+
+    max_bytes = _get_max_backup_size_bytes()
+    max_mb = max_bytes // (1024 * 1024)
+
+    # Check Content-Length header if present
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > max_bytes:
+                raise HTTPException(
+                    413,
+                    f"Uploaded file exceeds maximum allowed limit of {max_mb} MB (Content-Length: {int(cl) / (1024*1024):.1f} MB)."
+                )
+        except ValueError:
+            pass
+
+    # Read content in chunks up to max_bytes
+    contents = bytearray()
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        contents.extend(chunk)
+        if len(contents) > max_bytes:
+            raise HTTPException(
+                413,
+                f"Uploaded backup exceeds the maximum allowed size of {max_mb} MB."
+            )
+
     try:
-        contents = await file.read()
-        _restore_backup_zip(contents)
+        _restore_backup_zip(bytes(contents))
         ConfigManager.get_config(force_reload=True)
-        # Close SQLite database connections & reload memory
-        bot.viewers.reload()
+        if hasattr(bot, "viewers") and hasattr(bot.viewers, "reload"):
+            bot.viewers.reload()
         return {"status": "imported", "filename": file.filename}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Backup import failed")
         raise HTTPException(500, f"Import failed: {e}")

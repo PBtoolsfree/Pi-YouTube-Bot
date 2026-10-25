@@ -113,14 +113,25 @@ export default function SettingsPage({ config, onSave }) {
     }
 
     const bkImportFile = async (file) => {
-        if (!file?.name.endsWith('.zip')) { bkAddToast('error', 'Only .zip backup files are accepted'); return }
+        if (!file?.name?.toLowerCase().endsWith('.zip')) { bkAddToast('error', 'Only .zip backup files are accepted'); return }
+        const maxBytes = 100 * 1024 * 1024
+        if (file.size > maxBytes) {
+            bkAddToast('error', `Backup file is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Max limit is 100 MB.`)
+            return
+        }
         setBkImportLoading(true)
         try {
             const fd = new FormData(); fd.append('file', file)
             await axios.post(`${API_URL}/backup/import`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
             bkAddToast('success', `✅ "${file.name}" imported and restored!`)
-        } catch (e) { bkAddToast('error', 'Import failed: ' + (e.response?.data?.detail || e.message)) }
-        finally { setBkImportLoading(false) }
+            bkLoadBackups()
+        } catch (e) {
+            if (e.response?.status === 413) {
+                bkAddToast('error', 'Import failed (HTTP 413 Payload Too Large): Backup exceeds maximum upload size (100 MB). Check NGINX client_max_body_size.')
+            } else {
+                bkAddToast('error', 'Import failed: ' + (e.response?.data?.detail || e.message))
+            }
+        } finally { setBkImportLoading(false) }
     }
 
     const bkSave = async () => {

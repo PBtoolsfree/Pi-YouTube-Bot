@@ -46,6 +46,9 @@ export default function DomainSettings({ config, onSave }) {
     listen 80;
     server_name ${parsedDomain};
 
+    # Allow backup uploads up to 100MB (prevents HTTP 413)
+    client_max_body_size 100M;
+
     # Force HTTPS (Optional, requires SSL cert)
     # return 301 https://$host$request_uri;
 
