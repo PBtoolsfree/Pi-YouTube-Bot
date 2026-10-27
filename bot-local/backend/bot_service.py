@@ -106,7 +106,9 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
         "attack", "top", "leaderboard", "shop", "game",
-        "dice", "roll", "tts"
+        "dice", "roll", "tts",
+        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon", "show",
+        "mypokemon", "summon", "pokeattack", "pattack", "help"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -1579,8 +1581,8 @@ class BotService:
         
         if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
             remaining = message[len(cmd_prefix):].strip()
-            parts = remaining.split(" ")
-            cmd_name = parts[0].lower().strip()
+            parts = remaining.split()
+            cmd_name = parts[0].lower().strip() if parts else ""
             
             if is_valid_command(cmd_name, config):
                 normalized_message = "!" + cmd_name
@@ -1591,8 +1593,8 @@ class BotService:
         return None
 
     async def _handle_command(self, author, message, chat_obj=None):
-        parts = message.split(" ")
-        cmd = parts[0].lower()
+        parts = message.strip().split()
+        cmd = parts[0].lower() if parts else ""
         args = parts[1:] if len(parts) > 1 else []
 
         if cmd == "!claim":

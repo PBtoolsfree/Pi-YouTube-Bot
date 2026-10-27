@@ -115,7 +115,8 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
     builtin_commands = {
         "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat",
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
-        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon", "show"
+        "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon", "show",
+        "mypokemon", "summon", "pokeattack", "pattack", "help"
     }
     if cleaned_cmd in builtin_commands:
         return True
@@ -1735,16 +1736,34 @@ class BotService:
         cmd_prefix = cmd_cfg.get("prefix", "!")
 
         is_command_run = False
-        if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
-            remaining = message[len(cmd_prefix):].strip()
-            parts = remaining.split(" ")
-            cmd_name = parts[0].lower().strip()
+        msg_stripped = message.strip()
+        if cmd_enabled and msg_stripped.lower().startswith(cmd_prefix.lower()):
+            remaining = msg_stripped[len(cmd_prefix):].strip()
+            parts = remaining.split()
+            cmd_name = parts[0].lower().strip() if parts else ""
 
-            if is_valid_command(cmd_name, config):
+            # Check if this command prefix is an explicit AI prefix (e.g. !ai, !ask, !piya)
+            is_ai_cmd = False
+            if ai_enabled:
+                ai_prefixes = [p.lower().strip() for p in ai_triggers.get("prefixes", []) if p.strip()]
+                for pref in ai_prefixes:
+                    clean_pref = pref.lstrip(cmd_prefix).strip().lower()
+                    if cmd_name == clean_pref:
+                        is_ai_cmd = True
+                        break
+
+            if is_ai_cmd:
+                # Handled below by AI triggers
+                pass
+            elif is_valid_command(cmd_name, config):
                 normalized_message = "!" + cmd_name
                 if len(parts) > 1:
                     normalized_message += " " + " ".join(parts[1:])
                 await self._handle_command(author, normalized_message, chat_obj)
+                is_command_run = True
+            elif cmd_name:
+                # Explicit command that is unrecognized — do not let it disappear or get swallowed by AI
+                await self._send_chat(f"@{author} Unknown command '!{cmd_name}'. Type !help for available commands.")
                 is_command_run = True
 
         if is_command_run:
@@ -1854,8 +1873,8 @@ class BotService:
         return None
 
     async def _handle_command(self, author, message, chat_obj=None):
-        parts = message.split(" ")
-        cmd = parts[0].lower()
+        parts = message.strip().split()
+        cmd = parts[0].lower() if parts else ""
         args = parts[1:] if len(parts) > 1 else []
 
         config = self.load_config()
@@ -1939,47 +1958,56 @@ class BotService:
 
         elif cmd == "!catch":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             result = await self.pokemon.handle_catch(author)
             await self._send_chat(result)
 
         elif cmd == "!battle":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
-            if len(args) == 2 and args[0].isdigit():
-                # Omitted target: !battle <bet> <pokemon>
-                target = "random"
-                try:
-                    bet = int(args[0])
-                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
-            elif len(args) > 2 and args[0].isdigit():
-                target = "random"
-                try:
-                    bet = int(args[0])
-                    poke_name = " ".join(args[1:]) if len(args) > 1 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
-            elif len(args) >= 2:
-                # Specified target: !battle @user <bet> <pokemon>
+
+            if not args:
+                await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> [pokemon_name] or !accept")
+                return
+
+            # Support "!battle accept [pokemon_name]" alias
+            if args[0].lower() == "accept":
+                poke_name = " ".join(args[1:]) if len(args) > 1 else None
+                result = await self.pokemon.handle_accept(author, poke_name)
+                await self._send_chat(result)
+                return
+
+            # Determine whether first arg is target user
+            first_is_target = args[0].startswith("@") or (len(args) >= 2 and not args[0].isdigit() and any(a.isdigit() for a in args[1:]))
+            if first_is_target:
                 target = args[0]
-                try:
-                    bet = int(args[1])
-                    poke_name = " ".join(args[2:]) if len(args) > 2 else None
-                    result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
-                    await self._send_chat(result)
-                except ValueError:
-                    await self._send_chat(f"@{author} Invalid bet amount.")
+                rest = args[1:]
             else:
-                await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> <pokemon_name>")
+                target = "random"
+                rest = args
+
+            # Look for the digit argument as bet
+            digit_indices = [i for i, a in enumerate(rest) if a.isdigit()]
+            if not digit_indices:
+                if first_is_target:
+                    await self._send_chat(f"@{author} Please specify a bet amount! e.g. !battle {target} 50")
+                else:
+                    await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> [pokemon_name]")
+                return
+
+            bet_idx = digit_indices[0]
+            bet = int(rest[bet_idx])
+            remaining_poke_args = rest[:bet_idx] + rest[bet_idx + 1:]
+            poke_name = " ".join(remaining_poke_args) if remaining_poke_args else None
+
+            result = await self.pokemon.handle_battle_challenge(author, target, bet, poke_name)
+            await self._send_chat(result)
 
         elif cmd == "!accept":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             poke_name = " ".join(args) if args else None
             result = await self.pokemon.handle_accept(author, poke_name)
@@ -1987,21 +2015,25 @@ class BotService:
 
         elif cmd == "!mypokemon":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             result = await self.pokemon.handle_my_pokemon(author)
             await self._send_chat(result)
 
         elif cmd in ["!pokemon", "!pokemons"]:
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             if args:
-                result = await self.pokemon.handle_view_pokemon(author, args[0])
+                target_or_lookup = " ".join(args)
+                result = await self.pokemon.handle_view_pokemon(author, target_or_lookup)
             else:
                 result = await self.pokemon.handle_my_pokemon(author)
             await self._send_chat(result)
 
         elif cmd == "!summon":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             if not args:
                 await self._send_chat(f"@{author} Usage: !summon <pokemon_name>")
@@ -2012,28 +2044,24 @@ class BotService:
 
         elif cmd == "!showpokemon":
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
-            if not args:
-                result = await self.pokemon.handle_check_pokemon(author)
+            poke_name = " ".join(args) if args else None
+            result = await self.pokemon.handle_show_pokemon(author, poke_name)
+            if result:
                 await self._send_chat(result)
-            else:
-                poke_name = " ".join(args)
-                result = await self.pokemon.handle_show_pokemon(author, poke_name)
-                if result:
-                    await self._send_chat(result)
 
         elif cmd == "!show":
             if args and args[0].lower() == "pokemon":
                 if not getattr(self, "pokemon", None):
+                    await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                     return
-                if len(args) == 1:
-                    result = await self.pokemon.handle_check_pokemon(author)
+                poke_name = " ".join(args[1:]) if len(args) > 1 else None
+                result = await self.pokemon.handle_show_pokemon(author, poke_name)
+                if result:
                     await self._send_chat(result)
-                else:
-                    poke_name = " ".join(args[1:])
-                    result = await self.pokemon.handle_show_pokemon(author, poke_name)
-                    if result:
-                        await self._send_chat(result)
+            else:
+                await self._send_chat(f"@{author} Usage: !show pokemon [pokemon_name] or !showpokemon [pokemon_name]")
 
         elif cmd == "!rob":
             if not args:
@@ -2285,6 +2313,7 @@ class BotService:
 
         elif cmd in ["!pokeattack", "!pattack"]:
             if not getattr(self, "pokemon", None):
+                await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                 return
             if not args:
                 await self._send_chat(f"@{author} Usage: !pokeattack <@target>")
@@ -2307,6 +2336,7 @@ class BotService:
 
             if not is_numeric or args[0].startswith("@"):
                 if not getattr(self, "pokemon", None):
+                    await self._send_chat(f"@{author} Pokémon system is currently unavailable.")
                     return
                 result = await self.pokemon.handle_attack(author, args[0])
                 await self._send_chat(result)
@@ -2462,6 +2492,9 @@ class BotService:
 
             res = self.viewers.pay_loan(author, amount)
             await self._send_chat(f"@{author} {res['message']}")
+
+        elif cmd == "!help":
+            await self._send_chat(f"@{author} Commands: !points, !catch, !mypokemon, !pokemon [@user], !summon <name>, !attack <@user>, !battle [@user] <bet>, !accept, !give @user <pts>, !top, !gamble <pts>")
 
         else:
             # Custom Commands Fallback

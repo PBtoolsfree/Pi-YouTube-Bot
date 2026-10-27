@@ -358,19 +358,32 @@ class PokemonService:
         except (ValueError, TypeError):
             catch_cost = 10
 
-        if catch_cost > 0 and self.bot and hasattr(self.bot, "viewers"):
+        canonical_user = user
+        if self.bot and hasattr(self.bot, "viewers"):
+            if hasattr(self.bot.viewers, "find_username"):
+                found = self.bot.viewers.find_username(user)
+                if found:
+                    canonical_user = found
             viewers_map = getattr(self.bot.viewers, "viewers", {})
-            user_entry = viewers_map.get(user, {})
-            user_pts = user_entry.get("points", 0)
-            if user_pts < catch_cost:
-                return f"@{user}, you need {catch_cost} points to attempt catching! (Your balance: {int(user_pts)} pts)"
-            # Deduct points for the catch attempt
-            if hasattr(self.bot.viewers, "deduct_points"):
-                self.bot.viewers.deduct_points(user, catch_cost)
-            elif hasattr(self.bot.viewers, "add_points"):
-                self.bot.viewers.add_points(user, -catch_cost)
-            else:
-                user_entry["points"] = user_pts - catch_cost
+            user_entry = viewers_map.get(canonical_user)
+            if not user_entry:
+                for u, d in viewers_map.items():
+                    if u.lower() == user.lower():
+                        canonical_user = u
+                        user_entry = d
+                        break
+
+            if catch_cost > 0:
+                user_pts = user_entry.get("points", 0) if user_entry else 0
+                if user_pts < catch_cost:
+                    return f"@{user}, you need {catch_cost} points to attempt catching! (Your balance: {int(user_pts)} pts)"
+                # Deduct points for the catch attempt
+                if hasattr(self.bot.viewers, "deduct_points"):
+                    self.bot.viewers.deduct_points(canonical_user, catch_cost)
+                elif hasattr(self.bot.viewers, "add_points"):
+                    self.bot.viewers.add_points(canonical_user, -catch_cost)
+                elif user_entry is not None:
+                    user_entry["points"] = user_pts - catch_cost
 
         # 2. Catch Success Rate (RNG roll)
         try:
@@ -398,18 +411,26 @@ class PokemonService:
         }
         self.active_wild_pokemon = None
 
-        if user not in self.users_data:
-            self.users_data[user] = {"pokemons": [], "wins": 0, "losses": 0}
+        matched_user = user
+        for u in self.users_data:
+            if u.lower() == user.lower():
+                matched_user = u
+                break
 
-        user_data = self.users_data[user]
+        if matched_user not in self.users_data:
+            self.users_data[matched_user] = {"pokemons": [], "wins": 0, "losses": 0}
+
+        user_data = self.users_data[matched_user]
         user_data.setdefault("pokemons", []).append(caught_pokemon)
         self.save_data()
 
         # Keep viewer record in sync if available
         if self.bot and hasattr(self.bot, "viewers"):
             viewers_map = getattr(self.bot.viewers, "viewers", {})
-            if user in viewers_map:
-                viewers_map[user].setdefault("pokemons", []).append(caught_pokemon)
+            for u in viewers_map:
+                if u.lower() == user.lower():
+                    viewers_map[u].setdefault("pokemons", []).append(caught_pokemon)
+                    break
 
         # Broadcast catch to overlays
         if self.bot and getattr(self.bot, "broadcast_func", None):
@@ -552,8 +573,25 @@ class PokemonService:
         if not inv:
             return None
 
-        user_data = self.users_data.get(user, {})
-        saved_active = user_data.get("active_pokemon")
+        user_data = self.users_data.get(user)
+        if not user_data:
+            for u, data in self.users_data.items():
+                if u.lower() == user.lower():
+                    user_data = data
+                    break
+        saved_active = user_data.get("active_pokemon") if user_data else None
+
+        if not saved_active and self.bot and hasattr(self.bot, "viewers"):
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            user_entry = viewers_map.get(user)
+            if not user_entry:
+                for u, d in viewers_map.items():
+                    if u.lower() == user.lower():
+                        user_entry = d
+                        break
+            if user_entry:
+                saved_active = user_entry.get("active_pokemon")
+
         if saved_active:
             match = next((p for p in inv if p["name"].lower() == str(saved_active).lower()), None)
             if match:
@@ -603,45 +641,76 @@ class PokemonService:
         return f"🎒 @{user}'s Pokémon ({total_count} total | {wins}W-{losses}L){active_str}: {items_str}. Commands: !summon <name> | !attack <@user>"
 
     async def handle_view_pokemon(self, caller: str, target: str) -> str:
-        """Displays another viewer's public pokemon collection."""
+        """Displays another viewer's public pokemon collection or looks up a Pokemon name in Pokedex."""
+        if not target or not target.strip():
+            return await self.handle_my_pokemon(caller)
+
         clean_target = target.replace("@", "").strip()
         if not clean_target or clean_target.lower() == caller.lower():
             return await self.handle_my_pokemon(caller)
 
-        inv = self.get_user_inventory(clean_target)
-        if not inv:
+        # 1. Resolve canonical viewer name if possible
+        canonical_target = clean_target
+        if self.bot and hasattr(self.bot, "viewers") and hasattr(self.bot.viewers, "find_username"):
+            resolved = self.bot.viewers.find_username(clean_target)
+            if resolved:
+                canonical_target = resolved
+
+        inv = self.get_user_inventory(canonical_target)
+        if inv:
+            counts = {}
+            first_seen = {}
+            for p in inv:
+                name = p["name"]
+                counts[name] = counts.get(name, 0) + 1
+                if name not in first_seen:
+                    first_seen[name] = p
+
+            formatted_items = []
+            for name, count in counts.items():
+                poke = first_seen[name]
+                pwr = poke.get("power", 10)
+                if count > 1:
+                    formatted_items.append(f"{name} ×{count} (PWR {pwr})")
+                else:
+                    formatted_items.append(f"{name} (PWR {pwr})")
+
+            user_data = self.users_data.get(canonical_target, {})
+            wins = user_data.get("wins", 0)
+            losses = user_data.get("losses", 0)
+            total_count = len(inv)
+
+            active = self.get_active_pokemon(canonical_target)
+            active_str = f" [Active: {active['name']}]" if active else ""
+
+            items_str = ", ".join(formatted_items)
+            if len(items_str) > 350:
+                items_str = items_str[:347] + "..."
+
+            return f"🎒 @{canonical_target}'s Pokémon ({total_count} total | {wins}W-{losses}L){active_str}: {items_str}"
+
+        # 2. Check if clean_target is a Pokemon in POKEMON_LIST (Pokedex lookup)
+        global POKEMON_LIST
+        if not POKEMON_LIST:
+            load_pokemon_list()
+
+        pokedex_match = next((p for p in POKEMON_LIST if p.get("name", "").lower() == clean_target.lower()), None)
+        if not pokedex_match:
+            pokedex_match = next((p for p in POKEMON_LIST if clean_target.lower() in p.get("name", "").lower()), None)
+
+        if pokedex_match:
+            pwr = pokedex_match.get("power", 10)
+            ptype = pokedex_match.get("type", "Normal")
+            caller_inv = self.get_user_inventory(caller)
+            caller_owns = [p for p in caller_inv if p.get("name", "").lower() == pokedex_match["name"].lower()]
+            own_str = f" @{caller} owns ×{len(caller_owns)}." if caller_owns else f" @{caller} does not own this Pokémon yet."
+            return f"🔍 Pokédex: {pokedex_match['name']} (PWR: {pwr} | Type: {ptype}).{own_str}"
+
+        # 3. Explicit viewer mention but has no pokemons
+        if target.startswith("@"):
             return f"@{caller}, {clean_target} doesn't own any Pokémon yet!"
 
-        counts = {}
-        first_seen = {}
-        for p in inv:
-            name = p["name"]
-            counts[name] = counts.get(name, 0) + 1
-            if name not in first_seen:
-                first_seen[name] = p
-
-        formatted_items = []
-        for name, count in counts.items():
-            poke = first_seen[name]
-            pwr = poke.get("power", 10)
-            if count > 1:
-                formatted_items.append(f"{name} ×{count} (PWR {pwr})")
-            else:
-                formatted_items.append(f"{name} (PWR {pwr})")
-
-        user_data = self.users_data.get(clean_target, {})
-        wins = user_data.get("wins", 0)
-        losses = user_data.get("losses", 0)
-        total_count = len(inv)
-
-        active = self.get_active_pokemon(clean_target)
-        active_str = f" [Active: {active['name']}]" if active else ""
-
-        items_str = ", ".join(formatted_items)
-        if len(items_str) > 350:
-            items_str = items_str[:347] + "..."
-
-        return f"🎒 @{clean_target}'s Pokémon ({total_count} total | {wins}W-{losses}L){active_str}: {items_str}"
+        return f"@{caller}, '{clean_target}' is neither a known viewer nor a Pokémon in the Pokédex."
 
     async def handle_summon(self, user: str, pokemon_name: str) -> str:
         """Allows a viewer to summon an owned Pokemon to be their active battle buddy on stream."""
@@ -667,6 +736,13 @@ class PokemonService:
         if user not in self.users_data:
             self.users_data[user] = {"pokemons": inv, "wins": 0, "losses": 0}
         self.users_data[user]["active_pokemon"] = match["name"]
+
+        # Keep viewer record in sync if available
+        if self.bot and hasattr(self.bot, "viewers"):
+            viewers_map = getattr(self.bot.viewers, "viewers", {})
+            if user in viewers_map:
+                viewers_map[user]["active_pokemon"] = match["name"]
+
         self.save_data()
 
         if self.bot and getattr(self.bot, "broadcast_func", None):
@@ -693,6 +769,12 @@ class PokemonService:
         clean_target = target_user.replace("@", "").strip()
         if not clean_target:
             return f"@{attacker}, please specify an opponent! Usage: !attack @username"
+
+        # Resolve canonical target username
+        if self.bot and hasattr(self.bot, "viewers") and hasattr(self.bot.viewers, "find_username"):
+            resolved = self.bot.viewers.find_username(clean_target)
+            if resolved:
+                clean_target = resolved
 
         if clean_target.lower() == attacker.lower():
             return f"@{attacker}, you cannot attack yourself! Challenge another viewer."
@@ -767,61 +849,79 @@ class PokemonService:
         if not inv:
             return None
 
-        if pokemon_name:
-            match = next((p for p in inv if p["name"].lower() == pokemon_name.strip().lower()), None)
+        if pokemon_name and pokemon_name.strip():
+            clean_name = pokemon_name.strip().lower()
+            match = next((p for p in inv if p["name"].lower() == clean_name), None)
             if not match:
-                match = next((p for p in inv if pokemon_name.strip().lower() in p["name"].lower()), None)
+                match = next((p for p in inv if clean_name in p["name"].lower()), None)
             return match
 
         return self.get_active_pokemon(user)
 
-    async def handle_show_pokemon(self, user, pokemon_name):
+    async def handle_show_pokemon(self, user, pokemon_name=None):
         pokemon = self.get_user_pokemon(user, pokemon_name)
         if not pokemon:
-            return f"@{user}, you don't own a Pokemon named {pokemon_name}!"
-            
+            if pokemon_name and pokemon_name.strip():
+                return f"@{user}, you don't own a Pokemon named {pokemon_name}!"
+            else:
+                return f"@{user}, you don't own any Pokémon to show off! Catch one with !catch."
+
         if self.bot and getattr(self.bot, "broadcast_func", None):
-            await self.bot.broadcast_func({
-                "type": "POKEMON_EVENT",
-                "action": "show",
-                "user": user,
-                "pokemon": pokemon
-            })
-            await self.bot.broadcast_func({
-                "type": "pokemon_event",
-                "action": "show",
-                "user": user,
-                "pokemon": pokemon
-            })
+            try:
+                payload = {
+                    "type": "POKEMON_EVENT",
+                    "action": "show",
+                    "user": user,
+                    "pokemon": pokemon
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
+            except Exception as b_err:
+                self.logger.error(f"Failed to broadcast show event: {b_err}")
+
         return f"✨ @{user} is showing off their {pokemon['name']} on stream!"
 
     async def handle_battle_challenge(self, challenger, target, bet_amount, pokemon_name=None):
+        challenger_inv = self.get_user_inventory(challenger)
+        if not challenger_inv:
+            return f"@{challenger}, you don't own any Pokémon to battle! Catch one with !catch."
+
         if target == "random":
-            valid_targets = [u for u, data in self.users_data.items() if u != challenger and (data.get("pokemons") or data.get("pokemon"))]
+            valid_targets = set()
+            for u in self.users_data:
+                if u.lower() != challenger.lower() and self.get_user_inventory(u):
+                    valid_targets.add(u)
+            if self.bot and hasattr(self.bot, "viewers"):
+                for u in getattr(self.bot.viewers, "viewers", {}):
+                    if u.lower() != challenger.lower() and self.get_user_inventory(u):
+                        valid_targets.add(u)
+
             if not valid_targets:
                 return f"@{challenger}, nobody else has a Pokemon to battle right now!"
             active_chatters = getattr(self.bot, "session_chatters", {})
             active_valid = [u for u in valid_targets if u in active_chatters]
-            target = random.choice(active_valid) if active_valid else random.choice(valid_targets)
-            
-        target = target.replace("@", "").strip()
-        
-        if challenger == target:
+            target = random.choice(active_valid) if active_valid else random.choice(list(valid_targets))
+
+        clean_target = target.replace("@", "").strip()
+        if self.bot and hasattr(self.bot, "viewers") and hasattr(self.bot.viewers, "find_username"):
+            resolved = self.bot.viewers.find_username(clean_target)
+            if resolved:
+                clean_target = resolved
+
+        if challenger.lower() == clean_target.lower():
             return f"@{challenger}, you cannot battle yourself!"
-            
+
         challenger_poke = self.get_user_pokemon(challenger, pokemon_name)
         if not challenger_poke:
-            if pokemon_name:
+            if pokemon_name and pokemon_name.strip():
                 return f"@{challenger}, you don't own a Pokemon named {pokemon_name}!"
             else:
-                return f"@{challenger}, you have multiple Pokemons! Please specify: !battle @user <bet> <pokemon_name>"
-            
-        # Target's pokemon doesn't need to be specified by challenger.
-        # But we check if target has ANY pokemon
-        target_poke_test = self.users_data.get(target, {}).get("pokemons", [])
-        if not target_poke_test and not self.users_data.get(target, {}).get("pokemon"):
-            return f"@{challenger}, {target} doesn't have any Pokemons to battle!"
-            
+                return f"@{challenger}, please specify which Pokémon to battle with: !battle @user <bet> <pokemon_name>"
+
+        target_inv = self.get_user_inventory(clean_target)
+        if not target_inv:
+            return f"@{challenger}, {clean_target} doesn't have any Pokemons to battle!"
+
         config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
         pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
         min_bet = int(pokemon_config.get("duel_cost", 50))
@@ -830,81 +930,97 @@ class PokemonService:
             bet_amount = int(bet_amount)
             if bet_amount < min_bet:
                 return f"Bet amount must be at least {min_bet} points."
-        except ValueError:
+        except (ValueError, TypeError):
             return "Invalid bet amount."
-            
+
         # Check balances
-        challenger_bal = self.bot.viewers.get_viewer(challenger).get("points", 0)
-        target_bal = self.bot.viewers.get_viewer(target).get("points", 0)
-        
+        challenger_bal = self.bot.viewers.get_total_points(challenger) if hasattr(self.bot.viewers, "get_total_points") else self.bot.viewers.get_viewer(challenger).get("points", 0)
+        target_bal = self.bot.viewers.get_total_points(clean_target) if hasattr(self.bot.viewers, "get_total_points") else self.bot.viewers.get_viewer(clean_target).get("points", 0)
+
         if challenger_bal < bet_amount:
             return f"@{challenger}, you don't have enough points. (Bal: {int(challenger_bal)})"
         if target_bal < bet_amount:
-            return f"@{challenger}, {target} doesn't have enough points to match the bet. (Bal: {int(target_bal)})"
-            
-        # Register pending battle
-        if target in [b["target"] for b in self.pending_battles.values()]:
-            return f"@{challenger}, {target} already has a pending battle challenge!"
-            
+            return f"@{challenger}, {clean_target} doesn't have enough points to match the bet. (Bal: {int(target_bal)})"
+
+        # Check if target already has pending challenge
+        for ch, b in self.pending_battles.items():
+            if b["target"].lower() == clean_target.lower():
+                return f"@{challenger}, {clean_target} already has a pending battle challenge!"
+
+        # Cancel previous pending challenge if this challenger already has one
+        if challenger in self.pending_battles:
+            old_data = self.pending_battles.pop(challenger)
+            if "task" in old_data and old_data["task"]:
+                old_data["task"].cancel()
+
         # Expire challenge in 60s
         async def expire_challenge():
-            await asyncio.sleep(60)
-            if challenger in self.pending_battles:
-                del self.pending_battles[challenger]
-                await self.bot._send_chat(f"@{challenger}, your battle challenge to {target} expired.")
+            try:
+                await asyncio.sleep(60)
+                if challenger in self.pending_battles:
+                    del self.pending_battles[challenger]
+                    if self.bot and hasattr(self.bot, "_send_chat"):
+                        await self.bot._send_chat(f"@{challenger}, your battle challenge to {clean_target} expired.")
+            except asyncio.CancelledError:
+                pass
 
         task = asyncio.create_task(expire_challenge())
-        
+
         self.pending_battles[challenger] = {
-            "target": target,
+            "target": clean_target,
             "bet": bet_amount,
             "task": task,
             "challenger_poke": challenger_poke
         }
-        
-        return f"⚔️ @{target}, {challenger} challenged you using {challenger_poke['name']} for {bet_amount} points! Type !accept <pokemon_name> to fight!"
+
+        return f"⚔️ @{clean_target}, {challenger} challenged you using {challenger_poke['name']} for {bet_amount} points! Type !accept <pokemon_name> to fight!"
 
     async def handle_accept(self, target, pokemon_name=None):
-        # Find who challenged this target
+        clean_target = target.replace("@", "").strip()
+
+        # Find who challenged this target (case-insensitive)
         challenger = None
-        for ch, data in self.pending_battles.items():
-            if data["target"] == target:
+        for ch, data in list(self.pending_battles.items()):
+            if data["target"].lower() == clean_target.lower():
                 challenger = ch
                 break
-                
+
         if not challenger:
             return f"@{target}, you don't have any pending battle challenges."
-            
-        battle_data = self.pending_battles.pop(challenger)
-        battle_data["task"].cancel()
-        
+
+        battle_data = self.pending_battles.pop(challenger, None)
+        if not battle_data:
+            return f"@{target}, you don't have any pending battle challenges."
+
+        if "task" in battle_data and battle_data["task"]:
+            battle_data["task"].cancel()
+
         bet = battle_data["bet"]
-        
-        # Verify balances again just in case
-        challenger_bal = self.bot.viewers.get_viewer(challenger).get("points", 0)
-        target_bal = self.bot.viewers.get_viewer(target).get("points", 0)
-        
+
+        challenger_bal = self.bot.viewers.get_total_points(challenger) if hasattr(self.bot.viewers, "get_total_points") else self.bot.viewers.get_viewer(challenger).get("points", 0)
+        target_bal = self.bot.viewers.get_total_points(target) if hasattr(self.bot.viewers, "get_total_points") else self.bot.viewers.get_viewer(target).get("points", 0)
+
         if challenger_bal < bet or target_bal < bet:
             return f"Battle cancelled! Someone doesn't have enough points for the {bet} bet."
-            
+
+        target_inv = self.get_user_inventory(target)
+        if not target_inv:
+            return f"@{target}, you don't own any Pokémon to battle! Catch one with !catch."
+
         target_poke = self.get_user_pokemon(target, pokemon_name)
         if not target_poke:
-            if pokemon_name:
+            if pokemon_name and pokemon_name.strip():
                 return f"@{target}, you don't own a Pokemon named {pokemon_name}!"
             else:
-                return f"@{target}, you have multiple Pokemons! Please specify: !accept <pokemon_name>"
-                
+                return f"@{target}, please specify which Pokémon to battle with: !accept <pokemon_name>"
+
         challenger_poke = battle_data["challenger_poke"]
-        
+
         # RNG Battle resolution
-        # Slight advantage if power is higher
-        power_diff = challenger_poke["power"] - target_poke["power"]
-        # Base 50% chance, +/- 2% per power diff, max 80% min 20%
-        win_chance = 0.5 + (power_diff * 0.02)
-        win_chance = max(0.2, min(0.8, win_chance))
-        
+        power_diff = challenger_poke.get("power", 10) - target_poke.get("power", 10)
+        win_chance = max(0.2, min(0.8, 0.5 + (power_diff * 0.02)))
         challenger_wins = random.random() < win_chance
-        
+
         config = getattr(self.bot, "load_config", lambda: {})() if self.bot else {}
         pokemon_config = config.get("loyalty", {}).get("games", {}).get("pokemon", {})
         try:
@@ -912,31 +1028,41 @@ class PokemonService:
         except (ValueError, TypeError):
             duel_reward = 0
 
-        if challenger_wins:
-            winner = challenger
-            loser = target
-            winner_poke = challenger_poke
-            loser_poke = target_poke
-            self.bot.viewers.update_viewer(winner, points=challenger_bal + bet + duel_reward)
-            self.bot.viewers.update_viewer(loser, points=target_bal - bet)
-            self.users_data[winner]["wins"] += 1
-            self.users_data[loser]["losses"] += 1
-        else:
-            winner = target
-            loser = challenger
-            winner_poke = target_poke
-            loser_poke = challenger_poke
-            self.bot.viewers.update_viewer(winner, points=target_bal + bet + duel_reward)
-            self.bot.viewers.update_viewer(loser, points=challenger_bal - bet)
-            self.users_data[winner]["wins"] += 1
-            self.users_data[loser]["losses"] += 1
-            
+        winner = challenger if challenger_wins else target
+        loser = target if challenger_wins else challenger
+        winner_poke = challenger_poke if challenger_wins else target_poke
+        loser_poke = target_poke if challenger_wins else challenger_poke
+
+        # Safe point updates without crashing
+        if self.bot and hasattr(self.bot, "viewers"):
+            if hasattr(self.bot.viewers, "add_points") and hasattr(self.bot.viewers, "deduct_points"):
+                self.bot.viewers.add_points(winner, bet + duel_reward)
+                self.bot.viewers.deduct_points(loser, bet)
+            elif hasattr(self.bot.viewers, "set_points"):
+                win_bal = challenger_bal if winner == challenger else target_bal
+                lose_bal = target_bal if loser == target else challenger_bal
+                self.bot.viewers.set_points(winner, win_bal + bet + duel_reward)
+                self.bot.viewers.set_points(loser, max(0, lose_bal - bet))
+            else:
+                win_entry = self.bot.viewers.get_viewer(winner)
+                lose_entry = self.bot.viewers.get_viewer(loser)
+                win_entry["points"] = win_entry.get("points", 0) + bet + duel_reward
+                lose_entry["points"] = max(0, lose_entry.get("points", 0) - bet)
+
+        # Safe win/loss record updates
+        if winner not in self.users_data:
+            self.users_data[winner] = {"pokemons": self.get_user_inventory(winner), "wins": 0, "losses": 0}
+        if loser not in self.users_data:
+            self.users_data[loser] = {"pokemons": self.get_user_inventory(loser), "wins": 0, "losses": 0}
+
+        self.users_data[winner]["wins"] = self.users_data[winner].get("wins", 0) + 1
+        self.users_data[loser]["losses"] = self.users_data[loser].get("losses", 0) + 1
         self.save_data()
-        
+
         # Broadcast battle to overlays
         if self.bot and getattr(self.bot, "broadcast_func", None):
             try:
-                await self.bot.broadcast_func({
+                payload = {
                     "type": "POKEMON_EVENT",
                     "action": "battle",
                     "challenger": {"name": challenger, "pokemon": challenger_poke},
@@ -944,10 +1070,12 @@ class PokemonService:
                     "winner": winner,
                     "bet": bet,
                     "reward": duel_reward
-                })
+                }
+                await self.bot.broadcast_func(payload)
+                await self.bot.broadcast_func({**payload, "type": "pokemon_event"})
             except Exception as b_err:
                 self.logger.error(f"Failed to broadcast battle event: {b_err}")
-        
+
         bonus_msg = f" (+{duel_reward} bonus)" if duel_reward > 0 else ""
         return f"🏆 BATTLE RESULTS: @{winner}'s {winner_poke['name']} defeated @{loser}'s {loser_poke['name']} and won {bet}{bonus_msg} points!"
 

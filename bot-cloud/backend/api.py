@@ -371,7 +371,7 @@ async def broadcast_log(data: dict):
 
     if os.environ.get("RUN_MODE") == "cloud":
         allowed_pi_types = [
-            "play_tts", "log", "tts_event", "POKEMON_EVENT",
+            "play_tts", "log", "tts_event", "POKEMON_EVENT", "pokemon_event",
             "goal_start", "goal_update", "goal_achieved", "goal_ended",
             "giveaway_update", "meme_redeem", "meme_expired"
         ]
