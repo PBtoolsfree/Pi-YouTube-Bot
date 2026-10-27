@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, FileSpreadsheet, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud, Power } from 'lucide-react'
+import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud, Power } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, Input, Button, Switch, Textarea } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
 
@@ -50,7 +50,6 @@ export default function SettingsPage({ config, onSave }) {
         { id: 'stream', label: 'Stream Status', icon: <Power className="h-4 w-4" /> },
         ...(localConfig?.is_cloud ? [
             { id: 'youtube', label: 'YouTube Auth', icon: <Youtube className="h-4 w-4" /> },
-            { id: 'sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="h-4 w-4" /> },
             { id: 'ai', label: 'AI & Mod', icon: <Cpu className="h-4 w-4" /> },
             { id: 'bot_integration', label: 'Bot Integration', icon: <Radio className="h-4 w-4" /> },
         ] : [
@@ -249,93 +248,7 @@ export default function SettingsPage({ config, onSave }) {
         onSave(updated)
     }
 
-    // --- Google Sheets Logic ---
-    const [sheetsStatus, setSheetsStatus] = useState({ has_credentials: false, connected: false, enabled: false, last_error: null })
-    const [jsonContent, setJsonContent] = useState("")
-    const [sheetsTesting, setSheetsTesting] = useState(false)
-    const [sheetsClientId, setSheetsClientId] = useState("")
-    const [sheetsClientSecret, setSheetsClientSecret] = useState("")
-    const [sheetsCredSaving, setSheetsCredSaving] = useState(false)
-    const [sheetsCredsStatus, setSheetsCredsStatus] = useState({ has_sheets_credentials: false })
-    const [creatingSheet, setCreatingSheet] = useState(false)
 
-    useEffect(() => {
-        if (activeSection === 'sheets') {
-            fetchSheetsStatus()
-            axios.get(`${API_URL}/auth/sheets/credentials-status`).then(res => setSheetsCredsStatus(res.data)).catch(() => { })
-        }
-    }, [activeSection])
-
-    const fetchSheetsStatus = () => {
-        axios.get(`${API_URL}/sheets/status`).then(res => setSheetsStatus(res.data)).catch(console.error)
-    }
-
-    const handleSaveSheetsCreds = async () => {
-        if (!jsonContent.trim()) return alert("Please paste JSON content.")
-        try {
-            await axios.post(`${API_URL}/sheets/creds`, { json_content: jsonContent })
-            alert("Credentials saved!")
-            setJsonContent("")
-            fetchSheetsStatus()
-        } catch (e) {
-            alert("Error: " + (e.response?.data?.detail || e.message))
-        }
-    }
-
-    const handleSaveSheetsOAuthCreds = async () => {
-        if (!sheetsClientId.trim() || !sheetsClientSecret.trim()) {
-            return alert("Both Client ID and Client Secret are required.")
-        }
-        setSheetsCredSaving(true)
-        try {
-            const res = await axios.post(`${API_URL}/auth/sheets/setup`, {
-                client_id: sheetsClientId,
-                client_secret: sheetsClientSecret
-            })
-            alert(res.data.message || "Sheets credentials saved!")
-            setSheetsClientId("")
-            setSheetsClientSecret("")
-            setSheetsCredsStatus(prev => ({ ...prev, has_sheets_credentials: true }))
-        } catch (e) {
-            alert("Error: " + (e.response?.data?.detail || e.message))
-        } finally {
-            setSheetsCredSaving(false)
-        }
-    }
-
-    const handleCreateSheet = async () => {
-        setCreatingSheet(true)
-        try {
-            const res = await axios.post(`${API_URL}/sheets/create`, { name: "Pi Bot Transactions" })
-            alert("✅ " + res.data.message)
-            // Auto-select the new sheet
-            if (res.data.sheet_id) {
-                updateNested('google_sheets.sheet_id', res.data.sheet_id)
-            }
-            fetchSheetsStatus()
-        } catch (e) {
-            alert("Error: " + (e.response?.data?.detail || e.message))
-        } finally {
-            setCreatingSheet(false)
-        }
-    }
-
-    const handleTestSheets = async () => {
-        setSheetsTesting(true)
-        try {
-            const res = await axios.post(`${API_URL}/sheets/test`)
-            if (res.data.status === 'success') {
-                alert("✅ " + res.data.message)
-            } else {
-                alert("❌ Error: " + res.data.message)
-            }
-            fetchSheetsStatus()
-        } catch (e) {
-            alert("Connection Test Failed: " + e.message)
-        } finally {
-            setSheetsTesting(false)
-        }
-    }
 
     return (
         <div className="pb-10 space-y-6">
@@ -772,7 +685,42 @@ export default function SettingsPage({ config, onSave }) {
                             </Card>
                         )}
 
-
+                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                            <CardHeader className="pb-3 border-b border-zinc-800">
+                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Discord Integration</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-4 space-y-4">
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Bot Token</label>
+                                        <Input
+                                            type="password"
+                                            value={localConfig.discord_integration?.bot_token || ''}
+                                            onChange={(e) => updateNested('discord_integration.bot_token', e.target.value)}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="MTExMjIzMzM0NDQ1NTU..."
+                                        />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Your Discord application bot token. Ensure your bot is added to your target servers.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Discord Channel IDs (Comma-Separated)</label>
+                                        <Input
+                                            value={localConfig.discord_integration?.channel_ids ?? localConfig.discord_integration?.channel_id ?? ''}
+                                            onChange={(e) => {
+                                                updateNested('discord_integration.channel_ids', e.target.value);
+                                            }}
+                                            className="bg-zinc-950 border-zinc-700 h-9"
+                                            placeholder="1507640240393683045, 987654321098765"
+                                        />
+                                        <p className="text-[10px] text-zinc-500">
+                                            Target text channel IDs where the Discord Bot has permissions to post.
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         {!localConfig?.is_cloud && (
                             <>
@@ -835,186 +783,7 @@ export default function SettingsPage({ config, onSave }) {
                 )}
 
 
-                {activeSection === 'sheets' && (
-                    <div className="grid gap-6 md:grid-cols-2">
-                        {/* Config */}
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">Sheets Configuration</CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-zinc-300">Enabled</label>
-                                    <Switch
-                                        checked={localConfig.google_sheets?.enabled || false}
-                                        onCheckedChange={(c) => updateNested('google_sheets.enabled', c)}
-                                    />
-                                </div>
 
-                                {/* SEPARATE SHEETS ACCOUNT SETUP */}
-                                <div className="space-y-3 pt-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Connection</label>
-
-                                    {sheetsStatus.using_oauth ? (
-                                        <div className="p-3 bg-emerald-950/30 border border-emerald-900/50 rounded-md text-emerald-200 text-xs space-y-2">
-                                            <p className="font-medium flex items-center gap-2">
-                                                <CheckCircle2 className="h-4 w-4" /> Connected
-                                            </p>
-                                            <p className="opacity-80">
-                                                Your Google Sheets account is connected.
-                                            </p>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => window.location.href = `${API_URL}/auth/sheets/login`}
-                                                className="w-full bg-emerald-800 hover:bg-emerald-700 text-white border-none h-8"
-                                            >
-                                                Reconnect / Switch Account
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300 text-xs space-y-2">
-                                            <p className="font-medium">
-                                                Connect a separate Google Account for Sheets
-                                            </p>
-                                            <p className="opacity-60 text-[10px]">
-                                                Use a different account than YouTube to avoid quota limits.
-                                            </p>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => window.location.href = `${API_URL}/auth/sheets/login`}
-                                                className="w-full bg-white hover:bg-zinc-200 text-black h-8 font-semibold"
-                                            >
-                                                <ExternalLink className="h-3 w-3 mr-2" />
-                                                Connect Google Sheets
-                                            </Button>
-                                        </div>
-                                    )}
-
-                                    <div className="pt-2">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase mb-1 block">Select Sheet</label>
-                                        {!sheetsStatus.using_oauth && !authStatus.is_connected && !localConfig.google_sheets?.sheet_id ? (
-                                            <div className="text-[10px] text-zinc-500 italic px-1">
-                                                Connect an account to load sheets...
-                                            </div>
-                                        ) : (
-                                            <SheetsDropdown
-                                                value={localConfig.google_sheets?.sheet_id}
-                                                onChange={(val) => updateNested('google_sheets.sheet_id', val)}
-                                                apiUrl={API_URL}
-                                            />
-                                        )}
-                                    </div>
-
-                                    <div className="relative pt-2">
-                                        <div className="absolute inset-0 flex items-center">
-                                            <span className="w-full border-t border-zinc-800" />
-                                        </div>
-                                        <div className="relative flex justify-center text-[10px] uppercase">
-                                            <span className="bg-zinc-950 px-2 text-zinc-500">Or Manual ID</span>
-                                        </div>
-                                    </div>
-
-                                    <Input
-                                        value={localConfig.google_sheets?.sheet_id || ''}
-                                        onChange={(e) => updateNested('google_sheets.sheet_id', e.target.value)}
-                                        className="bg-zinc-950 border-zinc-700 font-mono text-xs h-9"
-                                        placeholder="Paste Sheet ID manually..."
-                                    />
-                                </div>
-
-
-                                <div className="pt-4 border-t border-zinc-800 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-xs font-semibold text-zinc-500 uppercase">Status</label>
-                                        {sheetsStatus.connected ?
-                                            <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-1 rounded border border-emerald-800">Connected</span> :
-                                            <span className="text-[10px] bg-red-950 text-red-400 px-2 py-1 rounded border border-red-800">Disconnected</span>
-                                        }
-                                    </div>
-                                    {sheetsStatus.last_error && (
-                                        <div className="p-2 bg-red-950/30 border border-red-900/50 rounded text-[10px] text-red-300 font-mono break-all">
-                                            {sheetsStatus.last_error}
-                                        </div>
-                                    )}
-                                    <Button
-                                        onClick={handleTestSheets}
-                                        disabled={sheetsTesting || !localConfig.google_sheets?.enabled}
-                                        size="sm"
-                                        className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 h-9"
-                                    >
-                                        {sheetsTesting ? "Testing..." : "Test Connection"}
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Sheets OAuth Credentials */}
-                        <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                            <CardHeader className="pb-3 border-b border-zinc-800">
-                                <CardTitle className="text-zinc-100 flex items-center gap-2 text-sm font-semibold">
-                                    <Key className="h-4 w-4 text-yellow-500" /> Sheets OAuth Credentials
-                                    {sheetsCredsStatus.has_sheets_credentials ? (
-                                        <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-950 border border-emerald-800 px-2 py-0.5 rounded-full">
-                                            <CheckCircle2 className="h-3 w-3" /> Set
-                                        </span>
-                                    ) : (
-                                        <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-950 border border-amber-800 px-2 py-0.5 rounded-full">
-                                            <AlertTriangle className="h-3 w-3" /> Not Configured
-                                        </span>
-                                    )}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-4 space-y-4">
-                                <p className="text-[10px] text-zinc-500">
-                                    Enter your Google Cloud OAuth Client ID &amp; Secret for Google Sheets access.
-                                    This is used for OAuth login and auto-connecting on Pi startup.
-                                </p>
-                                <div className="space-y-2">
-                                    <Input
-                                        value={sheetsClientId}
-                                        onChange={(e) => setSheetsClientId(e.target.value)}
-                                        placeholder="Client ID (e.g. 123...apps.googleusercontent.com)"
-                                        className="bg-zinc-950 border-zinc-700 font-mono text-[11px] text-zinc-100 h-9"
-                                    />
-                                    <Input
-                                        type="password"
-                                        value={sheetsClientSecret}
-                                        onChange={(e) => setSheetsClientSecret(e.target.value)}
-                                        placeholder="Client Secret (e.g. GOCSPX-...)"
-                                        className="bg-zinc-950 border-zinc-700 font-mono text-[11px] text-zinc-100 h-9"
-                                    />
-                                </div>
-                                <Button
-                                    size="sm"
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 text-xs"
-                                    onClick={handleSaveSheetsOAuthCreds}
-                                    disabled={sheetsCredSaving || (!sheetsClientId && !sheetsClientSecret)}
-                                >
-                                    {sheetsCredSaving ? 'Saving...' : sheetsCredsStatus.has_sheets_credentials ? '✓ Update Credentials' : 'Save Credentials'}
-                                </Button>
-                                <p className="text-[10px] text-zinc-500">
-                                    After saving, click "Connect Google Sheets" on the left to complete OAuth login.
-                                </p>
-
-                                {/* Create New Sheet */}
-                                <div className="pt-3 border-t border-zinc-800 space-y-2">
-                                    <label className="text-xs font-semibold text-zinc-500 uppercase">Quick Setup</label>
-                                    <Button
-                                        size="sm"
-                                        onClick={handleCreateSheet}
-                                        disabled={creatingSheet || (!sheetsStatus.using_oauth && !authStatus.is_connected)}
-                                        className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold h-9 text-xs"
-                                    >
-                                        {creatingSheet ? 'Creating...' : '📊 Create New Sheet (with Headers)'}
-                                    </Button>
-                                    <p className="text-[10px] text-zinc-500">
-                                        Creates a new Google Sheet with Date, Time, User, Amount, Type, Message, Transaction ID columns.
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
 
             </div>
 
@@ -1186,44 +955,5 @@ export default function SettingsPage({ config, onSave }) {
             )}
 
         </div >
-    )
-}
-
-function SheetsDropdown({ value, onChange, apiUrl }) {
-    const [sheets, setSheets] = useState([])
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(null)
-
-    useEffect(() => {
-        setLoading(true)
-        axios.get(`${apiUrl}/sheets/list`)
-            .then(res => {
-                const list = res.data.sheets || []
-                setSheets(list)
-                // Auto-select first if none selected? No, let user choose.
-            })
-            .catch(err => {
-                console.error("Failed to fetch sheets:", err)
-                setError("Failed to load sheets. Please Try Again.")
-            })
-            .finally(() => setLoading(false))
-    }, [apiUrl])
-
-    if (loading) return <div className="text-xs text-zinc-500 animate-pulse">Loading sheets...</div>
-    if (error) return <div className="text-xs text-red-500">{error} <button onClick={() => window.location.reload()} className="underline">Retry</button></div>
-
-    return (
-        <select
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1 text-sm text-zinc-100 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-            <option value="" disabled>Select a Google Sheet...</option>
-            {sheets.map(sheet => (
-                <option key={sheet.id} value={sheet.id}>
-                    {sheet.name}
-                </option>
-            ))}
-        </select>
     )
 }

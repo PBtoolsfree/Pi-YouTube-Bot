@@ -102,6 +102,4 @@ curl -X POST http://localhost:8000/api/donate \
 When a donation is detected:
 1. TTS alert plays (e.g. "TestUser donated 100 rupees!")
 2. OBS overlay shows animation
-3. Telegram notification sent
-4. Logged to Google Sheets (if enabled)
-5. Super Chat style display for large amounts
+3. Super Chat style display for large amounts

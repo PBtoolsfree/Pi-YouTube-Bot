@@ -76,17 +76,17 @@ class RateLimiter:
 
     def is_allowed(self, ip):
         now = time.time()
-        
+
         # Periodic cleanup: remove IPs with no recent activity
         if now - self._last_cleanup > self._cleanup_interval:
             stale_ips = [k for k, v in self.requests.items() if not v or now - v[-1] > self.window]
             for k in stale_ips:
                 self.requests.pop(k, None)  # type: ignore
             self._last_cleanup = now
-        
+
         # Clean up old requests for this IP
         self.requests[ip] = [t for t in self.requests[ip] if now - t < self.window]
-        
+
         if len(self.requests[ip]) < self.limit:
             self.requests[ip].append(now)
             return True
@@ -139,21 +139,21 @@ class TunnelSecurityASGIMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-            
+
         request = Request(scope, receive=receive)
-        
+
         # 1. Identify if request is from Cloudflare Tunnel / public internet
         is_public = _is_public_request(request)
         cf_ip = request.headers.get("cf-connecting-ip")
         path = request.url.path
         method = request.method
-        
+
         cfg = _get_config()
         security_cfg = cfg.get("security", {})
         allowed_paths = security_cfg.get("allowed_public_paths", [
             "/tip", "/tip/", "/api/donate", "/api/webhook/*", "/api/config", "/assets", "/favicon.ico", "/manifest.json"
         ])
-        
+
         # Scoped safe public display/read-only APIs:
         is_safe_public_api = (
             (path in ["/api/health", "/api/version"] and method == "GET")
@@ -216,7 +216,7 @@ class TunnelSecurityASGIMiddleware:
                                 authenticated = True
                     except Exception as e:
                         logger.error("Basic auth decoding error: %s", e)
-                
+
                 if not authenticated:
                     response = Response(
                         status_code=401,
@@ -295,6 +295,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _verify_admin_access(request: Request) -> Dict[str, str]:
+    """Authenticate and authorize administrative operations using existing security model.
+
+    Returns dict with authenticated identity and role: {'user': 'admin', 'role': 'owner'}.
+    Fails closed if authentication is invalid or not configured.
+    """
+    cfg = _get_config()
+    db_password = cfg.get("security", {}).get("dashboard_password") or os.environ.get("DASHBOARD_PASSWORD")
+    if not db_password:
+        raise HTTPException(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
+            detail="Admin authentication required (dashboard password not configured)"
+        )
+
+    auth_header = request.headers.get("authorization") if request else None
+    if auth_header and auth_header.startswith("Basic "):
+        try:
+            import base64
+            encoded = auth_header.split(" ", 1)[1]
+            decoded = base64.b64decode(encoded).decode("utf-8")
+            if ":" in decoded:
+                user, pwd = decoded.split(":", 1)
+                if user == "admin" and pwd == db_password:
+                    return {"user": "admin", "role": "owner"}
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
+        detail="Admin authentication required"
+    )
+
 # --- SINGLETONS ---
 audio = AudioService()
 ai_engine = AIEngine()
@@ -337,14 +371,14 @@ async def broadcast_log(data: dict):
 
     if os.environ.get("RUN_MODE") == "cloud":
         allowed_pi_types = [
-            "play_tts", "log", "tts_event", "POKEMON_EVENT", 
-            "goal_start", "goal_update", "goal_achieved", "goal_ended", 
+            "play_tts", "log", "tts_event", "POKEMON_EVENT",
+            "goal_start", "goal_update", "goal_achieved", "goal_ended",
             "giveaway_update", "meme_redeem", "meme_expired"
         ]
         should_broadcast = data.get("type") in allowed_pi_types or data.get("event") == "AGENT_ACTION"
         if should_broadcast and bot and getattr(bot, "pi_clients", None):
             asyncio.create_task(bot.pi_clients.broadcast(data))
-    
+
     async def safe_send(ws):
         try:
             await ws.send_json(data)
@@ -405,7 +439,7 @@ async def broadcast_to_pi_clients(event: dict):
     if not active_pi_websockets:
         logger.info("No Pi clients connected. Alert queued in database.")
         return
-        
+
     logger.info("Sending alert to connected Pi clients...")
     success = False
     for ws in list(active_pi_websockets):
@@ -414,7 +448,7 @@ async def broadcast_to_pi_clients(event: dict):
             success = True
         except Exception as e:
             logger.error(f"Failed to send alert to a Pi client: {e}")
-            
+
     if success and event.get("transaction_id"):
         bot.mark_donation_as_played(event["transaction_id"])
 
@@ -428,7 +462,7 @@ async def cloud_queue_processor():
                     # Take the oldest unplayed donation (pending is returned newest-first, so pending[-1] is oldest)
                     item = pending[-1]
                     logger.info(f"Draining queued alert: {item['user']} - {item['amount']}")
-                    
+
                     # Construct correct payload based on type
                     payload = {
                         "user": item["user"],
@@ -441,7 +475,7 @@ async def cloud_queue_processor():
                         payload["do_tts"] = True
                     else:
                         payload["type"] = "donation_alert"
-                        
+
                     await broadcast_to_pi_clients(payload)
                     # wait 15 seconds to avoid Pi hanging
                     await asyncio.sleep(15)
@@ -465,7 +499,7 @@ async def startup_event():
         if "CRITICAL" in w:
             logger.critical("FATAL STARTUP ERROR: %s", w)
             sys.exit(1)  # Fail fast so systemd can restart the bot
-            
+
     try:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         dist_path = os.path.join(project_root, "frontend", "dist")
@@ -540,7 +574,7 @@ async def debug_fs():
 async def get_config(request: Request):
     full_config = ConfigManager.get_config()
     is_cloud = (os.environ.get("RUN_MODE") != "local")
-    
+
     # SECURITY: If public (Tunnel), sanitize the config to hide secrets (API Keys, etc)
     if getattr(request.state, "is_public", False):
         # Deep Copy & Sanitize Tip Config
@@ -587,7 +621,7 @@ async def get_config(request: Request):
             "security": {"allowed_public_paths": full_config.get("security", {}).get("allowed_public_paths", [])}, # Let frontend know what's allowed
             "is_cloud": is_cloud
         }
-        
+
     cfg_copy = full_config.copy()
     cfg_copy["is_cloud"] = is_cloud
     return cfg_copy
@@ -598,18 +632,18 @@ async def update_config(payload: ConfigUpdate):
         saved = ConfigManager.save_config(payload.config)
         if not saved:
             raise HTTPException(500, "Failed to save config")
-            
+
         # Broadcast to Cloud UI clients
         payload.config["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
         asyncio.create_task(broadcast_log({"type": "config_update", "config": payload.config}))
-        
+
         # Broadcast to Local Pi clients
         if getattr(bot, "pi_clients", None):
             asyncio.create_task(bot.pi_clients.broadcast({
                 "type": "sync_config_full",
                 "config": payload.config
             }))
-            
+
         return {"status": "success"}
     except HTTPException:
         raise
@@ -627,10 +661,103 @@ async def streamer_bot_chat(payload: Dict[str, Any]):
     return await bot.handle_sb_chat(user, message, payload=payload)
 
 @app.post("/api/chat")
-async def manual_chat(payload: Dict[str, str]):
+async def manual_chat(payload: Dict[str, Any]):
     prompt = payload.get("prompt")
     if not prompt: raise HTTPException(400, "Prompt required")
-    return await bot.handle_sb_chat("Tester", prompt, force_ai=True)
+    if hasattr(bot, "agent") and bot.agent:
+        # Non-privileged dashboard test console: strictly viewer role, tools disallowed
+        reply = await bot.agent.process_request(
+            user_name="DashboardTester",
+            user_id="dashboard_test",
+            text=str(prompt),
+            caller_role="viewer",
+            allow_tools=False
+        )
+        return {"response": reply or "Done.", "botReply": reply or "Done."}
+    reply = await bot.handle_sb_chat("Tester", str(prompt), force_ai=True)
+    return {"response": reply or "Done.", "botReply": reply or "Done."}
+
+@app.get("/api/agent/status")
+async def get_agent_status():
+    """Returns live status, switches, metrics, and recent actions of Piya."""
+    if hasattr(bot, "agent") and bot.agent:
+        return bot.agent.get_status_overview()
+    return {"enabled": False, "name": "Piya", "switches": {}, "metrics": {}}
+
+@app.post("/api/agent/config")
+async def update_agent_config(request: Request, payload: Dict[str, Any]):
+    """Update agent settings (name, personality, language, tone, switches, auto_chat)."""
+    _verify_admin_access(request)
+    cfg = ConfigManager.get_config()
+    agent_cfg = cfg.setdefault("agent", {})
+
+    # Allowed top-level fields
+    for field in ["name", "personality", "custom_system_prompt", "language", "reply_length", "tone", "enabled"]:
+        if field in payload:
+            agent_cfg[field] = payload[field]
+
+    # Switches
+    if "switches" in payload and isinstance(payload["switches"], dict):
+        current_switches = agent_cfg.setdefault("switches", {})
+        for k, v in payload["switches"].items():
+            current_switches[k] = bool(v)
+            if k == "auto_chat":
+                agent_cfg.setdefault("auto_chat", {})["enabled"] = bool(v)
+
+    # Auto-chat
+    if "auto_chat" in payload and isinstance(payload["auto_chat"], dict):
+        current_auto = agent_cfg.setdefault("auto_chat", {})
+        for k, v in payload["auto_chat"].items():
+            current_auto[k] = v
+        if "enabled" in payload["auto_chat"]:
+            agent_cfg.setdefault("switches", {})["auto_chat"] = bool(payload["auto_chat"]["enabled"])
+
+    ConfigManager.save_config(cfg)
+    if hasattr(bot, "broadcast_func") and callable(bot.broadcast_func):
+        asyncio.create_task(bot.broadcast_func({"type": "agent_config_updated", "agent": agent_cfg}))
+    return {"status": "success", "agent": agent_cfg}
+
+@app.post("/api/agent/toggle")
+async def toggle_agent_switch(request: Request, payload: Dict[str, Any]):
+    """Quickly toggle an agent feature switch."""
+    _verify_admin_access(request)
+    switch = payload.get("switch")
+    if not switch:
+        raise HTTPException(400, "Switch name required")
+    cfg = ConfigManager.get_config()
+    agent_cfg = cfg.setdefault("agent", {})
+    switches = agent_cfg.setdefault("switches", {})
+    default_val = False if switch == "auto_chat" else True
+    curr = switches.get(switch, default_val)
+    new_val = not curr
+    switches[switch] = new_val
+    if switch == "auto_chat":
+        agent_cfg.setdefault("auto_chat", {})["enabled"] = new_val
+    ConfigManager.save_config(cfg)
+    return {"status": "success", "switch": switch, "enabled": switches[switch]}
+
+@app.post("/api/agent/confirm")
+async def confirm_agent_action(request: Request, payload: Dict[str, Any]):
+    """Confirm a pending high-impact agent action with its cryptographic code."""
+    admin_info = _verify_admin_access(request)
+    code = payload.get("code") or payload.get("confirmation_code")
+    if not code:
+        raise HTTPException(400, "Confirmation code required")
+    if hasattr(bot, "agent") and bot.agent:
+        # Caller identity and role are strictly derived from verified admin session, NEVER from client payload
+        user = admin_info["user"]
+        role = admin_info["role"]
+        res = await bot.agent.confirm_pending_action(user, role, str(code))
+        return {"status": "success", "result": res}
+    raise HTTPException(503, "Agent service not initialized")
+
+@app.get("/api/agent/audit")
+async def get_agent_audit(request: Request):
+    """Returns the protected audit trail of recent agent tool executions."""
+    _verify_admin_access(request)
+    if hasattr(bot, "agent") and bot.agent:
+        return {"audit_log": list(reversed(bot.agent.get_audit_trail(50)))}
+    return {"audit_log": []}
 
 @app.get("/api/audio/status")
 async def get_audio_status():
@@ -641,11 +768,12 @@ async def get_viewers():
     return bot.viewers.viewers
 
 @app.post("/api/loyalty/add")
-async def add_points(payload: Dict[str, Any]):
+async def add_points(request: Request, payload: Dict[str, Any]):
+    _verify_admin_access(request)
     user = payload.get("user")
     amount = payload.get("amount", 0)
     if not user: raise HTTPException(400, "User required")
-    
+
     bot.viewers.add_points(user, amount)
     return {"status": "added", "new_balance": bot.viewers.get_viewer(user).get("points", 0)}
 
@@ -654,13 +782,13 @@ async def redeem_reward(payload: Dict[str, Any]):
     from backend.config_manager import ConfigManager
     if ConfigManager.get_config().get("stream_offline", False):
         return {"status": "error", "message": "Stream is offline. Points activities are disabled."}
-        
+
     user = payload.get("user")
     cost = payload.get("cost", 0)
     reward = payload.get("reward", "Unknown Reward")
-    
+
     if not user: raise HTTPException(400, "User required")
-    
+
     success = bot.viewers.redeem(user, cost)
     if success:
         # Chat-only notification (no TTS/OBS alerts)
@@ -695,7 +823,7 @@ async def get_gambling_history():
     total_bets = len(history)
     total_winnings = sum(item.get("payout", 0) for item in valid_gambles if item.get("win"))
     biggest_win = max([item.get("payout", 0) for item in valid_gambles if item.get("win")] or [0])
-    
+
     return {
         "stats": {
             "total_bets": total_bets,
@@ -910,9 +1038,9 @@ async def moderation_delete(payload: Dict[str, Any]):
 async def start_boss(payload: Dict[str, Any]):
     hp = payload.get("hp", 5000)
     boss_type = payload.get("boss_type", "thanos")
-    
+
     result = bot.boss_fight.spawn_boss(hp, boss_type)
-    
+
     # Broadcast to overlays
     if bot.broadcast_func:
         asyncio.create_task(bot.broadcast_func({
@@ -920,22 +1048,22 @@ async def start_boss(payload: Dict[str, Any]):
             "hp": hp,
             "boss_type": boss_type
         }))
-        
+
     # Send chat message to YouTube
     asyncio.create_task(bot._send_chat(result["message"]))
-    
+
     return {"status": "success", "message": result["message"]}
 
 @app.post("/api/loyalty/spawn_pokemon")
 async def spawn_pokemon(is_test: bool = True):
     if not hasattr(bot, "pokemon"):
         return {"success": False, "message": "Pokemon service not initialized"}
-    
+
     result = await bot.pokemon.spawn_wild_pokemon(force=True, is_test=is_test)
     if result:
         overlay_count = len(active_overlay_websockets)
         return {
-            "success": True, 
+            "success": True,
             "message": f"{'Test ' if is_test else ''}Wild {result.get('name', 'Pokemon')} spawned!",
             "pokemon": result,
             "is_test": is_test,
@@ -1005,7 +1133,7 @@ async def list_goals():
 async def create_goal(payload: Dict[str, Any]):
     cfg = ConfigManager.get_config()
     goals = cfg.get("goals", {"enabled": True, "active_goals": []})
-    
+
     import uuid
     new_goal = {
         "id": str(uuid.uuid4()),
@@ -1032,7 +1160,7 @@ async def create_goal(payload: Dict[str, Any]):
 async def update_goal(goal_id: str, payload: Dict[str, Any]):
     cfg = ConfigManager.get_config()
     goals = cfg.get("goals", {"enabled": True, "active_goals": []})
-    
+
     updated = False
     for goal in goals["active_goals"]:
         if goal["id"] == goal_id:
@@ -1041,10 +1169,10 @@ async def update_goal(goal_id: str, payload: Dict[str, Any]):
                     goal[k] = v
             updated = goal
             break
-            
+
     if not updated:
         raise HTTPException(404, "Goal not found")
-        
+
     cfg["goals"] = goals
     ConfigManager.save_config(cfg)
     return {"status": "updated", "goal": updated}
@@ -1053,13 +1181,13 @@ async def update_goal(goal_id: str, payload: Dict[str, Any]):
 async def delete_goal(goal_id: str):
     cfg = ConfigManager.get_config()
     goals = cfg.get("goals", {"enabled": True, "active_goals": []})
-    
+
     original_len = len(goals["active_goals"])
     goals["active_goals"] = [g for g in goals["active_goals"] if g["id"] != goal_id]
-    
+
     if len(goals["active_goals"]) == original_len:
         raise HTTPException(404, "Goal not found")
-        
+
     cfg["goals"] = goals
     ConfigManager.save_config(cfg)
     return {"status": "deleted"}
@@ -1114,9 +1242,9 @@ async def announce_giveaway_winners(payload: Dict[str, Any]):
     prize = payload.get("prize", "")
     if not winners:
         return {"status": "error"}
-        
+
     GiveawayService.add_history(winners)
-    
+
     names = ", ".join(winners)
     if prize:
         msg = f"🎉 CONGRATULATIONS to {names} for winning the giveaway! 🎁 They won: {prize}!"
@@ -1124,12 +1252,12 @@ async def announce_giveaway_winners(payload: Dict[str, Any]):
     else:
         msg = f"🎉 CONGRATULATIONS to {names} for winning the giveaway! 🎁"
         speech = f"Congratulations to {names} for winning the giveaway!"
-        
+
     await bot._send_chat(msg)
-    
+
     if bot.audio:
         await bot.audio.speak(speech, "public")
-        
+
     return {"status": "success"}
 
 @app.get("/api/redeems")
@@ -1158,7 +1286,7 @@ async def delete_redeem(reward_id: str):
 async def test_redeem(reward_id: str):
     """Trigger a redeem without spending points (for testing)."""
     target_sb_ws = bot.sb_ws
-    
+
     if os.environ.get("RUN_MODE") == "cloud":
         class CloudSBProxy:
             def __init__(self, bot): self.bot = bot
@@ -1187,7 +1315,7 @@ async def test_redeem(reward_id: str):
 async def get_system_status():
     mem = psutil.virtual_memory()
     cpu = psutil.cpu_percent(interval=None)
-    
+
     temp = None
     # Try to get temp on Raspberry Pi
     try:
@@ -1204,16 +1332,16 @@ async def get_system_status():
     bot_stats = bot.get_status()
     audio_stats = audio.get_status()
     cfg = ConfigManager.get_config()
-    
+
     # Streamerbot mapping
     obs_cfg = cfg.get("streamer_bot", {})
     sb_enabled = obs_cfg.get("enabled", False)
-    
+
     # Get status directly from worker_health managed by BotService connection loop
     sb_worker = bot_stats.get("workers", {}).get("streamerbot", {})
     sb_health_status = sb_worker.get("status", "disconnected")
     sb_last_error = sb_worker.get("last_error", None)
-    
+
     if not sb_enabled:
         sb_status = "disabled"
     elif bot_stats.get("streamer_bot_connected"):
@@ -1225,7 +1353,7 @@ async def get_system_status():
     yt_enabled = True
     yt_worker = bot_stats.get("workers", {}).get("youtube_monitor", {})
     yt_health_status = yt_worker.get("status", "disconnected")
-    
+
     if sb_enabled and sb_status == "connected":
         yt_status = "running"
     elif yt_health_status == "running":
@@ -1257,7 +1385,7 @@ async def get_system_status():
     # AI Engine mapping
     ai_cfg = cfg.get("ai_topology", {})
     ai_enabled = ai_cfg.get("enabled", True)
-    
+
     response_data = {
         "bot": {
             "email_status": bot_stats.get("email_status", "Unknown")
@@ -1315,11 +1443,11 @@ async def get_system_status():
         },
         "warnings": []
     }
-    
+
     logger.debug(f"[API STATUS] bot_core: {response_data['bot_core']['status']} | "
                  f"streamerbot: {response_data['workers']['streamerbot']['status']} | "
                  f"youtube: {response_data['workers']['youtube_monitor']['status']}")
-                 
+
     return response_data
 
 # --- QUICK BOT CONTROLS ---
@@ -1347,11 +1475,11 @@ async def toggle_offline():
     cfg = ConfigManager.get_config(force_reload=True)
     cfg["stream_offline"] = not cfg.get("stream_offline", False)
     ConfigManager.save_config(cfg)
-    
+
     # Broadcast to Cloud UI
     cfg["is_cloud"] = (os.environ.get("RUN_MODE") != "local")
     asyncio.create_task(broadcast_log({"type": "config_update", "config": cfg}))
-    
+
     # Broadcast to Local Pi
     if bot and getattr(bot, "pi_clients", None):
         asyncio.create_task(bot.pi_clients.broadcast({
@@ -1359,7 +1487,7 @@ async def toggle_offline():
             "key": "stream_offline",
             "value": cfg["stream_offline"]
         }))
-        
+
     return {"status": "success", "stream_offline": cfg["stream_offline"]}
 
 @app.post("/api/bot/restart")
@@ -1385,16 +1513,7 @@ async def clear_clips():
     bot.recent_clips = []
     return {"status": "success", "message": "Clips cleared"}
 
-# --- INTEGRATIONS CONTROL ---
 
-@app.post("/api/integrations/telegram/restart")
-async def restart_telegram():
-    try:
-        await bot.telegram.stop()
-        await bot.telegram.start()
-        return {"status": "success", "message": "Telegram Service Restarted"}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to restart Telegram: {e}")
 
 # --- CUSTOM COMMANDS CRUD ---
 
@@ -1532,10 +1651,10 @@ async def set_audio_priority(payload: PriorityRequest):
     cfg = bot.load_config()
     if "audio" not in cfg: cfg["audio"] = {}
     cfg["audio"]["priority_mode"] = payload.mode
-    
+
     # Save
     ConfigManager.save_config(cfg)
-    
+
     return {"status": "updated", "mode": payload.mode}
 
 class QueuePauseRequest(BaseModel):
@@ -1576,7 +1695,7 @@ async def update_audio_config(payload: Dict[str, Any]):
     """Update audio-specific config (rate, volume, max_play_duration, banned_words)."""
     cfg = ConfigManager.get_config()
     audio_cfg = cfg.get("audio", {})
-    
+
     if "mode" in payload:
         audio_cfg["mode"] = payload["mode"]
     if "voice" in payload:
@@ -1593,7 +1712,7 @@ async def update_audio_config(payload: Dict[str, Any]):
     if "banned_words" in payload:
         if isinstance(payload["banned_words"], list):
             audio_cfg["banned_words"] = payload["banned_words"]
-    
+
     cfg["audio"] = audio_cfg
     ConfigManager.save_config(cfg)
     return {"status": "updated", "audio": {
@@ -1611,7 +1730,7 @@ async def update_audio_config(payload: Dict[str, Any]):
 async def test_audio(request: Request):
     if not bot.audio:
         return JSONResponse({"status": "error", "message": "Audio Engine not initialized"}, status_code=500)
-    
+
     await bot.audio.speak("This is a test of the emergency broadcast system. Audio is working!", "public")
     return {"status": "success", "message": "Test audio queued"}
 
@@ -1623,10 +1742,10 @@ async def test_provider(provider_id: str, payload: Optional[Dict[str, Any]] = No
     else:
         config = bot.load_config()
         provider = next((p for p in config["ai_topology"]["providers"] if p["id"] == provider_id), None)
-    
+
     if not provider:
         raise HTTPException(404, "Provider configuration not found. Please save first or send configuration in body.")
-    
+
     # 2. Call AI Engine test
     return await ai_engine.test_connection(provider)
 
@@ -1654,7 +1773,7 @@ async def clear_donations_route():
     success = bot.clear_donation_history()
     if success:
         bot.processed_transactions.clear() # Clear deduplication cache to allow old tips again
-        
+
         # Broadcast to Pi Clients
         is_cloud = (os.environ.get("RUN_MODE") != "local")
         if is_cloud and getattr(bot, "pi_clients", None):
@@ -1662,7 +1781,7 @@ async def clear_donations_route():
                 "type": "sync_action",
                 "action": "clear_history"
             })
-            
+
         return {"status": "success", "message": "History cleared"}
     raise HTTPException(500, "Failed to clear history")
 
@@ -1685,7 +1804,7 @@ async def delete_donation_item_route(payload: DeleteDonationRequest):
                 "user": payload.user,
                 "amount": payload.amount
             })
-            
+
         return {"status": "success", "message": "Item deleted"}
     raise HTTPException(404, "Item not found or failed to delete")
 
@@ -1723,29 +1842,29 @@ class EmailTestPayload(BaseModel):
 async def test_email_connection(payload: EmailTestPayload = Body(...)):
     # Allow testing with payload credentials OR saved config
     temp_config = {"email_verification": payload.dict()}
-    
+
     # Use the service to test connection
     # We create a temporary service instance or use the bot's
     from backend.services.email_service import EmailService
-    
+
     # Mock config loader
     loader = lambda: temp_config
-        
+
     service = EmailService(loader)
-    
+
     import threading
     import asyncio
-    
+
     def _run_connect():
         return service._connect()
-        
+
     loop = asyncio.get_event_loop()
     success = await loop.run_in_executor(None, _run_connect)
-    
+
     if success:
         service._disconnect()
         return {"status": "success", "message": "Connected to IMAP successfully!"}
-    
+
     error_msg = service.last_error if hasattr(service, 'last_error') else "Unknown Error"
     return {"status": "failed", "message": f"Connection Failed: {error_msg}"}
 
@@ -1762,20 +1881,20 @@ async def debug_email_check():
             return {"status": "error", "message": f"Failed to import EmailService: {e}"}
 
         service = EmailService(bot.load_config)
-        
+
         if not service._connect():
             return {"status": "error", "message": f"Could not connect: {service.last_error}"}
-            
+
         service.mail.select("inbox")
         import datetime
         date_str = (datetime.date.today()).strftime("%d-%b-%Y")
         status, messages = service.mail.search(None, f'(SINCE "{date_str}")')
-        
+
         logs = []
         if status == "OK":
             email_ids = messages[0].split()
             recent_ids = email_ids[-10:] if len(email_ids) > 10 else email_ids
-            
+
             for e_id in reversed(recent_ids):
                 try:
                     res, msg_data = service.mail.fetch(e_id, "(RFC822)")
@@ -1792,7 +1911,7 @@ async def debug_email_check():
                     logs.append(f"Error fetching {e_id}: {str(ex)}")
         else:
             logs.append("No emails found today via SEARCH command.")
-            
+
         service._disconnect()
         return {"status": "success", "logs": logs}
     except Exception as e:
@@ -1876,15 +1995,15 @@ async def payment_webhook(provider: str, payload: dict):
 
             # 1 & 2. Find all amounts with currency symbols
             all_matches = []
-            
+
             for m in re.finditer(r'(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)', combined_text, flags=re.IGNORECASE):
                 try: all_matches.append((m.start(), float(m.group(1).replace(',', '').strip())))
                 except: pass
-                
+
             for m in re.finditer(r'([\d,]+(?:\.\d+)?)\s*(?:₹|Rs\.?|INR)', combined_text, flags=re.IGNORECASE):
                 try: all_matches.append((m.start(), float(m.group(1).replace(',', '').strip())))
                 except: pass
-                
+
             if all_matches:
                 all_matches.sort(key=lambda x: x[0])
                 for pos, val in all_matches:
@@ -1894,7 +2013,7 @@ async def payment_webhook(provider: str, payload: dict):
                         continue
                     amount = val
                     break
-                
+
                 # If all matches were skipped due to context, just pick the first one as a fallback
                 if amount <= 0 and all_matches:
                     amount = all_matches[0][1]
@@ -1907,7 +2026,7 @@ async def payment_webhook(provider: str, payload: dict):
                         amount = float(m.group(1).replace(',', '').strip())
                         break
                     except: pass
-                    
+
             if amount <= 0:
                 # 4. Last resort: extract all numbers
                 cleaned_text = re.sub(r'(?:₹|Rs\.?|INR|\bRs\b)', '', combined_text, flags=re.IGNORECASE).strip()
@@ -1924,7 +2043,7 @@ async def payment_webhook(provider: str, payload: dict):
                         break
                     except Exception:
                         pass
-                
+
                 if amount <= 0:
                     logger.warning("Webhook/%s: no valid amount found in: %.120r", provider, combined_text)
                     return {"status": "ignored", "reason": f"Could not parse amount from text: {repr(combined_text[:120])}"}  # type: ignore
@@ -1947,14 +2066,14 @@ async def payment_webhook(provider: str, payload: dict):
                 if m0:
                     sender = m0.group(1).strip()
                     break
-                    
-                # 2. "from Name" or "by Name" 
+
+                # 2. "from Name" or "by Name"
                 # Stop matching at punctuation like comma, period, or words like "on", "for", "via"
                 m1 = re.search(r'(?:from|by)\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)(?:[,;\.\n]|\s+on\b|\s+for\b|\s+via\b|\s+using\b|$)', search_text, re.IGNORECASE)
                 if m1:
                     sender = m1.group(1).strip()
                     break
-                    
+
                 # 3. "received ... has sent"
                 m2 = re.search(r'received\s+([A-Za-z0-9 ]+?)\s+has sent', search_text, re.IGNORECASE)
                 if m2:
@@ -2045,10 +2164,10 @@ async def initiate_phonepe_payment(payload: PhonePeInitiateRequest, request: Req
         host = request.headers.get("host", "localhost:8000")
         protocol = "http"
         base_url = f"{protocol}://{host}"
-        
+
         callback_url = f"{base_url}/api/webhook/phonepe"
         redirect_url = f"{base_url}/tip?status=success" # Frontend handles this query param
-        
+
         result = await phonepe_service.initiate_payment(payload.amount, payload.user, callback_url, redirect_url)
         return {"redirectUrl": result["url"], "orderId": result["order_id"]}
     except Exception as exc:
@@ -2068,7 +2187,7 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     amount = payload.get("amount")
     if not amount:
         raise HTTPException(400, "Amount required")
-    
+
     timestamp = payload.get("timestamp") # New: Transaction Start Time
 
     try:
@@ -2079,23 +2198,23 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     # Use a temporary service instance to check
     # In production, might want a persistent one or connection pooling
     service = EmailService(bot.load_config)
-    
+
     # Run in thread to avoid blocking async loop
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, lambda: service.check_for_payment_email(amount, min_timestamp=timestamp, processed_ids=bot.processed_transactions))
-        
+
         # If verified, trigger alert!
         if result["verified"]:
             user = payload.get("user", "Anonymous")
             message = payload.get("message", "Donation via UPI")
-            
+
             # Trigger Alert with Transaction ID (Message-ID) for Deduplication
             msg_id = result.get("message_id")
-            
+
             # Trigger Alert
             await bot.trigger_donation_alert(user, float(amount), message, transaction_id=msg_id, skip_verification=True)
-            
+
         return result
     finally:
         service._disconnect()
@@ -2109,201 +2228,7 @@ async def email_disconnect_manual():
     return await bot.disconnect_email()
 
 
-@app.post("/api/sheets/creds")
-async def upload_sheets_creds(payload: Dict[str, str]):
-    """
-    Saves service account JSON to service_account.json
-    """
-    json_content = payload.get("json_content")
-    if not json_content:
-        raise HTTPException(400, "JSON content required")
-    
-    try:
-        # Validate JSON
-        parsed = json.loads(json_content)
-        if "type" not in parsed or parsed["type"] != "service_account":
-             # Loose validation, but good enough
-             pass
-        
-        with open("service_account.json", "w") as f:
-            f.write(json_content) # Just write raw text to preserve formatting/keys
-            
-        return {"status": "success", "message": "Credentials saved to service_account.json"}
-    except json.JSONDecodeError:
-         raise HTTPException(400, "Invalid JSON format")
-    except Exception as e:
-         raise HTTPException(500, str(e))
 
-@app.get("/api/sheets/status")
-async def get_sheets_status():
-    """
-    Checks if creds file exists and if enabled
-    """
-    has_sa_creds = os.path.exists("service_account.json")
-    config = bot.load_config()
-    sheets_config = config.get("google_sheets", {})
-    enabled = sheets_config.get("enabled", False)
-    sheet_id = sheets_config.get("sheet_id", "")
-    
-    # Check for OAuth creds
-    has_oauth_creds = "oauth_credentials" in sheets_config
-    
-    # Fallback check (YouTube creds) - optional, but good for UI state
-    yt_oauth = "oauth_credentials" in config.get("youtube", {})
-    
-    return {
-        "has_credentials": has_sa_creds or has_oauth_creds or yt_oauth,
-        "using_oauth": has_oauth_creds,
-        "enabled": enabled,
-        "sheet_id": sheet_id,
-        "connected": bot.sheets.connected,
-        "last_error": bot.sheets.last_error
-    }
-
-@app.post("/api/sheets/test")
-async def test_sheets_connection():
-    """
-    Forces a connection attempt
-    """
-    success = await bot.sheets.connect()
-    if success:
-        return {"status": "success", "message": f"Connected to Sheet: {bot.sheets.sheet.title if bot.sheets.sheet else 'Unknown'}"}
-    else:
-        return {"status": "error", "message": bot.sheets.last_error or "Unknown Error"}
-
-@app.get("/api/sheets/list")
-async def list_user_spreadsheets():
-    """
-    Fetches list of Google Sheets for the authenticated user via Drive API.
-    Requires OAuth connection (Specific to Sheets or fall back to YouTube).
-    """
-    try:
-        config = bot.load_config()
-        yt_config = config.get("youtube", {})
-        sheets_config = config.get("google_sheets", {})
-        
-        oauth_creds = None
-        
-        # 1. Prefer specific Sheets credentials
-        if "oauth_credentials" in sheets_config:
-            oauth_creds = sheets_config["oauth_credentials"]
-        # 2. Fallback to YouTube credentials (if they have scopes, which they might if user didn't separate)
-        elif "oauth_credentials" in yt_config:
-            oauth_creds = yt_config["oauth_credentials"]
-            
-        if not oauth_creds:
-            raise HTTPException(400, "by authenticating in the Google Sheets tab.")
-            
-        # Create Credentials object
-        from google.oauth2.credentials import Credentials
-        creds = Credentials(
-            token=oauth_creds.get("token"),
-            refresh_token=oauth_creds.get("refresh_token"),
-            token_uri=oauth_creds.get("token_uri"),
-            client_id=oauth_creds.get("client_id"),
-            client_secret=oauth_creds.get("client_secret"),
-            scopes=oauth_creds.get("scopes")
-        )
-        
-        # Use Google Drive API to list sheets
-        # mimetype = 'application/vnd.google-apps.spreadsheet'
-        def _fetch_drive_files():
-            from googleapiclient.discovery import build
-            service = build('drive', 'v3', credentials=creds)
-            return service.files().list(
-                q="mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
-                fields="nextPageToken, files(id, name)",
-                pageSize=20
-            ).execute()
-
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(None, _fetch_drive_files)  # type: ignore
-        
-        items = results.get('files', [])
-        return {"status": "success", "sheets": items}
-        
-    except Exception as e:
-        print(f"List Sheets Error: {e}")
-        raise HTTPException(500, f"Failed to list sheets: {str(e)}")
-
-@app.post("/api/sheets/create")
-async def create_sheets_template(payload: Optional[Dict[str, str]] = None):
-    """
-    Creates a new Google Sheet with the correct headers for transaction logging.
-    Returns the new sheet ID so the frontend can auto-select it.
-    """
-    try:
-        config = bot.load_config()
-        sheets_config = config.get("google_sheets", {})
-        yt_config = config.get("youtube", {})
-
-        oauth_creds = None
-        if "oauth_credentials" in sheets_config:
-            oauth_creds = sheets_config["oauth_credentials"]
-        elif "oauth_credentials" in yt_config:
-            oauth_creds = yt_config["oauth_credentials"]
-
-        if not oauth_creds:
-            raise HTTPException(400, "No OAuth credentials found. Connect your Google account first.")
-
-        from google.oauth2.credentials import Credentials as UserCredentials
-        creds = UserCredentials(
-            token=oauth_creds.get("token"),
-            refresh_token=oauth_creds.get("refresh_token"),
-            token_uri=oauth_creds.get("token_uri"),
-            client_id=oauth_creds.get("client_id"),
-            client_secret=oauth_creds.get("client_secret"),
-            scopes=oauth_creds.get("scopes")
-        )
-
-        # Auto-refresh if needed
-        if not creds.token or (hasattr(creds, 'expired') and creds.expired):
-            from google.auth.transport.requests import Request as AuthRequest
-            await asyncio.to_thread(creds.refresh, AuthRequest())
-
-        sheet_name = (payload or {}).get("name", "Pi Bot Transactions")
-
-        def _create_sheet():
-            import gspread
-            gc = gspread.authorize(creds)
-            spreadsheet = gc.create(sheet_name)
-
-            # Add headers
-            headers = ["Date", "Time", "User", "Amount", "Type", "Message", "Transaction ID"]
-            sheet = spreadsheet.sheet1
-            sheet.append_row(headers)
-
-            # Format header row (bold + freeze)
-            sheet.format("A1:G1", {
-                "textFormat": {"bold": True},
-                "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
-                "horizontalAlignment": "CENTER"
-            })
-            sheet.freeze(rows=1)
-
-            # Auto-resize columns
-            sheet.columns_auto_resize(0, 7)
-
-            return spreadsheet.id, spreadsheet.title
-
-        sheet_id, title = await asyncio.to_thread(_create_sheet)
-
-        # Auto-save the sheet_id to config
-        config["google_sheets"]["sheet_id"] = sheet_id
-        ConfigManager.save_config(config)
-
-        # Auto-connect to the new sheet
-        await bot.sheets.connect()
-
-        return {
-            "status": "success",
-            "sheet_id": sheet_id,
-            "title": title,
-            "message": f"Created sheet '{title}' with headers and connected!"
-        }
-    except Exception as e:
-        print(f"Create Sheet Error: {e}")
-        raise HTTPException(500, f"Failed to create sheet: {str(e)}")
 
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -2384,7 +2309,7 @@ async def test_youtube_api(payload: Dict[str, str]):
     """
     method = payload.get("fetch_method", "api")
     channel_id = payload.get("channel_id")
-    
+
     if not channel_id:
         raise HTTPException(400, "Missing Channel ID")
 
@@ -2402,35 +2327,35 @@ async def test_youtube_api(payload: Dict[str, str]):
     api_key = payload.get("api_key")
     if not api_key:
         raise HTTPException(400, "Missing API Key")
-        
+
     url = f"https://www.googleapis.com/youtube/v3/channels?part=statistics&id={channel_id}&key={api_key}"
-    
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(url)
         data = resp.json()
-        
+
         if resp.status_code != 200:
             return {"status": "error", "code": resp.status_code, "error": data}
-            
+
         items = data.get("items", [])
         if not items:
             return {"status": "error", "message": "Channel not found via API. Check ID."}
-            
+
         stats = items[0].get("statistics", {})
         sub_count = stats.get("subscriberCount")
-        
+
         if sub_count:
             bot.set_subscriber_count(int(sub_count), save=True)
-            
+
         return {"status": "success", "statistics": stats, "channel_id": channel_id, "method": "api"}
 
 @app.post("/api/subscriber")
 async def set_subscriber_count(payload: SubscriberUpdate):
     # Only allow saving from this endpoint if explicitly requested (usually True)
-    # But wait, we wanted to DISABLE manual updates. 
-    # Actually, we can just force save=False if we want to prevent manual persistence, 
+    # But wait, we wanted to DISABLE manual updates.
+    # Actually, we can just force save=False if we want to prevent manual persistence,
     # but the user might still want to manually correct it if the API is broken.
-    # The requirement was "Remove manual input". 
+    # The requirement was "Remove manual input".
     # So we can keep this endpoint for Internal/Testing use or just respect the flag.
     bot.set_subscriber_count(payload.count, save=payload.save)
     return {"status": "updated", "count": payload.count}
@@ -2462,8 +2387,7 @@ def _get_required_redirect_uris():
     import socket
     scheme = "http"
     uris = [
-        f"{scheme}://localhost:8000/api/auth/youtube/callback",
-        f"{scheme}://localhost:8000/api/auth/sheets/callback"
+        f"{scheme}://localhost:8000/api/auth/youtube/callback"
     ]
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2473,7 +2397,6 @@ def _get_required_redirect_uris():
         s.close()
         nip_host = lan_ip.replace(".", "-") + ".nip.io"
         uris.append(f"{scheme}://{nip_host}:8000/api/auth/youtube/callback")
-        uris.append(f"{scheme}://{nip_host}:8000/api/auth/sheets/callback")
     except Exception:
         pass
     return uris
@@ -2484,17 +2407,17 @@ async def disconnect_auth():
     try:
         current_config = bot.load_config()
         yt_cfg = current_config.get("youtube", {})
-        
+
         # Remove OAuth credentials
         if "oauth_credentials" in yt_cfg:
             del yt_cfg["oauth_credentials"]
-        
+
         # Reset fetch method to 'scrape' (default fallback)
         yt_cfg["fetch_method"] = "scrape"
-        
+
         current_config["youtube"] = yt_cfg
         ConfigManager.save_config(current_config)
-        
+
         return {"status": "success", "message": "YouTube OAuth disconnected."}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -2517,8 +2440,7 @@ async def setup_auth(payload: Dict[str, Any]):
             # Detect server LAN IP for nip.io redirect URI
             import socket
             redirect_uris = [
-                "http://localhost:8000/api/auth/youtube/callback",
-                "http://localhost:8000/api/auth/sheets/callback"
+                "http://localhost:8000/api/auth/youtube/callback"
             ]
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2528,10 +2450,9 @@ async def setup_auth(payload: Dict[str, Any]):
                 s.close()
                 nip_host = lan_ip.replace(".", "-") + ".nip.io"
                 redirect_uris.append(f"http://{nip_host}:8000/api/auth/youtube/callback")
-                redirect_uris.append(f"http://{nip_host}:8000/api/auth/sheets/callback")
             except Exception:
                 pass
-            
+
             data = {
                 "web": {
                     "client_id": client_id.strip(),
@@ -2584,13 +2505,13 @@ def _convert_ip_to_nip_io(host: str) -> str:
         hostname, port = parts[0], parts[1]
     else:
         hostname, port = host, None
-    
+
     # Check if hostname is an IP address (not localhost)
     ip_pattern = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
     if ip_pattern.match(hostname) and hostname != "127.0.0.1":
         nip_host = hostname.replace(".", "-") + ".nip.io"
         return f"{nip_host}:{port}" if port else nip_host
-    
+
     return host
 
 def _is_ssl_enabled():
@@ -2606,13 +2527,13 @@ async def login_youtube(request: Request):
         # Load config to check for force_localhost
         current_config = bot.load_config()
         auth = AuthService(lambda: current_config)
-        
+
         # Build redirect URI dynamically from the request
         host = request.headers.get("host", "localhost:8000")
-        
+
         # Check if forced localhost redirect is enabled
         use_localhost = current_config.get("force_localhost_redirect", False)
-        
+
         if use_localhost:
             host = "localhost:8000"
         else:
@@ -2621,7 +2542,7 @@ async def login_youtube(request: Request):
         # Detect scheme from reverse proxy (HTTPS) or fallback to request scheme
         scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/youtube/callback"
-        
+
         url, state = auth.get_auth_url(redirect_uri=redirect_uri)
         return {"url": url, "redirect_uri": redirect_uri}
     except FileNotFoundError:
@@ -2634,26 +2555,26 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
     import urllib.parse
     import traceback
     print(f">>> [OAuth Callback] HIT! code={code is not None}, state={state is not None}, error={error}")
-    
+
     # Handle Google-side errors (user denied access, etc.)
     if error:
         return RedirectResponse(f"/settings?oauth=error&message={urllib.parse.quote(error)}")
-    
+
     if not code:
         return RedirectResponse("/settings?oauth=error&message=No%20authorization%20code%20received")
-    
+
     try:
         from backend.services.auth_service import AuthService
         # Load config
         current_config = bot.load_config()
         auth = AuthService(lambda: current_config)
-        
+
         # Build redirect URI dynamically from the request (must match what was used in login)
         host = request.headers.get("host", "localhost:8000")
-        
+
         # Check if forced localhost redirect is enabled
         use_localhost = current_config.get("force_localhost_redirect", False)
-        
+
         if use_localhost:
             host = "localhost:8000"
         else:
@@ -2662,31 +2583,31 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
         # Detect scheme from reverse proxy (HTTPS) or fallback to request scheme
         scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
         redirect_uri = f"{scheme}://{host}/api/auth/youtube/callback"
-        
+
         # Run in thread — exchange_code uses synchronous 'requests' library internally
         # which blocks the event loop and causes ERR_EMPTY_RESPONSE
         creds = await asyncio.to_thread(auth.exchange_code, code, redirect_uri, state=state)
-        
+
         # Save credentials to config
         if "youtube" not in current_config: current_config["youtube"] = {}
         current_config["youtube"]["oauth_credentials"] = creds
         current_config["youtube"]["fetch_method"] = "oauth" # Switch to OAuth method
         ConfigManager.save_config(current_config)
-        
+
         # Config is managed via ConfigManager — no module-level 'config' var needed
 
-        return RedirectResponse("/settings?oauth=success") 
+        return RedirectResponse("/settings?oauth=success")
     except Exception as e:
         # Log full traceback to server console for debugging
         print(f">>> [OAuth Callback] ERROR: {e}")
         traceback.print_exc()
-        
+
         error_msg = str(e)
         # Build the actual redirect URI for the error message
         host = request.headers.get("host", "localhost:8000")
         scheme = request.url.scheme
         actual_redirect = f"{scheme}://{host}/api/auth/youtube/callback"
-        
+
         # Make common Google errors more user-friendly
         if "invalid_client" in error_msg:
             error_msg = "Invalid Client ID or Secret. Make sure you copied the OAuth CLIENT SECRET (starts with GOCSPX-), NOT the API Key (starts with AIza)."
@@ -2700,156 +2621,7 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
             error_msg = "Authorization code expired or already used. Please try signing in again."
         return RedirectResponse(f"/settings?oauth=error&message={urllib.parse.quote(error_msg)}")
 
-# --- SHEETS AUTHENTICATION (SEPARATE ACCOUNT) ---
-SHEETS_CLIENT_SECRET = "sheets_client_secret.json"
 
-@app.post("/api/auth/sheets/setup")
-async def setup_sheets_auth(payload: Dict[str, Any]):
-    """
-    Saves a separate client_secret.json for Google Sheets OAuth.
-    Accepts { client_id, client_secret } for the Sheets-specific OAuth client.
-    """
-    client_id = payload.get("client_id")
-    client_secret = payload.get("client_secret")
-    
-    if not client_id or not client_secret:
-        raise HTTPException(400, "Provide both client_id and client_secret for your Sheets OAuth client.")
-    
-    try:
-        import socket
-        redirect_uris = ["http://localhost:8000/api/auth/sheets/callback"]
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0.2)
-            s.connect(('8.8.8.8', 80))
-            lan_ip = s.getsockname()[0]
-            s.close()
-            nip_host = lan_ip.replace(".", "-") + ".nip.io"
-            redirect_uris.append(f"http://{nip_host}:8000/api/auth/sheets/callback")
-        except Exception:
-            pass
-        
-        data = {
-            "web": {
-                "client_id": (client_id or "").strip(),
-                "project_id": "pi-youtube-bot-sheets",
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "client_secret": (client_secret or "").strip(),
-                "redirect_uris": redirect_uris
-            }
-        }
-        
-        with open(SHEETS_CLIENT_SECRET, "w") as f:
-            json.dump(data, f, indent=4)
-        
-        return {"status": "success", "message": "Sheets credentials saved! You can now connect Google Sheets."}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.get("/api/auth/sheets/credentials-status")
-async def sheets_credentials_status():
-    """Check if sheets_client_secret.json exists."""
-    return {
-        "has_sheets_credentials": os.path.exists(SHEETS_CLIENT_SECRET),
-        "has_youtube_credentials": os.path.exists("client_secret.json")
-    }
-
-
-@app.get("/api/auth/sheets/login")
-async def login_sheets(request: Request):
-    try:
-        from backend.services.auth_service import AuthService
-        current_config = bot.load_config()
-        auth = AuthService(lambda: current_config)
-        
-        # Use separate client secret for Sheets if it exists, otherwise fall back
-        sheets_secret = SHEETS_CLIENT_SECRET if os.path.exists(SHEETS_CLIENT_SECRET) else None
-        
-        # Build redirect URI dynamically
-        host = request.headers.get("host", "localhost:8000")
-        use_localhost = current_config.get("force_localhost_redirect", False)
-        
-        if use_localhost:
-            host = "localhost:8000"
-        else:
-            host = _convert_ip_to_nip_io(host)
-
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
-        
-        # SPECIFIC SCOPES FOR SHEETS
-        sheets_scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
-        url, state = auth.get_auth_url(redirect_uri=redirect_uri, scopes=sheets_scopes, client_secrets_file=sheets_secret)
-        return RedirectResponse(url)
-    except FileNotFoundError:
-        return {"error": "Missing sheets_client_secret.json (or client_secret.json). Please add it to the bot folder."}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/auth/sheets/callback")
-async def callback_sheets(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
-    import urllib.parse
-    import traceback
-    print(f">>> [Sheets OAuth Callback] HIT! code={code is not None}, state={state is not None}, error={error}")
-    
-    if error:
-        return RedirectResponse(f"/settings?oauth_sheets=error&message={urllib.parse.quote(error)}")
-    
-    if not code:
-        return RedirectResponse("/settings?oauth_sheets=error&message=No%20authorization%20code%20received")
-    
-    try:
-        from backend.services.auth_service import AuthService
-        current_config = bot.load_config()
-        auth = AuthService(lambda: current_config)
-        
-        # Use separate client secret for Sheets if it exists
-        sheets_secret = SHEETS_CLIENT_SECRET if os.path.exists(SHEETS_CLIENT_SECRET) else None
-        
-        host = request.headers.get("host", "localhost:8000")
-        use_localhost = current_config.get("force_localhost_redirect", False)
-        
-        if use_localhost:
-            host = "localhost:8000"
-        else:
-            host = _convert_ip_to_nip_io(host)
-
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
-        
-        sheets_scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
-        # Exchange code for tokens
-        print(f">>> DEBUG: Calling auth.exchange_code with scopes={sheets_scopes}")
-        try:
-             creds = auth.exchange_code(code, redirect_uri, sheets_scopes, client_secrets_file=sheets_secret, state=state)
-        except Exception as e:
-             print(f">>> DEBUG: Error inside exchange_code call: {e}")
-             raise e
-        
-        # Save credentials to config under 'google_sheets'
-        if "google_sheets" not in current_config: current_config["google_sheets"] = {}
-        current_config["google_sheets"]["oauth_credentials"] = creds
-        current_config["google_sheets"]["enabled"] = True
-        ConfigManager.save_config(current_config)
-        
-        # Config is managed via ConfigManager — no module-level 'config' var needed
-        # Note: sheets_service needs to reload config to see this. It usually does on each connect call.
-
-        return RedirectResponse("/settings?oauth_sheets=success") 
-    except Exception as e:
-        print(f">>> [Sheets OAuth Callback] ERROR: {e}")
-        traceback.print_exc()
-        return RedirectResponse(f"/settings?oauth_sheets=error&message={urllib.parse.quote(str(e))}")
 
 
 
@@ -2992,8 +2764,6 @@ MAX_COMPRESSION_RATIO = 100  # Avoid zip bombs
 _BACKUP_FILES = [
     "config.json",
     "client_secret.json",
-    "sheets_client_secret.json",
-    "service_account.json",
     ".env",
     ".env.bak",
     "viewers.db",
@@ -3006,31 +2776,7 @@ _BACKUP_DIRS = [
     "data",
 ]
 
-def _verify_admin_access(request: Request):
-    """Authenticate and authorize backup operations using existing security model."""
-    cfg = _get_config()
-    db_password = cfg.get("security", {}).get("dashboard_password") or os.environ.get("DASHBOARD_PASSWORD")
-    if not db_password:
-        return True
-
-    auth_header = request.headers.get("authorization") if request else None
-    if auth_header and auth_header.startswith("Basic "):
-        try:
-            import base64
-            encoded = auth_header.split(" ", 1)[1]
-            decoded = base64.b64decode(encoded).decode("utf-8")
-            if ":" in decoded:
-                user, pwd = decoded.split(":", 1)
-                if user == "admin" and pwd == db_password:
-                    return True
-        except Exception:
-            pass
-
-    raise HTTPException(
-        status_code=401,
-        headers={"WWW-Authenticate": 'Basic realm="PiBot Dashboard"'},
-        detail="Admin authentication required"
-    )
+# Note: _verify_admin_access is defined above in core security middleware
 
 def _get_max_backup_size_bytes() -> int:
     cfg = _get_config()
@@ -3385,23 +3131,23 @@ async def upload_qr(file: UploadFile = File(...)):
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         uploads_dir = os.path.join(project_root, "data", "uploads")
         os.makedirs(uploads_dir, exist_ok=True)
-        
+
         # Use a fixed filename so it overwrites the old one
         ext = os.path.splitext(file.filename)[1]
         filename = f"custom_qr{ext}"
         filepath = os.path.join(uploads_dir, filename)
-        
+
         contents = await file.read()
         with open(filepath, "wb") as f:
             f.write(contents)
-            
+
         # Update config with the path
         cfg = ConfigManager.get_config(force_reload=True)
         if "tip_page" not in cfg:
             cfg["tip_page"] = {}
         cfg["tip_page"]["custom_qr_path"] = f"/uploads/{filename}"
         ConfigManager.save_config(cfg)
-        
+
         # Broadcast the QR code to Local Pi via WebSockets
         try:
             import base64
@@ -3455,11 +3201,11 @@ async def websocket_pi_client_endpoint(websocket: WebSocket):
             logger.warning("Pi client WebSocket connection rejected: Invalid Token")
             await websocket.close(code=1008, reason="Unauthorized")
             return
-            
+
     await pi_clients.connect(websocket)
     active_pi_websockets.append(websocket)
     logger.info("Pi client connected successfully!")
-    
+
     # Push pending/queued tips upon connection
     try:
         pending = bot.get_pending_donations()
@@ -3477,17 +3223,17 @@ async def websocket_pi_client_endpoint(websocket: WebSocket):
                 payload["do_tts"] = True
             else:
                 payload["type"] = "donation_alert"
-                
+
             await websocket.send_json(payload)
             bot.mark_donation_as_played(item["transaction_id"])
             # Small delay between historical queued alerts
             await asyncio.sleep(15)
-            
+
         while True:
             data = await websocket.receive_text()
             try:
                 event = json.loads(data)
-                
+
                 # Handle QR sync request directly in the endpoint
                 if event.get("type") == "request_qr_sync":
                     try:
@@ -3553,7 +3299,7 @@ if FRONTEND_DIST.exists():
         if full_path and (full_path.startswith("api") or full_path.startswith("ws")):
              # If it's a 404 on API, don't serve HTML
             return Response(status_code=404)
-        
+
         # 2. Check if specific file exists in dist (favicon.ico, vite.svg, etc)
         file_path = FRONTEND_DIST / full_path
         if full_path and file_path.is_file():
@@ -3569,5 +3315,4 @@ else:
     @app.get("/{full_path:path}")
     async def no_dist_error(full_path: str):
         return Response(content="Frontend 'dist' not found. Run 'cd frontend && npm run build'.", status_code=502)
-
 

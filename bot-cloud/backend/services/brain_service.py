@@ -148,6 +148,23 @@ class BrainService:
             logger.error(f"Brain Cleanup Error: {e}")
             return 0
 
+    def delete_user_history(self, username: str) -> int:
+        """Delete all chat_history records for a specific user upon request."""
+        if not username:
+            return 0
+        clean_user = username.lstrip('@').strip().lower()
+        try:
+            conn = self._get_conn()
+            c = conn.cursor()
+            c.execute("DELETE FROM chat_history WHERE LOWER(user) = ?", (clean_user,))
+            deleted = c.rowcount
+            conn.commit()
+            logger.info("Deleted %d history records from brain for user %s", deleted, username)
+            return deleted
+        except Exception as e:
+            logger.error("Error deleting user history from brain: %s", e)
+            return 0
+
     def get_stats(self):
         try:
             conn = self._get_conn()

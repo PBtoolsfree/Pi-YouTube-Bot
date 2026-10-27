@@ -35,9 +35,6 @@ google-auth-oauthlib>=1.0.0
 google-auth-httplib2>=0.1.1
 google-api-python-client>=2.100.0
 
-# --- Google Sheets ---
-gspread>=6.0.0
-oauth2client>=4.1.3
 
 # --- Storage (optional — used by CloudListenerService only) ---
 # supabase is optional: if not installed, cloud listener is automatically disabled.

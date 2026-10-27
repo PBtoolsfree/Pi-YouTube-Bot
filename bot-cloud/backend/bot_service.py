@@ -25,7 +25,6 @@ from backend.services.moderation_service import ModerationService
 from backend.services.ai_handler import AIHandler
 from backend.config_manager import ConfigManager
 from backend.services.loyalty_games import GambleService, BossFightService
-from backend.services.sheets_service import GoogleSheetsService
 from backend.services.brain_service import BrainService
 
 try:
@@ -114,7 +113,7 @@ def safe_format_welcome_message(template: str, author: str, streak: int = 1, day
 def is_valid_command(cmd_name: str, config: dict) -> bool:
     cleaned_cmd = cmd_name.lstrip("!")
     builtin_commands = {
-        "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat", 
+        "claim", "points", "ponits", "give", "rob", "buy", "gamble", "slots", "bowl", "bat",
         "attack", "top", "leaderboard", "shop", "redeem", "memes", "rewards", "loan", "payloan", "clip",
         "catch", "battle", "accept", "pokemon", "pokemons", "showpokemon", "show"
     }
@@ -131,15 +130,15 @@ class BotService:
         self.ai_engine = ai or AIEngine()
         self.config_path = config_path # Kept for ref, but ConfigManager handles it
         self.is_running = False
-        self.broadcast_func: Optional[Callable] = None 
-        self.sb_ws: Any = None 
-        self.chat: Any = None 
+        self.broadcast_func: Optional[Callable] = None
+        self.sb_ws: Any = None
+        self.chat: Any = None
         self.sb_ws_task: Optional[asyncio.Task] = None
         self.dynamic_engagement_task: Optional[asyncio.Task] = None
         self._background_tasks = set()
-        
+
         self.email_status = "Disabled"
-        
+
         # Health Tracking for Background Workers
         self.worker_health: Dict[str, Any] = {}
 
@@ -156,16 +155,16 @@ class BotService:
         self.gambling.bot = self
         self.boss_fight = BossFightService()
         self.boss_fight.bot = self
-        
+
         from backend.services.pokemon_service import PokemonService
         self.pokemon = PokemonService(self)
 
         # Meme Redeem Service
         self.redeem_svc = RedeemService()
-        
+
         # Native API Services
         self.youtube_api = YouTubeService(config_loader=self.load_config)
-        
+
         # Tunnel Service (Native)
         if tunnel_available:
             self.tunnel = TunnelService(port=8000)
@@ -185,14 +184,11 @@ class BotService:
             self.cloud_alert_client = CloudAlertClientService(self)
         else:
             self.cloud_alert_client = None
-        
-        # Google Sheets Service
-        self.sheets = GoogleSheetsService(self.load_config)
 
         # Brain Service (Memory)
         self.brain = BrainService()
 
-        # Agent Service (Telegram Control)
+        # Piya AI Agent Service
         # Pass 'self' so Agent can access all other services (viewers, mod, config, etc.)
         self.agent = AgentService(self)
 
@@ -201,7 +197,7 @@ class BotService:
 
         # Global Locks (moved from service to orchestrator if shared, but mod is per author)
         self.mod_locks = {} # {username: Lock}
-        
+
         # Session Analytics
         self.session_stats: dict[str, Any] = {
             "start_time": time.time(),
@@ -213,23 +209,23 @@ class BotService:
             "top_chatter": {"name": None, "count": 0}
         }
         self.session_chatters: dict[str, int] = {} # {name: count}
-        
+
         # Subscriber Tracking
         # Try to load from a persistent file or config, else 0
-        self.subscriber_count = 0 
+        self.subscriber_count = 0
         self._load_subscriber_count()
         self.on_subscriber_update = None # Callback function
 
         # Message Deduplication
         self.message_dedup_cache = collections.deque(maxlen=100)
-        
+
         # Transaction Deduplication (Persistent, capped at 5000)
         self.processed_transactions = collections.OrderedDict()
         self._load_processed_ids()
 
         # Custom Command Cooldowns
         self._custom_cmd_cooldowns: dict[str, float] = {}
-        
+
         # Live YouTube Stream Likes
         self.live_likes_count = -1
 
@@ -286,16 +282,16 @@ class BotService:
         """Returns True if Streamer.bot WebSocket is connected."""
         if not getattr(self, "sb_ws", None):
             return False
-            
+
         # Check standard property
         is_open = getattr(self.sb_ws, "open", False)
-        
+
         # Check websockets 10+ State.OPEN
         if not is_open:
             from websockets.protocol import State
             if hasattr(self.sb_ws, "state") and self.sb_ws.state == State.OPEN:
                 is_open = True
-                
+
         return bool(is_open)
 
     def load_config(self):
@@ -387,7 +383,7 @@ class BotService:
     def _spawn_managed_loop(self, name: str, coro_func: Callable):
         """Spawns an async loop with health tracking and auto-restart capabilities."""
         self.worker_health[name] = {"status": "starting", "last_active": time.time(), "restarts": 0}
-        
+
         async def _wrapper():
             while self.is_running:
                 try:
@@ -402,13 +398,13 @@ class BotService:
                     self.worker_health[name]["status"] = "error"
                     logger.error(f"Worker '{name}' crashed: {e}")
                     logger.error(traceback.format_exc())
-                
+
                 if not self.is_running:
                     break
-                    
+
                 self.worker_health[name]["restarts"] += 1
                 await asyncio.sleep(5)
-                
+
         return self._spawn_task(_wrapper())
 
     async def _banking_loop(self):
@@ -425,30 +421,30 @@ class BotService:
 
                 if today != last_processed:
                     logger.info("Processing daily banking interest and fines...")
-                    
+
                     loan_plans = {str(p.get("id", idx+1)): p for idx, p in enumerate(config.get("loyalty", {}).get("loan_plans", []))}
-                    
+
                     for username, v in list(self.viewers.viewers.items()):
                         principal = v.get("loan_principal", 0)
                         if principal <= 0 and v.get("loan_interest", 0) <= 0 and v.get("loan_fines", 0) <= 0:
                             continue
-                            
+
                         plan_id = str(v.get("loan_plan_id", ""))
                         plan = loan_plans.get(plan_id, {})
                         plan_type = plan.get("type", "daily")
-                        
+
                         daily_rate = plan.get("daily_interest_pct", 0) / 100.0
                         late_fine = plan.get("late_fine", 0)
-                        
+
                         if principal > 0 and daily_rate > 0 and plan_type == "daily":
                             interest_amt = int(principal * daily_rate)
                             v["loan_interest"] += interest_amt
-                            
+
                         if v.get("loan_due_date", 0) > 0 and time.time() > v.get("loan_due_date", 0):
                             v["loan_fines"] += late_fine
-                            
+
                         self.viewers.mark_dirty()
-                        
+
                     # Update config
                     if "loyalty" not in config:
                         config["loyalty"] = {}
@@ -456,17 +452,17 @@ class BotService:
                     from backend.config_manager import ConfigManager
                     ConfigManager.save_config(config)
                     logger.info("Banking daily processing complete.")
-                    
+
             except Exception as e:
                 logger.error(f"Error in banking loop: {e}")
-                
+
             await asyncio.sleep(3600) # Check every hour
 
 
     async def start(self, broadcast_func):
         self.broadcast_func = broadcast_func
         self.is_running = True
-        
+
         # Pass broadcast_func to AudioService
         if self.audio:
             self.audio.broadcast_func = broadcast_func
@@ -476,23 +472,17 @@ class BotService:
 
         # Start ViewerService background tasks (auto-save loop)
         await self.viewers.start()
-        
+
         # Start PokemonService task (cloud or standalone mode)
         run_mode_env = os.environ.get("RUN_MODE", "standalone")
         if run_mode_env in ["cloud", "standalone"]:
             if hasattr(self, "pokemon") and self.pokemon:
                 self.pokemon.start()
-            
+
         logger.info("Bot Service Started")
-        # Auto-Connect Sheets (blocking start to ensure data safety)
-        try:
-             logger.info("Auto-connecting to Google Sheets...")
-             await self.sheets.connect()
-        except Exception as e:
-             logger.error(f"Sheet Auto-Connect Failed: {e}")
 
         run_mode = os.environ.get("RUN_MODE", "standalone")
-        
+
         if run_mode in ["cloud", "standalone"]:
             logger.info(f"Running in {run_mode.capitalize()} Mode. Starting Heavy Lifting Services (AI, YouTube, Goals).")
             self._spawn_managed_loop("banking", self._banking_loop)
@@ -558,11 +548,11 @@ class BotService:
                 if os.path.exists(rewards_file):
                     with open(rewards_file, "r") as f:
                         rewards = json.load(f)
-                    
+
                     now = time.time()
                     updated_rewards = []
                     changed = False
-                    
+
                     for r in rewards:
                         if r.get("expires_at") and now > r["expires_at"]:
                             logger.info(f"Reward Expired for {r.get('author')}: {r.get('reward_type')}")
@@ -584,21 +574,21 @@ class BotService:
                                         await self._log_ui("WARNING", f"Failed to revoke expired mod for {r.get('author')}: {msg} — will retry")
                             else:
                                 revoke_ok = True  # Unknown type, just clean up
-                            
+
                             if revoke_ok:
                                 changed = True  # Don't keep this entry
                             else:
                                 updated_rewards.append(r)  # Keep for retry
                         else:
                             updated_rewards.append(r)
-                            
+
                     if changed:
                         with open(rewards_file, "w") as f:
                             json.dump(updated_rewards, f, indent=4)
 
             except Exception as e:
                 logger.error(f"Rewards Expiration Error: {e}")
-            
+
             await asyncio.sleep(300)  # Check every 5 minutes (rewards expire in days)
 
     async def _leaderboard_mod_sync_loop(self):
@@ -623,39 +613,39 @@ class BotService:
                 config = self.load_config()
                 b_id = config.get("youtube", {}).get("channel_id")
                 b_name = config.get("youtube", {}).get("channel_name", "").lower()
-                
+
                 top_3_names = []
                 for v in leaderboard:
                     v_name = v['name']
                     v_cid = v.get('channel_id')
-                    
+
                     is_b = False
                     if b_id and v_cid == b_id:
                         is_b = True
                     if b_name and v_name.lower() == b_name:
                         is_b = True
-                        
+
                     if is_b:
                         continue
-                    
+
                     top_3_names.append(v_name)
                     if len(top_3_names) >= 3:
                         break
-                
+
                 # 2. Load existing rewards
                 rewards = []
                 if os.path.exists(rewards_file):
                     with open(rewards_file, "r") as f:
                         rewards = json.load(f)
-                
+
                 # 3. Find current top 3 mods in the file
                 current_top3_mods = [r for r in rewards if r.get("reward_type") == "youtube_mod_leaderboard"]
                 current_mod_names = [r.get("author") for r in current_top3_mods]
-                
+
                 updated_rewards = [r for r in rewards if r.get("reward_type") != "youtube_mod_leaderboard"]
                 needs_save = False
                 assigned_mods = []
-                
+
                 # 4. Revoke mod from users who dropped out of top 3
                 for mod in current_top3_mods:
                     if mod.get("author") not in top_3_names:
@@ -683,11 +673,11 @@ class BotService:
                     else:
                         viewer_data = self.viewers.get_viewer(name)
                         channel_id = viewer_data.get("channel_id")
-                        
+
                         if channel_id == "NOT_FOUND":
                             logger.info(f"Skipping Top 3 Mod sync for {name} (channel_id previously failed to resolve)")
                             continue
-                            
+
                         if channel_id:
                             logger.info(f"Granting Top 3 Mod status to {name} ({channel_id})")
                             success, mod_id_or_err = await self.youtube_api.add_moderator(channel_id)
@@ -712,7 +702,7 @@ class BotService:
                                 logger.info(f"Successfully resolved channel_id for {name}: {channel_id}")
                                 viewer_data["channel_id"] = channel_id
                                 self.viewers.mark_dirty()
-                                
+
                                 logger.info(f"Granting Top 3 Mod status to {name} ({channel_id})")
                                 success, mod_id_or_err = await self.youtube_api.add_moderator(channel_id)
                                 if success:
@@ -731,18 +721,18 @@ class BotService:
                             else:
                                 logger.warning(f"Cannot grant Top 3 Mod status to {name}: Missing channel_id")
                                 await self._log_ui("WARNING", f"Top 3 Mod: Missing channel ID for {name}. They need to chat once while the bot is active.")
-                                
+
                                 # Cache failure to prevent quota drain
                                 viewer_data["channel_id"] = "NOT_FOUND"
                                 self.viewers.mark_dirty()
-                                
+
                                 # Send Chat Notification if we haven't already
                                 if not hasattr(self, '_notified_missing_mod'):
                                     self._notified_missing_mod = set()
                                 if name not in self._notified_missing_mod:
                                     self._notified_missing_mod.add(name)
                                     asyncio.create_task(self._send_chat(f"🏆 @{name}, you are in the Top 3 Leaderboard! Please send a message in chat so I can automatically give you your Moderator status!"))
-                
+
                 # 6. Save if changes were made
                 if needs_save:
                     updated_rewards.extend(assigned_mods)
@@ -771,7 +761,7 @@ class BotService:
                 active_goals = goals_cfg.get("active_goals", [])
                 needs_save = False  # Only True for achievement / window expiry
                 now = time.time()
-                
+
                 # Setup rewarded set if not exists
                 if not hasattr(self, "_goal_claims"):
                     self._goal_claims = {}
@@ -784,7 +774,7 @@ class BotService:
                         # Broadcast websocket event for goal_update (real-time UI)
                         if self.broadcast_func:
                             asyncio.create_task(self.broadcast_func({"type": "goal_update", "goal": goal}))
-                            
+
                     elif goal.get("type") == "likes":
                         current_likes = getattr(self, "live_likes_count", -1)
                         goal["current"] = current_likes
@@ -805,7 +795,7 @@ class BotService:
                         needs_save = True
                         if self.broadcast_func:
                             asyncio.create_task(self.broadcast_func({"type": "goal_achieved", "goal": goal}))
-                            
+
                     # Check window expiration — THIS triggers a save (rare event)
                     elif goal.get("reward_window_active") and now > goal.get("reward_window_end", 0):
                         goal["reward_window_active"] = False
@@ -818,10 +808,10 @@ class BotService:
                     cfg["goals"]["active_goals"] = active_goals
                     ConfigManager.save_config(cfg)
                     logger.info("Goal state saved (achievement or window change)")
-                
+
             except Exception as e:
                 logger.error(f"Goal Monitoring Loop Error: {e}")
-                
+
             await asyncio.sleep(2) # Frequent checks for real-time progress
 
     async def _email_monitor_loop(self):
@@ -839,7 +829,7 @@ class BotService:
 
                 config = self.load_config()
                 email_cfg = config.get("email_verification", {})
-                
+
                 if not email_cfg.get("enabled"):
                     self.email_status = "Disabled"
                     await asyncio.sleep(10)
@@ -847,17 +837,17 @@ class BotService:
 
                 # Run blocking check in thread
                 success, msg = await asyncio.to_thread(self.email.check_connection)
-                
+
                 if success:
                     self.email_status = "Connected"
                 else:
                     self.email_status = f"Disconnected: {msg}"
                     logger.warning(f"Email Monitor: {self.email_status}")
-            
+
             except Exception as e:
                 self.email_status = f"Error: {str(e)}"
                 logger.error(f"Email Monitor Error: {e}")
-            
+
             await asyncio.sleep(60)
 
     async def connect_email(self):
@@ -871,16 +861,16 @@ class BotService:
             if not config.get("email_verification", {}).get("enabled"):
                 config.setdefault("email_verification", {})["enabled"] = True
                 ConfigManager.save_config(config)
-            
+
             # Check Connection Immediately
             self.email_status = "Connecting..."
             success, msg = await asyncio.to_thread(self.email.check_connection)
-            
+
             if success:
                 self.email_status = "Connected"
             else:
                 self.email_status = f"Disconnected: {msg}"
-                
+
             return {"status": self.email_status, "success": success}
         except Exception as e:
             logger.error(f"Error in connect_email: {e}")
@@ -894,13 +884,13 @@ class BotService:
         if not self.email:
             self.email_status = "Disabled (Service not installed)"
             return {"status": "Disabled", "success": True}
-        
+
         # Update Config
         config = self.load_config()
         if config.get("email_verification", {}).get("enabled"):
             config["email_verification"]["enabled"] = False
             ConfigManager.save_config(config)
-            
+
         self.email._disconnect()
         self.email_status = "Disabled"
         return {"status": "Disabled", "success": True}
@@ -909,7 +899,7 @@ class BotService:
         # 1. Streamer.bot (OBS)
         sb_status = "Disconnected"
         sb_meta = "WebSocket Closed"
-        
+
         # Check if SB WS exists
         if self.is_sb_connected:
                 sb_status = "Connected"
@@ -917,7 +907,7 @@ class BotService:
                 try:
                     remote = self.sb_ws.remote_address[0]
                 except: pass
-                
+
                 sb_meta = f"Host: {remote}"
                 # Verify send capability
                 try:
@@ -931,7 +921,7 @@ class BotService:
         if self.is_sb_connected:
             yt_status = "Monitoring"
             yt_meta = "Via Streamer.bot WS"
-        
+
         # 3. Audio Engine
         audio_status = "Inactive"
         if self.audio:
@@ -941,11 +931,7 @@ class BotService:
             "streamer_bot": {"status": sb_status, "meta": sb_meta},
             "youtube": {"status": yt_status, "meta": yt_meta},
             "audio": {"status": audio_status, "meta": "TTS Ready"},
-            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"},
-            "google_sheets": {
-                "status": "Connected" if self.sheets.connected else "Disconnected",
-                "meta": self.sheets.sheet.title if self.sheets.sheet else (self.sheets.last_error or "Not Connected")
-            }
+            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"}
         }
 
     async def send_test_chat(self):
@@ -990,7 +976,7 @@ class BotService:
 
                 logger.info(f"Connecting to Streamer.bot WS: {uri}")
                 import websockets
-                
+
                 try:
                     async with websockets.connect(uri) as ws:
                         self.sb_ws = ws
@@ -1001,7 +987,7 @@ class BotService:
                             "restart_count": self.worker_health.get("streamerbot", {}).get("restart_count", 0)
                         }
                         await self._log_ui("SYSTEM", "Connected to Streamer.bot WS")
-                        
+
                         subscribe_msg: Dict[str, Any] = {
                             "request": "Subscribe",
                             "id": "PiBotSubs",
@@ -1027,13 +1013,13 @@ class BotService:
                             try:
                                 # Wait for message with timeout to allow config check
                                 msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
-                                
+
                                 try:
                                     data = json.loads(msg)
                                     await self._handle_sb_event(data)
                                 except Exception as process_err:
                                     logger.error(f"SB Event Error: {process_err}")
-                                    
+
                             except asyncio.TimeoutError:
                                 # Timeout reached, check if we should still be connected
                                 if not self.load_config().get("streamer_bot", {}).get("enabled"):
@@ -1042,11 +1028,11 @@ class BotService:
                                     break
                                 # If still enabled, just continue waiting
                                 continue
-                            
+
                             except websockets.exceptions.ConnectionClosed:
                                 logger.info("Streamer.bot Connection Closed.")
                                 break
-                                
+
                             # Also check after receiving a message (fast disconnect)
                             if not self.load_config().get("streamer_bot", {}).get("enabled"):
                                 await ws.close()
@@ -1074,7 +1060,7 @@ class BotService:
         event = data.get("event", {})
         source = event.get("source")
         etype = event.get("type")
-        
+
         # Log Streamer.bot responses (subscribe confirmations, action results, errors)
         if "status" in data:
             req_id = data.get("id", "Unknown")
@@ -1082,11 +1068,11 @@ class BotService:
                 logger.error(f"[SB Response Error] ID: {req_id} | Error: {data.get('error', 'unknown error')}")
             else:
                 logger.info(f"[SB Response] ID: {req_id} | Status: {data['status']}")
-        
+
         # Log every event we receive from SB so we can diagnose missing chat messages
         if source or etype:
             logger.info(f"[SB Event] Source: {source} | Type: {etype} | Keys: {list(data.keys())}")
-        
+
         is_msg = etype in ["Message", "YouTubeMessage"]
         is_alert = etype in [
             "Member", "YouTubeMember", "YouTubeMemberMilestone", "MemberMileStone",
@@ -1101,10 +1087,10 @@ class BotService:
             if is_msg:
                 # ... existing message handling ...
                 msg_data = data.get("data", {})
-                
+
                 # In newer Streamer.bot versions, the message details are nested inside data["message"]
                 inner_msg = msg_data.get("message", {}) if isinstance(msg_data.get("message"), dict) else {}
-                
+
                 # CRASH-SAFE EXTRACTION
                 raw_user = inner_msg.get("user") or msg_data.get("user")
                 name_from_user = None
@@ -1120,27 +1106,27 @@ class BotService:
                     msg_data.get("username") or
                     "Unknown"
                 )
-                
+
                 message = (
                     inner_msg.get("message") or
-                    (msg_data.get("message") if isinstance(msg_data.get("message"), str) else None) or 
-                    msg_data.get("msg") or 
+                    (msg_data.get("message") if isinstance(msg_data.get("message"), str) else None) or
+                    msg_data.get("msg") or
                     msg_data.get("text")
                 )
-                
+
                 msg_id = (
                     inner_msg.get("eventId") or
                     inner_msg.get("internalId") or
-                    msg_data.get("msgId") or 
+                    msg_data.get("msgId") or
                     msg_data.get("eventId") or
                     msg_data.get("id")
                 )
-                
+
                 # ENHANCED ID EXTRACTION: Try all known fields for YouTube Channel ID
                 user_id = (
                     inner_msg.get("user", {}).get("id") or
-                    msg_data.get("user", {}).get("id") or 
-                    msg_data.get("userId") or 
+                    msg_data.get("user", {}).get("id") or
+                    msg_data.get("userId") or
                     msg_data.get("channelId") or
                     msg_data.get("user", {}).get("channelId")
                 )
@@ -1151,10 +1137,10 @@ class BotService:
                     u = msg_data.get("user", {})
                     is_sponsor = u.get("isSponsor", False) or msg_data.get("isSponsor", False) or u.get("role") == "sponsor"
                     is_sub = u.get("isSubscriber", False) or msg_data.get("isSubscriber", False) or u.get("isSubscribed", False) or msg_data.get("isSubscribed", False)
-                    
+
                     class MockChat:
                         class Author:
-                            def __init__(self, name, channel_id=None, sponsor=False, sub=False): 
+                            def __init__(self, name, channel_id=None, sponsor=False, sub=False):
                                 self.name = name
                                 self.channelId = channel_id
                                 self.is_sponsor = sponsor
@@ -1163,9 +1149,9 @@ class BotService:
                             self.author = self.Author(author, channel_id, sponsor, sub)
                             self.message = message
                             self.msg_id = msg_id
-                    
+
                     await self._handle_message(MockChat(author, message, msg_id, user_id, is_sponsor, is_sub))
-            
+
             elif is_alert:
                 # Forward to Cloud Server if running as local client
                 is_client = self.cloud_alert_client.is_running and os.environ.get("RUN_MODE") != "cloud"
@@ -1180,7 +1166,7 @@ class BotService:
                 msg_data = data.get("data", {})
                 logger.info(f"RAW ROOT: {data}") # Log to Terminal
                 await self._log_ui("DEBUG", f"RAW ROOT: {data}") # Log to UI
-                
+
                 # CRASH-SAFE EXTRACTION
                 raw_user = msg_data.get("user")
                 name_from_user = None
@@ -1189,7 +1175,7 @@ class BotService:
                     name_from_user = raw_user.get("name")
                 elif isinstance(raw_user, str):
                     name_from_user = raw_user
-                    
+
                 author = (
                     (str(name_from_user) if name_from_user else None)
                     or msg_data.get("userName")
@@ -1199,15 +1185,15 @@ class BotService:
                     or msg_data.get("author")
                     or "Someone (Fallback)"
                 )
-                
+
                 config = self.load_config()
                 ignore_list = [u.lower().replace("@", "").strip() for u in config.get("moderation", {}).get("ignore_list", [])]
                 author_clean = author.lower().replace("@", "").strip()
                 if author_clean in ignore_list:
                     return
-                
+
                 display_type = etype.replace("YouTube", "")
-                
+
                 # TEMPLATED MESSAGES
                 # Customize these to match the bot's personality
                 templates = {
@@ -1230,23 +1216,23 @@ class BotService:
                         "Calculated Charity! {author} gifts a sub! 🤓"
                     ]
                 }
-                
+
                 # random is imported at top level
                 if display_type in templates:
                     alert_msg = random.choice(templates[display_type]).format(author=author)
                 else:
                     # Generic Fallback
                     alert_msg = f"Alert! {author} triggered {display_type}! 🚀"
-                
+
                 await self._log_ui("ALERT", alert_msg, meta=data)
-                
+
                 # FIX: Send alert to YouTube chat via Streamer.bot (NOT direct YouTube API)
                 await self._send_chat(alert_msg)
-                
+
                 if self.audio:
                     # For TTS, keep it slightly simpler or same
                     await self.audio.speak(f"Thank you {author} for the {display_type}!", "public")
-                
+
                 # Map specific events to granular actions
                 action_map = {
                     "NewSubscriber": "YouTube Subscriber",
@@ -1261,20 +1247,20 @@ class BotService:
                     "RANK_UP": "Bot Rank Up",
                     "LOYALTY": "Bot Loyalty"
                 }
-                
+
                 # Default fallback
                 target_action = "YouTube Alerts"
-                
+
                 # Check mapping
                 clean_type = display_type.replace("YouTube", "") # e.g. YouTubeSuperChat -> SuperChat
                 for key, action in action_map.items():
                     if key in clean_type:
                         target_action = action
                         break
-                
+
                 # Determine event category for _fire_sb_alert
                 event_category = "Monetization" if clean_type in ["SuperChat", "SuperSticker"] else "Engagement"
-                
+
                 # Trigger the specific action
                 await self._fire_sb_alert(display_type.upper(), alert_msg, author, event_category, action_name=target_action)
 
@@ -1288,10 +1274,10 @@ class BotService:
 
                     # Increment immediately
                     self.subscriber_count += 1
-                    
+
                     # Log for debugging
                     logger.info(f"REAL-TIME UPDATE: Subscriber Count incremented to {self.subscriber_count}")
-                    
+
                     # Persist & Broadcast (Force broadcast even if save fails)
                     self._save_subscriber_count()
                     if callable(self.on_subscriber_update):
@@ -1301,7 +1287,7 @@ class BotService:
                 # LOGGING TO SHEETS AND LOYALTY POINTS (Super Chat / Member / Gift)
                 config = self.load_config()
                 loyalty_cfg = config.get("loyalty", {})
-                
+
                 # Membership Points
                 if display_type in ["NewSponsor", "Member", "MemberMilestone"]:
                     # Try to extract tier
@@ -1314,18 +1300,18 @@ class BotService:
                         pts = loyalty_cfg.get("points_per_membership_l2", 0)
                     else:
                         pts = loyalty_cfg.get("points_per_membership_l1", 0)
-                    
+
                     if pts > 0:
                         self.viewers.add_points(author, pts)
                         logger.info(f"Awarded {pts} points to {author} for Membership ({tier_str})")
-                        
+
                 elif display_type in ["GiftSub", "MembershipGift", "YouTubeMembershipGift"]:
                     # Try to extract number of gifts
                     try:
                         count = int(msg_data.get("count", msg_data.get("giftCount", 1)))
                     except Exception:
                         count = 1
-                    
+
                     base_pts = loyalty_cfg.get("points_per_gifted_membership", 0)
                     pts = base_pts * count
                     if pts > 0:
@@ -1337,7 +1323,7 @@ class BotService:
                     # Extract Amount if possible
                     # Data structure varies, usually in msg_data
                     amount_str = msg_data.get("amount") or msg_data.get("displayString") or "Unknown"
-                    
+
                     # Award Loyalty Points based on amount
                     try:
                         # re is imported at top level
@@ -1349,7 +1335,7 @@ class BotService:
                                 pts_per_rupee = loyalty_cfg.get("points_per_superchat_rupee", 0)
                             else:
                                 pts_per_rupee = loyalty_cfg.get("points_per_supersticker_rupee", 0)
-                                
+
                             if pts_per_rupee > 0:
                                 pts_to_add = int(amount_val * pts_per_rupee)
                                 self.viewers.add_points(author, pts_to_add)
@@ -1357,14 +1343,7 @@ class BotService:
                     except Exception as e:
                         logger.error(f"Failed to award points for {display_type}: {e}")
 
-                    # Only log Monetization types to sheets
-                    await self.sheets.log_transaction({
-                        "user": author,
-                        "amount": amount_str,
-                        "type": "Super Chat" if "SuperChat" in display_type else "Super Sticker",
-                        "message": msg_data.get("message") or msg_data.get("comment") or "",
-                        "transaction_id": msg_data.get("eventId") or f"sc_{int(time.time())}"
-                    })
+
 
         # Handle Responses to our requests
         rid = data.get("id", "")
@@ -1373,15 +1352,15 @@ class BotService:
             # Format depends on SB version, usually data.broadcaster.subscriberCount or similar
             try:
                 # Log structure to understand it
-                # await self._log_ui("DEBUG", f"SB Info: {str(data)[:200]}...") 
-                
+                # await self._log_ui("DEBUG", f"SB Info: {str(data)[:200]}...")
+
                 # Broadcaster Info Response logic
                 broadcaster = data.get("broadcaster", {})
                 if not broadcaster:
                      broadcaster = data.get("data", {}) # Sometimes directly in data
-                
+
                 sub_count = broadcaster.get("subscriberCount") or broadcaster.get("subscriber_count")
-                
+
                 if sub_count is not None:
                     self.subscriber_count = int(sub_count)
                     self._save_subscriber_count()
@@ -1401,25 +1380,25 @@ class BotService:
         author = data.get("user", "Test User")
         amount = data.get("amount", "₹100")
         message = data.get("message", "This is a test Super Chat!")
-        
-        # Calculate tier color/style based on amount is handled by frontend mostly, 
+
+        # Calculate tier color/style based on amount is handled by frontend mostly,
         # but we pass raw data matching SB format.
-        
+
         # Trigger the alert via the same mechanism as real events
-        # "SUPERCHAT" is the display_type expected by _fire_sb_alert logic if we were parsing it, 
+        # "SUPERCHAT" is the display_type expected by _fire_sb_alert logic if we were parsing it,
         # but here we call _fire_sb_alert directly.
-        
+
         await self._fire_sb_alert(
-            "SUPERCHAT", 
-            f"💰 {author} dropped {amount}!", 
-            author, 
-            "Monetization", 
+            "SUPERCHAT",
+            f"💰 {author} dropped {amount}!",
+            author,
+            "Monetization",
             action_name="YouTube Super Chat",
             extra_data={
                 "amount": amount,
                 "message": message,
                 "tier": data.get("tier", "blue"), # Optional tier color hint
-                "displayString": amount 
+                "displayString": amount
             }
         )
         return {"status": "success", "message": "Test Super Chat Triggered"}
@@ -1443,7 +1422,7 @@ class BotService:
             # We assume the action name matches exactly an action in SB, OR we map it.
             # For flexibility, let's assume the AI sends the exact name OR a mapped key.
             # Example: <action name="Scare" /> -> triggers action named "Scare"
-            
+
             payload = {
                 "request": "DoAction",
                 "action": {"name": action_name},
@@ -1459,10 +1438,10 @@ class BotService:
         author = chat_obj.author.name.lower()
         if author.startswith('@'):
             author = author[1:]
-            
+
         channel_id = getattr(chat_obj.author, 'channelId', None)
         message = chat_obj.message
-        
+
         # 0. Check Ignore Text List (Silent Ignore)
         if not message.startswith("!"):
             config = self.load_config()
@@ -1473,33 +1452,33 @@ class BotService:
                 if ignore_text and ignore_text.lower() in msg_lower:
                     logger.info(f"Silently ignoring message from {author} containing ignored text: '{ignore_text}'")
                     return None
-        
+
         # Unique ID for Deduplication
         msg_id = getattr(chat_obj, 'msg_id', None) or getattr(chat_obj, 'id', None)
-        
+
         # Secondary content-based deduplication to prevent Streamer.bot + YouTube API double processing
         content_hash = f"{author}:{message}"
         now = time.time()
-        
+
         if (msg_id and msg_id in self.message_dedup_cache) and not force_ai:
             logger.info(f"Duplicate Message Ignored (msg_id): {msg_id}")
             return None
-            
+
         if not hasattr(self, "_content_dedup_dict"):
             self._content_dedup_dict = {}
-            
+
         # Clean up cache if it gets too large
         if len(self._content_dedup_dict) > 500:
             cutoff = now - 30
             self._content_dedup_dict = {k: v for k, v in self._content_dedup_dict.items() if v > cutoff}
-            
+
         last_seen = self._content_dedup_dict.get(content_hash, 0)
         if now - last_seen < 15 and not force_ai:
             logger.info(f"Duplicate Message Ignored (content): {content_hash}")
             return None
-            
+
         self._content_dedup_dict[content_hash] = now
-            
+
         if msg_id:
             self.message_dedup_cache.append(msg_id)
 
@@ -1520,7 +1499,7 @@ class BotService:
                                 self._goal_claims = {}
                             if goal_id not in self._goal_claims:
                                 self._goal_claims[goal_id] = set()
-                            
+
                             aut_lower = author.lower()
                             if aut_lower not in self._goal_claims[goal_id]:
                                 self._goal_claims[goal_id].add(aut_lower)
@@ -1545,13 +1524,13 @@ class BotService:
         # Analytics
         self.session_stats["messages_processed"] = int(self.session_stats.get("messages_processed", 0)) + 1
         self.session_chatters[author] = int(self.session_chatters.get(author, 0)) + 1
-        
+
         # Track Peak Viewers
         current_viewers = len(self.viewers.viewers)
         peak = int(self.session_stats.get("peak_viewers", 0))
         if current_viewers > peak:
             self.session_stats["peak_viewers"] = current_viewers
-        
+
         # Track Commands
         if message.startswith("!"):
             self.session_stats["total_commands"] = int(self.session_stats.get("total_commands", 0)) + 1
@@ -1565,7 +1544,7 @@ class BotService:
         author_clean = author.replace("@", "").strip()
         if author_clean in ignore_list and not force_ai:
             return None
-        
+
         # 1. Viewer Tracking & Loyalty
         stream_offline = config.get("stream_offline", False)
         if stream_offline:
@@ -1574,13 +1553,13 @@ class BotService:
                 viewer_data = {"count": 1, "points": 0, "rank": "Noob"}
         else:
             viewer_data = self.viewers.update_viewer(
-                author, 
+                author,
                 trigger_welcome_cb=self._trigger_welcome,
                 trigger_rank_up_cb=self._trigger_rank_up,
                 check_loyalty_cb=self._check_loyalty,
                 channel_id=channel_id
             )
-            
+
             total_debt = viewer_data.get("loan_principal", 0) + viewer_data.get("loan_interest", 0) + viewer_data.get("loan_fines", 0)
             if total_debt > 0:
                 today = time.strftime("%Y-%m-%d")
@@ -1589,8 +1568,8 @@ class BotService:
                     self.viewers.mark_dirty()
                     asyncio.create_task(self._send_chat(f"🏦 @{author} Reminder: You have an active loan debt of {int(total_debt)} points. Please clear it using !payloan."))
         rank_info = self.viewers.get_rank(viewer_data.get("count", 0), viewer_data.get("watch_time", 0))
-        
-        
+
+
         # 2. Moderation Filters
         if mod_cfg.get("enabled", True):
             if author not in self.mod_locks:
@@ -1607,26 +1586,26 @@ class BotService:
                     if not removed:
                         # All locks are active (very rare), just let it grow temporarily
                         pass
-                
+
             async with self.mod_locks[author]:
                 caught, reason = await self.moderation.run_filters(author, message, mod_cfg)
-            
+
             if caught and not force_ai:
                 logic = mod_cfg.get("protection_logic", {})
                 max_warnings = logic.get("max_warnings", 2)
                 warning_window = logic.get("warning_window", 60)
-                
+
                 # Retrieve warning history
                 warning_history = viewer_data.get("warning_history", [])
                 if not isinstance(warning_history, list):
                     warning_history = []
-                    
+
                 # Append current time
                 warning_history.append(now)
-                
+
                 # Filter history by warning window
                 warning_history = [t for t in warning_history if now - t <= warning_window]
-                
+
                 viewer_data["warning_history"] = warning_history
                 new_warns = len(warning_history)
                 viewer_data["warnings"] = new_warns
@@ -1646,7 +1625,7 @@ class BotService:
                     dur_str = f"{mins} minute{'s' if mins != 1 else ''}" if mins >= 1 else f"{duration} seconds"
                     msg = f"🚫 @{author} You have been timed out for {dur_str} (Broken {max_warnings} rules in {warning_window}s). Reason: {reason}"
                     await self._send_chat(msg)
-                    
+
                     if os.environ.get("RUN_MODE") == "cloud":
                         if getattr(self, "pi_clients", None):
                             payload = {
@@ -1665,9 +1644,9 @@ class BotService:
                             }))
                     else:
                         await self.moderation.trigger_timeout(author, duration, channel_id=channel_id)
-                        
+
                     await self._log_ui("MOD", f"TIMEOUT: {author} for {duration}s. Reason: {reason}")
-                    
+
                     viewer_data["warnings"] = 0
                     viewer_data["warning_history"] = []
                     self.moderation.set_user_mute(author, now + duration + 5)
@@ -1675,7 +1654,7 @@ class BotService:
                 return 1
 
         await self._log_ui("CHAT", f"[{rank_info['emoji']}] {author}: {message}", author=author, meta={"msg_id": msg_id, "channel_id": channel_id}, is_forwarded=is_forwarded)
-        
+
         if self.audio and not message.strip().startswith(("!", "/")):
             await self.audio.speak(f"{author} says: {message}", "secret")
 
@@ -1709,26 +1688,36 @@ class BotService:
         # Load AI triggers configuration
         ai_triggers = config.get("moderation", {}).get("ai_triggers", {})
         ai_enabled = ai_triggers.get("enabled", True)
-        
+
         if ai_enabled:
             ai_prefixes = [p.lower().strip() for p in ai_triggers.get("prefixes", []) if p.strip()]
             ai_keywords = [k.lower().strip() for k in ai_triggers.get("keywords", []) if k.strip()]
-            
-            # Prefix matching (e.g. "!ai", "!ask")
+
+            # Dynamically include configured Agent name as wake keyword
+            agent_wake_name = self.agent.get_agent_name().lower()
+            if agent_wake_name not in ai_keywords:
+                ai_keywords.append(agent_wake_name)
+
+            # Prefix matching (e.g. "!ai", "!ask", "!piya")
             for pref in ai_prefixes:
                 if msg_lower.startswith(f"{pref} ") or msg_lower == pref:
                     should_respond = True
                     if msg_lower.startswith(f"{pref} "):
                         prompt = message[len(pref):].strip()
                     break
-            
-            # Keyword matching (e.g. "bot")
+
+            # Keyword & mention matching (e.g. "piya", "@piya")
             if not should_respond:
                 for kw in ai_keywords:
+                    if msg_lower.startswith(f"@{kw}"):
+                        should_respond = True
+                        prompt = message[len(kw) + 1:].lstrip(" :,").strip()
+                        break
                     if msg_lower.startswith(f"{kw} ") or msg_lower == kw:
                         should_respond = True
+                        prompt = message[len(kw):].strip()
                         break
-                    variations = [f"hey {kw}", f"pi {kw}", f"@{kw}", f"@pi {kw}", f"{kw} bhai", f"{kw} bata", f"{kw} batao"]
+                    variations = [f"hey {kw}", f"pi {kw}", f"@{kw}", f"@pi {kw}", f"{kw} bhai", f"{kw} bata", f"{kw} batao", f"{kw} suno"]
                     if any(v in msg_lower for v in variations):
                         should_respond = True
                         break
@@ -1740,24 +1729,17 @@ class BotService:
                     force_ai = True
                     break
 
-        # Gate by Streamer.bot connection status (unless forced for testing/manual chat or in cloud mode)
-        sb_enabled = config.get("streamer_bot", {}).get("enabled", False)
-        is_cloud = os.environ.get("RUN_MODE") == "cloud"
-        # We now have a YouTube API fallback, so we don't need to suppress responses if SB is disconnected!
-        # if sb_enabled and not self.is_sb_connected and not force_ai and not is_cloud:
-        #     should_respond = False
-
         # Command Parsing & Routing
         cmd_cfg = config.get("commands", {})
         cmd_enabled = cmd_cfg.get("enabled", True)
         cmd_prefix = cmd_cfg.get("prefix", "!")
-        
+
         is_command_run = False
         if cmd_enabled and message.lower().startswith(cmd_prefix.lower()):
             remaining = message[len(cmd_prefix):].strip()
             parts = remaining.split(" ")
             cmd_name = parts[0].lower().strip()
-            
+
             if is_valid_command(cmd_name, config):
                 normalized_message = "!" + cmd_name
                 if len(parts) > 1:
@@ -1768,58 +1750,107 @@ class BotService:
         if is_command_run:
             pass
         elif should_respond:
-            # Check cooldowns (skip if forced)
-            if not force_ai:
-                allowed, reason = self.ai_handler.check_cooldowns_for_api(author, config, force_ai)
-                if not allowed:
-                     return None # Silent fail for chat triggers
+            # Resolve caller role from trusted event metadata
+            is_mod = getattr(chat_obj.author, 'is_moderator', False) or getattr(chat_obj.author, 'is_chat_moderator', False)
+            is_owner = getattr(chat_obj.author, 'is_chat_owner', False) or force_ai
+            caller_role = self.agent.resolve_role(author, user_id=channel_id, is_mod=is_mod, is_owner=is_owner)
 
-            # BRAIN: Try Recall First
-            cached_reply = self.brain.recall_answer(prompt)
-            if cached_reply and not force_ai:
-                logger.info(f"BRAIN: Recalled answer for '{prompt}'")
-                await self._send_chat(f"@{author} {cached_reply}")
-                await self._log_ui("BRAIN", f"Recalled: {cached_reply}", author="Pi Bot")
-                if self.audio:
-                    await self.audio.speak(cached_reply)
-                return cached_reply
+            # BRAIN: Try Recall First (if not forced)
+            if self.agent.is_feature_enabled("memory_enabled") and not force_ai:
+                cached_reply = self.brain.recall_answer(prompt)
+                if cached_reply:
+                    logger.info(f"BRAIN: Recalled answer for '{prompt}'")
+                    await self._send_chat(f"@{author} {cached_reply}")
+                    await self._log_ui("BRAIN", f"Recalled: {cached_reply}", author=self.agent.get_agent_name())
+                    if self.agent.is_feature_enabled("tts_actions") and self.audio:
+                        await self.audio.speak(cached_reply, "public")
+                    return cached_reply
 
-            # YOUTUBE MEMORY: Restore History (7-day context)
-            async def _history_loader(user):
-                 # Use YouTube memory for richer 7-day context
-                 return await asyncio.to_thread(youtube_memory.get_user_history_as_chat, user, 20)
-            
-            await self.ai_handler.ensure_history(author, _history_loader)
-
-            # AI Processing
-            context_kwargs = {}
-            if getattr(self, "_live_context", None):
-                context_kwargs["live_context"] = self._live_context
-                
-            response = await self.ai_handler.process_ai(
-                author, prompt, config, self.viewers, self.audio, self._log_ui, self._send_chat,
-                trigger_action_cb=self._trigger_sb_action,
-                force_ai=force_ai,
-                **context_kwargs
+            # Process request through Central Piya Agent Brain
+            response = await self.agent.process_request(
+                author,
+                channel_id,
+                prompt,
+                caller_role=caller_role,
+                allow_tools=True
             )
+
             if response:
                 self.session_stats["ai_responses"] = int(self.session_stats.get("ai_responses", 0)) + 1
+                await self._send_chat(f"@{author} {response}")
+                await self._log_ui("AI", f"{self.agent.get_agent_name()}: {response}", author=self.agent.get_agent_name())
 
-                # YOUTUBE MEMORY: Update AI reply
-                if yt_row_id and self.yt_memory_enabled:
+                # Speak TTS if enabled
+                if self.agent.is_feature_enabled("tts_actions") and self.audio:
+                    await self.audio.speak(response, "public")
+
+                # YouTube Memory & Brain Updates
+                if yt_row_id and self.yt_memory_enabled and self.agent.is_feature_enabled("chat_history"):
                     try:
                         youtube_memory.update_ai_reply(yt_row_id, response)
                     except Exception as e:
                         logger.error(f"YouTube Memory Reply Update Error: {e}")
 
-
-                
-                # BRAIN: Learn from AI
-                if response:
-                    self.brain.learn(prompt, response)
+                if self.agent.is_feature_enabled("memory_enabled"):
+                    try:
+                        self.brain.learn(prompt, response)
+                    except Exception as e:
+                        logger.warning(f"Brain learn error: {e}")
 
             return response
-            
+
+        elif not message.startswith(("!", "/")):
+            # ── AUTOMATIC / RANDOM VIEWER CONVERSATION ──
+            auto_cfg = self.agent.get_config().get("auto_chat", {})
+            auto_switched = self.agent.is_feature_enabled("auto_chat") and auto_cfg.get("enabled", False)
+            if auto_switched:
+                stream_live_only = auto_cfg.get("stream_live_only", True)
+                is_live = getattr(self, "is_live", True)
+                if not stream_live_only or is_live:
+                    mod_cfg = config.get("moderation", {})
+                    ignore_list = [u.lower() for u in mod_cfg.get("ignore_list", [])]
+                    bot_name_lower = self.agent.get_agent_name().lower()
+                    aut_lower = author.lower()
+
+                    if aut_lower not in ignore_list and aut_lower != bot_name_lower and "bot" not in aut_lower:
+                        now = time.time()
+                        global_cd = auto_cfg.get("global_cooldown", 60)
+                        user_cd = auto_cfg.get("user_cooldown", 180)
+                        max_session = auto_cfg.get("max_session_replies", 50)
+                        session_count = getattr(self, "_session_auto_chat_count", 0)
+
+                        if session_count < max_session:
+                            last_global = getattr(self, "_last_auto_chat_time", 0.0)
+                            if not hasattr(self, "_user_last_auto_chat"):
+                                self._user_last_auto_chat = {}
+                            last_user = self._user_last_auto_chat.get(aut_lower, 0.0)
+
+                            if (now - last_global >= global_cd) and (now - last_user >= user_cd):
+                                import random
+                                prob = float(auto_cfg.get("probability", 0.05))
+                                if random.random() < prob:
+                                    # Critical safety boundary: allow_tools is FALSE
+                                    auto_reply = await self.agent.process_request(
+                                        author, channel_id, message,
+                                        caller_role="viewer",
+                                        allow_tools=False,
+                                        is_auto_chat=True
+                                    )
+                                    if auto_reply:
+                                        max_len = int(auto_cfg.get("max_length", 150))
+                                        if len(auto_reply) > max_len:
+                                            auto_reply = auto_reply[:max_len].rsplit(" ", 1)[0]
+
+                                        self._last_auto_chat_time = now
+                                        self._user_last_auto_chat[aut_lower] = now
+                                        self._session_auto_chat_count = session_count + 1
+
+                                        await self._send_chat(f"@{author} {auto_reply}")
+                                        await self._log_ui("AUTO_CHAT", f"{self.agent.get_agent_name()} to @{author}: {auto_reply}")
+
+                                        if self.agent.is_feature_enabled("tts_actions") and self.audio:
+                                            await self.audio.speak(auto_reply, "public")
+
         return None
 
     async def _handle_command(self, author, message, chat_obj=None):
@@ -1830,7 +1861,7 @@ class BotService:
         config = self.load_config()
         if config.get("stream_offline", False):
             offline_blocked_cmds = [
-                "!claim", "!give", "!rob", "!rps", "!heist", "!spin", 
+                "!claim", "!give", "!rob", "!rps", "!heist", "!spin",
                 "!slots", "!roll", "!gamble", "!bet", "!loan", "!pay"
             ]
             if cmd in offline_blocked_cmds:
@@ -1852,17 +1883,17 @@ class BotService:
             msg_count = v.get("count", 0)
             watch_time = v.get("watch_time", 0)
             watch_hours = watch_time / 3600.0
-            
+
             # Find next rank
             cfg = self.load_config().get("loyalty", {})
             ranks = cfg.get("ranks", self.viewers.ranks)
             sorted_ranks = sorted(ranks, key=lambda x: int(x.get("min_messages", 0)), reverse=True)
-            
+
             rank_obj = self.viewers.get_rank(msg_count, watch_time)
             rank = rank_obj["name"]
             emoji = rank_obj.get("emoji", "")
-            
-            # Since ranks are sorted descending, we want to find the first rank (from the top) 
+
+            # Since ranks are sorted descending, we want to find the first rank (from the top)
             # that is strictly greater than current messages OR current hours.
             # Wait, the "next rank" is the one directly above their current rank.
             # We can find it by going ascending and finding the first one they don't meet.
@@ -1874,7 +1905,7 @@ class BotService:
                 if msg_count < req_m or watch_hours < req_h:
                     next_rank = r
                     break
-                
+
             if next_rank:
                 req_m = int(next_rank.get("min_messages", 0)) - msg_count
                 req_h = float(next_rank.get("min_hours", 0)) - watch_hours
@@ -1884,36 +1915,26 @@ class BotService:
                 await self._send_chat(f"@{author} You have {pts} Points, {msg_count} Messages, {watch_hours:.1f} Hrs! Rank: {rank} {emoji}. Need {req_str} for {next_rank['name']}!")
             else:
                 await self._send_chat(f"@{author} You have {pts} Points, {msg_count} Messages, {watch_hours:.1f} Hrs! Rank: {rank} {emoji}. You are at the highest rank!")
-                
+
         elif cmd == "!give":
             if not self.gambling._is_game_enabled("give"):
                 await self._send_chat(f"@{author} The !give command is currently disabled by the streamer.")
                 return
-                
+
             if len(args) < 2:
                 await self._send_chat(f"@{author} Usage: !give <username> <amount>")
                 return
             target = args[0].replace('@', '').strip()
             try:
                 amount = int(args[1])
-                if amount <= 0:
-                    await self._send_chat(f"@{author} Amount must be positive!")
-                    return
-                if target not in self.viewers.viewers:
-                    await self._send_chat(f"@{author} transfer failed! Target user '{target}' has never visited this stream.")
-                    return
-                v = self.viewers.get_viewer(author)
-                if v.get("points", 0) < amount:
-                    await self._send_chat(f"@{author} transfer failed! Insufficient points (You have {v.get('points', 0)}).")
-                    return
-                
-                success = self.viewers.transfer_points(author, target, amount)
-                if success:
-                    self.gambling._log_economy_action(author, "give", amount, target=target, win=True, payout=amount)
-                    await self._send_chat(f"@{author} successfully gave {amount} Points to {target}!")
+                res = self.viewers.transfer_points_detailed(author, target, amount)
+                if res.get("success"):
+                    actual_target = res.get("receiver", target)
+                    self.gambling._log_economy_action(author, "give", amount, target=actual_target, win=True, payout=amount)
+                    await self._send_chat(f"@{author} successfully gave {amount} Points to {actual_target}!")
                 else:
-                    await self._send_chat(f"@{author} transfer failed!")
-            except ValueError:
+                    await self._send_chat(f"@{author} transfer failed! {res.get('message', 'Transaction could not be completed.')}")
+            except (ValueError, TypeError):
                 await self._send_chat(f"@{author} Please enter a valid number for amount.")
 
         elif cmd == "!catch":
@@ -1921,7 +1942,7 @@ class BotService:
                 return
             result = await self.pokemon.handle_catch(author)
             await self._send_chat(result)
-            
+
         elif cmd == "!battle":
             if not getattr(self, "pokemon", None):
                 return
@@ -1956,7 +1977,7 @@ class BotService:
                     await self._send_chat(f"@{author} Invalid bet amount.")
             else:
                 await self._send_chat(f"@{author} Usage: !battle [@user] <bet_amount> <pokemon_name>")
-                
+
         elif cmd == "!accept":
             if not getattr(self, "pokemon", None):
                 return
@@ -2000,7 +2021,7 @@ class BotService:
                 result = await self.pokemon.handle_show_pokemon(author, poke_name)
                 if result:
                     await self._send_chat(result)
-                    
+
         elif cmd == "!show":
             if args and args[0].lower() == "pokemon":
                 if not getattr(self, "pokemon", None):
@@ -2019,14 +2040,14 @@ class BotService:
                 await self._send_chat(f"@{author} Usage: !rob <username>")
                 return
             target = args[0].replace('@', '')
-            
+
             # Cooldown check for rob (to prevent spam)
             cooldown_key = f"rob_{author}"
             last_used = self._custom_cmd_cooldowns.get(cooldown_key, 0)
             if time.time() - last_used < 60:
                 await self._send_chat(f"@{author} The cops are still looking for you! Wait 1 minute before robbing again.")
                 return
-            
+
             self._custom_cmd_cooldowns[cooldown_key] = time.time()
             result = await self.gambling.rob(author, target, self.viewers)
             await self._send_chat(result["message"])
@@ -2035,36 +2056,36 @@ class BotService:
             if not args:
                 await self._send_chat(f"@{author} Usage: !buy <item_name>. Use !shop to see available rewards.")
                 return
-            
+
             # Map !buy to !redeem
             redeem_name = " ".join(args)
             await self._handle_redeem_cmd(author, redeem_name, chat_obj)
 
         elif cmd == "!clip":
             config = self.load_config()
-            
+
             # --- START NEW CLIP SETTINGS LOGIC ---
             clip_settings = config.get("clip_settings", {})
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
             # Fallback to persisted memory if Streamer.bot didn't flag them in this chat message
             if not is_sponsor and self.viewers.viewers.get(author, {}).get("is_sponsor"):
                 is_sponsor = True
-                
+
             # Determine role and tier settings
             role_key = "everyone"
             if is_sponsor:
                 role_key = "member"
-                
+
             tier_config = clip_settings.get(role_key, {})
             # Defaults
             is_enabled = tier_config.get("enabled", True)
             cost = int(tier_config.get("point_cost", 0))
             daily_limit = int(tier_config.get("daily_limit", 3 if role_key == "everyone" else 10))
-            
+
             if not is_enabled:
                 await self._send_chat(f"@{author} ⚠️ Ye command abhi sirf Members ke liye hai! 💎 Become a Channel Member to use !clip!")
                 return
-                
+
             # Check Daily Limit
             import datetime
             today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -2072,11 +2093,11 @@ class BotService:
             clip_stats = v.get("clip_stats", {"date": today, "count": 0})
             if clip_stats.get("date") != today:
                 clip_stats = {"date": today, "count": 0}
-                
+
             if clip_stats["count"] >= daily_limit:
                  await self._send_chat(f"@{author} You have reached your daily limit of {daily_limit} clips!")
                  return
-                 
+
             # Check Points
             if cost > 0:
                 total_pts = self.viewers.get_total_points(author)
@@ -2086,7 +2107,7 @@ class BotService:
             # --- END NEW CLIP SETTINGS LOGIC ---
 
             channel_id = config.get("youtube", {}).get("channel_id")
-            
+
             video_id_arg = None
             if len(args) > 0 and args[0]:
                 video_id_arg = args[0]
@@ -2096,12 +2117,12 @@ class BotService:
             else:
                 await self._send_chat(f"@{author} Error: Channel ID not configured.")
                 return
-                
+
             try:
                 metadata = {}
                 import calendar
                 from datetime import datetime
-                
+
                 if not video_id_arg:
                     api_context = getattr(self, "_live_context", None)
                     if not api_context or not api_context.get("actualStartTime"):
@@ -2137,7 +2158,7 @@ class BotService:
                                     }
                     except Exception as e:
                         logger.error(f"Clip specific video API Error: {e}")
-                
+
                 if not metadata:
                     def get_metadata():
                         import json, urllib.request, re, subprocess, sys
@@ -2154,7 +2175,7 @@ class BotService:
                                     return {"id": data["videoDetails"]["videoId"], "is_live": True, "release_timestamp": calendar.timegm(dt.timetuple()), "title": data["videoDetails"]["title"]}
                         except Exception as e:
                             logger.warning(f"HTML scraper failed, falling back to yt-dlp: {e}")
-                        
+
                         try:
                             res = subprocess.run([sys.executable, "-m", "yt_dlp", "-J", "--no-warnings", "--no-playlist", "--extractor-args", "youtube:player_client=ios,android", channel_url], capture_output=True, text=True, check=False, timeout=15)
                             if res.returncode == 0:
@@ -2176,16 +2197,16 @@ class BotService:
                         except Exception as e:
                             return {"error": str(e)}
                         return {"error": "Failed"}
-                        
+
                     metadata = await asyncio.to_thread(get_metadata)
-                
+
                 if metadata.get("error"):
                     await self._send_chat(f"@{author} Error: {metadata.get('error')[:200]}")
                     return
-                    
+
                 video_id = metadata.get("id") or video_id_arg
                 start_ts = metadata.get("release_timestamp")
-                
+
                 if video_id and start_ts:
                     # Execute create_clip on the Cloud server directly
                     await self.handle_pi_client_event({
@@ -2196,16 +2217,16 @@ class BotService:
                         "title": metadata.get("title", "Live Stream"),
                         "thumbnail": metadata.get("thumbnail")
                     })
-                    
+
                     # Deduct points and increment daily stats
                     if cost > 0:
                         self.viewers.deduct_points(author, cost)
-                    
+
                     if author not in self.viewers.viewers:
                         self.viewers.viewers[author] = {"points": 0, "count": 0}
                     clip_stats["count"] += 1
                     self.viewers.viewers[author]["clip_stats"] = clip_stats
-                    
+
                 else:
                     await self._send_chat(f"@{author} Could not get live stream start time. Is the stream live?")
             except Exception as e:
@@ -2260,7 +2281,7 @@ class BotService:
             total_points = self.viewers.get_total_points(author)
             result = await self.gambling.bat(author, amount, total_points, self.viewers)
             await self._send_chat(result["message"])
-                
+
 
         elif cmd in ["!pokeattack", "!pattack"]:
             if not getattr(self, "pokemon", None):
@@ -2294,11 +2315,11 @@ class BotService:
             try:
                 total_points = self.viewers.get_total_points(author)
                 result = self.boss_fight.attack_boss(author, amount, total_points, self.viewers)
-                
+
                 if not result["success"]:
                     await self._send_chat(f"@{author} {result['message']}")
                     return
-                
+
                 # Send websocket event for damage
                 if self.broadcast_func:
                     asyncio.create_task(self.broadcast_func({
@@ -2307,7 +2328,7 @@ class BotService:
                         "damage": result["actual_damage"],
                         "current_hp": result["current_hp"]
                     }))
-                    
+
                 if result["defeated"]:
                     rewards = self.boss_fight.process_rewards(self.viewers)
                     top_msg = ", ".join([f"{r[0]} (+{r[1]})" for r in rewards["top_rewards"]])
@@ -2332,7 +2353,7 @@ class BotService:
             if not args:
                 await self._handle_memes_cmd(author)
                 return
-            
+
             redeem_name = " ".join(args)
             await self._handle_redeem_cmd(author, redeem_name, chat_obj)
 
@@ -2343,20 +2364,20 @@ class BotService:
             if os.environ.get("RUN_MODE") != "cloud" and not getattr(self, "cloud_alert_client", None):
                 await self._send_chat(f"@{author} 🏦 The Cloud Banking System is offline.")
                 return
-            
+
             cfg = self.load_config().get("loyalty", {})
             loan_plans = cfg.get("loan_plans", [])
             if not loan_plans:
                 await self._send_chat(f"@{author} 🏦 No loan plans are currently available.")
                 return
-                
+
             if not args:
                 v = self.viewers.get_viewer(author)
                 total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
                 if args and args[0] == "info":
                      await self._send_chat(f"@{author} 🏦 Debt Info: Principal: {v.get('loan_principal', 0)}, Interest: {v.get('loan_interest', 0)}, Fines: {v.get('loan_fines', 0)}. Total Debt: {int(total_debt)}")
                      return
-                
+
                 plans_list = []
                 for idx, p in enumerate(loan_plans):
                     ptype = p.get('type', 'daily')
@@ -2364,7 +2385,7 @@ class BotService:
                         plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Lumpsum ({p.get('duration_days', 7)}d, {p.get('total_interest_pct', 0)}% tot)")
                     else:
                         plans_list.append(f"{p.get('id', idx+1)}: {p.get('amount', 0)}pts Daily ({p.get('duration_days', 7)}d, {p.get('daily_interest_pct', 0)}%/d)")
-                
+
                 await self._send_chat(f"@{author} 🏦 Loan Plans:")
                 await asyncio.sleep(1.5)
                 for p in plans_list:
@@ -2372,7 +2393,7 @@ class BotService:
                     await asyncio.sleep(1)
                 await self._send_chat(f"@{author} Use !loan take <id> to borrow, or !loan info to check debt.")
                 return
-                
+
             action = args[0].lower()
             if action == "info":
                 v = self.viewers.get_viewer(author)
@@ -2389,7 +2410,7 @@ class BotService:
                 if not target_plan:
                     await self._send_chat(f"@{author} 🏦 Invalid loan plan ID.")
                     return
-                
+
                 # Check limits/anti-stacking
                 res = self.viewers.take_loan(author, target_plan)
                 await self._send_chat(f"@{author} {res['message']}")
@@ -2400,21 +2421,21 @@ class BotService:
             if os.environ.get("RUN_MODE") != "cloud" and not getattr(self, "cloud_alert_client", None):
                 await self._send_chat(f"@{author} 🏦 The Cloud Banking System is offline.")
                 return
-                
+
             if not args:
                 await self._send_chat(f"@{author} 🏦 Usage: !payloan <amount>, !payloan all, or !payloan <plan_id>")
                 return
-                
+
             v = self.viewers.get_viewer(author)
             total_debt = v.get("loan_principal", 0) + v.get("loan_interest", 0) + v.get("loan_fines", 0)
-            
+
             if total_debt <= 0:
                 await self._send_chat(f"@{author} 🏦 You do not have any active loan debt.")
                 return
-                
+
             active_plan_id = str(v.get("loan_plan_id", ""))
             arg = args[0].lower()
-            
+
             if arg == "all":
                 amount = int(total_debt)
             elif arg == active_plan_id:
@@ -2422,7 +2443,7 @@ class BotService:
                 loan_plans = {str(p.get("id", idx+1)): p for idx, p in enumerate(cfg.get("loan_plans", []))}
                 plan = loan_plans.get(active_plan_id, {})
                 ptype = plan.get("type", "daily")
-                
+
                 if ptype == "lumpsum":
                     amount = int(total_debt)
                 else:
@@ -2438,7 +2459,7 @@ class BotService:
                 except ValueError:
                     await self._send_chat(f"@{author} 🏦 Invalid input. Usage: !payloan <amount>, !payloan all, or !payloan <plan_id>")
                     return
-                    
+
             res = self.viewers.pay_loan(author, amount)
             await self._send_chat(f"@{author} {res['message']}")
 
@@ -2471,7 +2492,7 @@ class BotService:
                             self._total_downtime = 0
                             self._last_disconnect = 0
                             logger.info(f"New stream detected! Resetting total_downtime. (ID: {context['id']})")
-                            
+
                         self._live_context = context
                         logger.info(f"Updated Live Context: {context['title']}")
                 else:
@@ -2493,10 +2514,10 @@ class BotService:
                 if not self.is_sb_connected:
                     await asyncio.sleep(60)
                     continue
-                    
+
                 # Random sleep between 15 to 30 minutes
                 await asyncio.sleep(random.randint(900, 1800))
-                
+
                 # Double check after sleep
                 if not self.is_sb_connected:
                     continue
@@ -2550,16 +2571,16 @@ class BotService:
                     promo_text = random.choice(subscribe_promos)
                     await self._send_chat(promo_text)
                     await self._log_ui("AUTO_MSG", promo_text, author="AutoBot (Promo)")
-                    
+
                 elif choice == "loot_drop":
                     self._loot_box_active = True
                     drop_msg = "🎁 LOOT BOX drop hua hai! Pehle `!claim` karo aur 100-1000 random Points jeeto! Jaldi karo, 60 seconds hain! ⏰"
                     await self._send_chat(drop_msg)
                     await self._log_ui("AUTO_MSG", drop_msg, author="AutoBot (Loot Drop)")
-                    
+
                     # Auto-expire loot box after 60 seconds if no one claims
                     asyncio.create_task(self._expire_loot_box())
-                    
+
                 elif choice == "rivalry":
                     # Find two active viewers with close points
                     leaderboard = self.viewers.get_leaderboard(limit=10)
@@ -2572,7 +2593,7 @@ class BotService:
                         msg = f"⚔️ @{u1['name']} aur @{u2['name']} ke beech sirf {diff} points ka fark hai! Koi `!rob` karega ya `!gamble` se aage niklega? 🔥"
                         await self._send_chat(msg)
                         await self._log_ui("AUTO_MSG", msg, author="AutoBot (Rivalry)")
-                        
+
             except Exception as e:
                 logger.error(f"[Dynamic Engagement] Error: {e}")
                 await asyncio.sleep(60)
@@ -2599,10 +2620,10 @@ class BotService:
     async def _handle_redeem_cmd(self, author, redeem_name, chat_obj=None):
         custom_title_text = None
         reward = None
-        
+
         # Available rewards to match the index shown in !shop
         available = [r for r in self.redeem_svc.redeems if r.get("enabled", True)]
-        
+
         # Check if the redeem_name is entirely digits (e.g. "!redeem 1")
         if redeem_name.isdigit():
             idx = int(redeem_name) - 1
@@ -2620,7 +2641,7 @@ class BotService:
         # If not found by index, try by exact name
         if not reward:
             reward = self.redeem_svc.get_by_name(redeem_name)
-            
+
         if not reward:
             # Check for rewards which may have additional text (e.g. custom titles) by name
             for cr in available:
@@ -2638,14 +2659,14 @@ class BotService:
         if not reward:
             await self._send_chat(f"@{author} Unknown reward '{redeem_name}'. Use !shop to see list.")
             return
-        
+
         # Inject custom title text into the reward object temporarily
         if custom_title_text:
             reward = dict(reward) # Create a copy so we don't modify the service's dict
             reward["custom_title_text"] = custom_title_text
-        
+
         target_sb_ws = self.sb_ws
-        
+
         # Proxy for Cloud to send actions via Local Pi
         if os.environ.get("RUN_MODE") == "cloud":
             class CloudSBProxy:
@@ -2670,9 +2691,9 @@ class BotService:
             reward_obj = dict(result.get("reward", reward))
             if "custom_title_text" in reward:
                 reward_obj["custom_title_text"] = reward["custom_title_text"]
-                
+
             reward_type = reward_obj.get("type", "obs")
-            
+
             # Execute native rewards
             if reward_type != "obs":
                 error_msg = await self._apply_api_reward(author, reward_type, reward_obj, chat_obj)
@@ -2681,12 +2702,12 @@ class BotService:
                     self.redeem_svc._cooldowns.pop(reward["id"], None) # Clear cooldown
                     await self._send_chat(f"@{author} {error_msg} (Refunded {reward_obj['cost']} Points)")
                     return
-                
+
             if "custom_message" in result and result["custom_message"]:
                 await self._send_chat(result["custom_message"])
             else:
                 await self._send_chat(f"🎉 {author} redeemed {reward_obj['name']}! 🔥")
-                
+
             await self._log_ui("REWARD", f"{author} redeemed {reward_obj['name']} for {reward_obj['cost']} Points")
         else:
             await self._send_chat(f"@{author} {result['error']}")
@@ -2705,7 +2726,7 @@ class BotService:
 
         class MockChat:
             class Author:
-                def __init__(self, name, channel_id=None, sponsor=False, sub=False): 
+                def __init__(self, name, channel_id=None, sponsor=False, sub=False):
                     self.name = name
                     self.channelId = channel_id
                     self.is_sponsor = sponsor
@@ -2715,14 +2736,14 @@ class BotService:
                 self.message = message
                 self.msg_id = msg_id
                 self.id = msg_id
-        
+
         # If force_ai is true, we want to ensure we get a response, so we pass that along.
         # Note: We rely on _handle_message's deduplication logic now.
         response = await self._handle_message(MockChat(user, message, msg_id, channel_id, is_sponsor, is_sub), force_ai=force_ai)
-        
+
         if response:
              return {"botReply": response}
-             
+
         return {"botReply": ""}
 
     async def _send_youtube_chat(self, message):
@@ -2842,10 +2863,10 @@ class BotService:
             is_sub = event.get("is_sub", False)
             is_forwarded = event.get("is_forwarded", False)
             force_ai = event.get("force_ai", False)
-            
+
             class MockChat:
                 class Author:
-                    def __init__(self, name, channel_id=None, sponsor=False, sub=False): 
+                    def __init__(self, name, channel_id=None, sponsor=False, sub=False):
                         self.name = name
                         self.channelId = channel_id
                         self.is_sponsor = sponsor
@@ -2855,9 +2876,9 @@ class BotService:
                     self.message = message
                     self.msg_id = msg_id
                     self.id = msg_id
-            
+
             await self._handle_message(MockChat(author, message, msg_id, channel_id, is_sponsor, is_sub), is_forwarded=is_forwarded, force_ai=force_ai)
-            
+
         elif etype == "pi_heartbeat":
             self.last_pi_heartbeat = time.time()
             if "streamerbot_connected" in event:
@@ -2887,18 +2908,18 @@ class BotService:
             self.last_stream_state_timestamp = float(event.get("timestamp", time.time()))
             self.last_pi_heartbeat = time.time()
             logger.info(f"Local Pi reported stream status: {'LIVE' if self._remote_stream_live else 'OFFLINE'} (source: {event.get('source')})")
-                
+
         elif etype == "stream_disconnected":
             self._last_disconnect = time.time()
             logger.warning("Stream disconnected! Tracking buffering downtime.")
-            
+
         elif etype == "stream_reconnected":
             if hasattr(self, "_last_disconnect") and self._last_disconnect > 0:
                 downtime = time.time() - self._last_disconnect
                 self._total_downtime = getattr(self, "_total_downtime", 0) + downtime
                 self._last_disconnect = 0
                 logger.info(f"Stream reconnected! Added {downtime:.2f}s of buffering. Total downtime: {self._total_downtime:.2f}s")
-            
+
         elif etype == "sb_event":
             sb_data = event.get("data")
             if sb_data:
@@ -2912,16 +2933,16 @@ class BotService:
             current_time = int(time.time())
             stream_duration = current_time - start_timestamp
             total_downtime = int(getattr(self, "_total_downtime", 0))
-            
+
             # Prevent overnight Streamer.bot disconnects from corrupting clip times
             if total_downtime > stream_duration:
                 logger.warning(f"Clip downtime ({total_downtime}s) exceeds stream duration ({stream_duration}s). Resetting downtime.")
                 self._total_downtime = 0
                 total_downtime = 0
-                
+
             elapsed_seconds = max(0, stream_duration - total_downtime)
             clip_url = f"https://youtu.be/{video_id}?t={elapsed_seconds}s"
-            
+
             timestamp_str = time.strftime("%H:%M:%S", time.localtime(current_time))
             clip_entry = {
                 "timestamp": timestamp_str,
@@ -2929,16 +2950,16 @@ class BotService:
                 "url": clip_url,
                 "status": "Generated"
             }
-            
+
             if not hasattr(self, "recent_clips"):
                 self.recent_clips = []
             self.recent_clips.insert(0, clip_entry)
             if len(self.recent_clips) > 100:
                 self.recent_clips = self.recent_clips[:100]
-            
+
             # Use self._send_chat so it gets broadcasted back to the Pi
             await self._send_chat(f"🎬 @{author}, aapka epic moment save kar liya gaya hai! Link Discord par bhej diya hai, check out #stream-clips channel! 🚀")
-            
+
             # Discord Integration
             config = self.load_config()
             dc_cfg = config.get("discord_integration", {})
@@ -2946,7 +2967,7 @@ class BotService:
                 dc_cfg = config.get("discord", {})
             bot_token = dc_cfg.get("bot_token")
             channel_ids_str = dc_cfg.get("channel_ids") or dc_cfg.get("channel_id")
-            
+
             if bot_token and channel_ids_str:
                 embed = {
                     "title": "🎬 New Stream Clip!",
@@ -2961,9 +2982,9 @@ class BotService:
                 }
                 # Use the large image field for Discord instead of a small thumbnail
                 embed["image"] = {"url": f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"}
-                    
+
                 payload = {"embeds": [embed]}
-                
+
                 async def send_discord_msgs():
                     import httpx
                     async with httpx.AsyncClient() as client:
@@ -2980,7 +3001,7 @@ class BotService:
                                     logger.error(f"Discord API Error {resp.status_code}: {resp.text}")
                             except Exception as e:
                                 logger.error(f"Failed to send to Discord channel {cid}: {e}")
-                
+
                 self._spawn_task(send_discord_msgs())
 
         elif etype == "sync_config":
@@ -3091,7 +3112,7 @@ class BotService:
         """Unified Helper to trigger actions in Streamer.bot"""
         # 1. Voice
         # (Reserved for Voice Alerts)
-        
+
         # 1. ALWAYS broadcast to internal UI/Overlay (Decoupled from Streamer.bot)
         # Verify if it's a Super Chat to send the specific payload structure overlay expects
         if title == "SUPERCHAT" or type == "Monetization":
@@ -3116,7 +3137,7 @@ class BotService:
         if is_connected:
             try:
                 logger.info(f"Firing SB Action: {action_name} | Args: {title}, {author}")
-                
+
                 args = {
                     "alertTitle": title,
                     "alertMessage": message,
@@ -3126,7 +3147,7 @@ class BotService:
                     "msg_author": author,# Alias for %msg_author%
                     "type": type
                 }
-                
+
                 if extra_data:
                     args.update(extra_data)
 
@@ -3136,7 +3157,7 @@ class BotService:
                     "args": args,
                     "id": "PiBotAlert"
                 }
-                
+
                 if os.environ.get("RUN_MODE") == "cloud" and getattr(self, "pi_clients", None):
                     await self.pi_clients.broadcast({
                         "type": "trigger_sb_raw",
@@ -3144,12 +3165,12 @@ class BotService:
                     })
                 elif self.sb_ws is not None:
                     await self.sb_ws.send(json.dumps(payload))
-                
+
                 await self._log_ui("DEBUG", f"Sent Action: '{action_name}' to Streamer.bot")
             except Exception as e:
                 logger.warning(f"Failed to send Alert to SB: {e}")
                 # Don't log error to UI if we already showed the alert, just debug log
-    
+
         else:
             logger.warning("Streamer.bot Disconnected (Alert handled internally)")
 
@@ -3179,7 +3200,7 @@ class BotService:
         if self.audio:
             await self.audio.speak(msg, "public")
         await self._send_chat(msg)
-        
+
         # SEPARATE ACTION: Bot Alerts
         await self._fire_sb_alert("WELCOME", msg, author, "Welcome", action_name="Bot Alerts")
 
@@ -3192,7 +3213,7 @@ class BotService:
 
         # SEPARATE ACTION: Bot Alerts
         await self._fire_sb_alert("RANK UP", msg, author, "RankUpdate", action_name="Bot Alerts")
-        
+
         # Check for Native API Rewards tied to this rank
         native_reward = rank.get("native_reward")
         if native_reward:
@@ -3208,7 +3229,7 @@ class BotService:
             v["custom_title"] = title
             self.viewers._dirty = True
             return "" # Empty string means success
-            
+
         if reward_type == "custom_title":
             title = parameters.get("custom_title_text")
             if not title:
@@ -3221,13 +3242,13 @@ class BotService:
         if reward_type in ["youtube_mod", "youtube_mod_rank"]:
             duration_days = int(parameters.get("duration", parameters.get("mod_duration_days", 7)))
             duration_sec = duration_days * 86400
-            
+
             v = self.viewers.get_viewer(author)
             channel_id = v.get("channel_id")
             if not channel_id:
                 await self._log_ui("ERROR", f"Mod Reward Failed: Missing Channel ID for {author}")
                 return "Mod reward failed: missing channel ID."
-                
+
             success, result_id = await self.youtube_api.add_moderator(channel_id)
             if success:
                 # Add to active_rewards.json for expiration
@@ -3238,17 +3259,17 @@ class BotService:
                     if os.path.exists(rewards_file):
                         with open(rewards_file, "r") as f:
                             rewards = json.load(f)
-                    
+
                     rewards.append({
                         "author": author,
                         "reward_type": reward_type,
                         "mod_id": result_id,
                         "expires_at": time.time() + duration_sec
                     })
-                    
+
                     with open(rewards_file, "w") as f:
                         json.dump(rewards, f, indent=4)
-                        
+
                     await self._log_ui("REWARD", f"Gave YouTube Wrench to {author} for {duration_days} day(s)!")
                     await self._send_chat(f"@{author} 🎉 You have been granted Temporary Moderator for {duration_days} day(s)!")
                 except Exception as e:
@@ -3256,25 +3277,25 @@ class BotService:
             else:
                 await self._log_ui("ERROR", f"Mod Reward Failed: {result_id}")
                 return f"Mod reward failed: {result_id}"
-            
+
         elif reward_type == "giveaway_ticket":
             # 1. Eligibility Check
             eligibility = parameters.get("eligibility", "everyone").lower()
             is_sponsor = getattr(chat_obj.author, 'is_sponsor', False) if chat_obj else False
-            
+
             if "member" in eligibility and not is_sponsor:
                 return "This giveaway is for Members Only."
-                
+
             # 2. Check if already entered
             from backend.services.giveaway_service import GiveawayService
             status = GiveawayService.add_participant(author)
             if not status['ok']:
                 return status['error']
-            
+
             # Send specific broadcast to inform overlay immediately
             if self.broadcast_func:
                 await self.broadcast_func({"type": "giveaway_update", "action": "new_entry", "author": author})
-            
+
             # Change custom message logic to have a nicer response via chat
             # We don't return error here because it succeeded. Wait, I should just return None
             # and let the _handle_redeem_cmd print the success message.
@@ -3286,7 +3307,7 @@ class BotService:
         from datetime import datetime
         d1, d2 = datetime.strptime(last_date, "%Y-%m-%d"), datetime.strptime(today, "%Y-%m-%d")
         delta_days = (d2 - d1).days
-        
+
         # Stream Offline Streak Freeze Logic
         is_consecutive = (delta_days == 1)
         if delta_days > 1:
@@ -3304,7 +3325,7 @@ class BotService:
             # Streak Continues
             streak = streak + 1
             v["consecutive_days"] = streak
-            
+
             if streak == 2:
                 wm_cfg = self._get_welcome_message_config("day_2_streak")
                 hindi_voice = f"Swagat hai {author}! Aap kal bhi aaye thhe, dekhkar khushi hui!"
@@ -3324,7 +3345,7 @@ class BotService:
         elif delta_days > 1:
             # Streak Broken
             v["consecutive_days"] = 1
-            
+
             if delta_days >= 30:
                  wm_cfg = self._get_welcome_message_config("return_30_plus_days")
                  hindi_voice = f"Baap re! {author} pure {delta_days} din baad laute hain!"
@@ -3337,22 +3358,22 @@ class BotService:
 
             if wm_cfg.get("enabled", True):
                 eng_text = safe_format_welcome_message(wm_cfg.get("message", ""), author=author, streak=1, days=delta_days)
-        
+
         # Save updates
         self.viewers.viewers[author] = v
-        
+
         # Dispatch generic "Welcome Back" if text defined
         if eng_text:
             await self._trigger_special_announcement(eng_text, eng_text)
 
     async def _trigger_special_announcement(self, voice_text, eng_text):
         await self._log_ui("LOYALTY", eng_text)
-        
+
         if self.audio:
             await self.audio.speak(voice_text, "public")
-        
+
         await self._send_chat(eng_text)
-        
+
         # SEPARATE ACTION: Bot Alerts
         await self._fire_sb_alert("LOYALTY", eng_text, "System", "Loyalty", action_name="Bot Alerts")
 
@@ -3380,22 +3401,22 @@ class BotService:
             # Check if this is a "Test" user or bypass? No, specific check.
             logger.info(f"Verifying payment for {user}: {amount}")
             verified, reason, msg_id = await asyncio.to_thread(self.email.verify_payment, amount, sender_hint=user)
-            
+
             if not verified:
                 logger.warning(f"Payment Verification Failed for {user}: {reason}")
                 await self._log_ui("ERROR", f"Payment Failed: {reason}", author=user)
                 return {"status": "failed", "reason": reason}
-            
+
             # If verified internally, use the found Message-ID as transaction_id
             if not transaction_id and msg_id:
                 transaction_id = msg_id
-                
+
             # Re-check Deduplication (in case we just found an ID that was already processed)
             if transaction_id and transaction_id in self.processed_transactions:
                 logger.warning(f"Duplicate Transaction Ignored (Verified Email Re-use): {transaction_id}")
                 return {"status": "duplicate", "reason": "Email already used"}
 
-            
+
             # If verified, we track it for logs but keep the public message clean
             verified_tag = " (Verified ✅)"
 
@@ -3411,17 +3432,7 @@ class BotService:
         await self._log_ui("DONATION", log_msg, author=user, meta={"amount": amount})
         logger.info(log_msg)
 
-        # 1.5 Log to Google Sheets (Only if verified or explicit skip_verification with trusted source)
-        # Only log to Sheets if we are NOT in client mode (so Cloud logs it, Pi client skips it)
-        if not is_client:
-            if verified_tag or (skip_verification and transaction_id and not transaction_id.startswith("test_")):
-                 await self.sheets.log_transaction({
-                    "user": user,
-                    "amount": amount,
-                    "type": "Tip",
-                    "message": message,
-                    "transaction_id": transaction_id or f"tip_{int(time.time())}"
-                })
+
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
@@ -3436,7 +3447,7 @@ class BotService:
                     "transaction_id": transaction_id
                 }))
                 ws_sent = True
-                
+
             # Broadcast to Cloud Custom Overlays (so TTS works on public bot)
             if hasattr(self, "broadcast_func") and self.broadcast_func:
                 logger.info("Broadcasting to Cloud Custom Overlays...")
@@ -3447,7 +3458,7 @@ class BotService:
                     "message": message,
                     "transaction_id": transaction_id
                 }))
-            
+
             # Award loyalty points on the cloud!
             try:
                 pts_per_tip = config.get("loyalty", {}).get("points_per_tip_rupee", 0)
@@ -3508,7 +3519,7 @@ class BotService:
         message = "Tip via App"
         log_msg = f"APP NOTIFICATION: {user} tipped ₹{amount}"
         tx_id = f"app_alert_{int(time.time())}"
-        
+
         is_cloud = (os.environ.get("RUN_MODE") == "cloud")
         is_client = getattr(self, "cloud_alert_client", None) and self.cloud_alert_client.is_running
 
@@ -3516,15 +3527,7 @@ class BotService:
         await self._log_ui("APP_NOTIFICATION", log_msg, author=user, meta={"amount": amount})
         logger.info(log_msg)
 
-        # 2. Log Transaction (Only if NOT client mode)
-        if not is_client:
-            await self.sheets.log_transaction({
-                "user": user,
-                "amount": amount,
-                "type": "App Notification",
-                "message": message,
-                "transaction_id": tx_id
-            })
+
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
@@ -3539,7 +3542,7 @@ class BotService:
                     "transaction_id": tx_id
                 }))
                 ws_sent = True
-            
+
             # Award loyalty points on the cloud!
             try:
                 config = self.load_config()
@@ -3572,11 +3575,11 @@ class BotService:
             type="App Notification",
             action_name="AppAlert"
         )
-        
+
         # 5. Chat Thank you
         chat_msg = f"Thank you {user} for the Rs.{amount} Tip! 💙"
         await self._send_chat(chat_msg)
-        
+
         # 5.5 Award Loyalty Points for App Tip (Only on local Pi if NOT client mode, since cloud already did it)
         if not is_client:
             try:
@@ -3590,7 +3593,7 @@ class BotService:
 
         # 6. History (local history is saved as played=True)
         self._save_donation_history(user, amount, message, tx_id, played=True, source=source)
-        
+
         return {"status": "success", "processed": True}
 
     def _save_donation_history(self, user, amount, message, transaction_id=None, played=True, source="App Notification"):
@@ -3601,7 +3604,7 @@ class BotService:
         try:
             file_path = "data/donations.json"
             history: list[dict[str, Any]] = []
-            
+
             if not os.path.exists("data"):
                 os.makedirs("data")
 
@@ -3613,7 +3616,7 @@ class BotService:
                             history = loaded
                 except (json.JSONDecodeError, OSError):
                     history = []
-            
+
             entry = {
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "user": user,
@@ -3625,13 +3628,13 @@ class BotService:
             }
             # Prepend (Newest First)
             history.insert(0, entry)
-            
+
             # Limit to last 1000
             history = history[:1000]
-            
+
             with open(file_path, "w") as f:
                 json.dump(history, f, indent=2)
-                
+
         except Exception as e:
             logger.error(f"Failed to save donation history: {e}")
 
@@ -3693,12 +3696,12 @@ class BotService:
             file_path = "data/donations.json"
             if not os.path.exists(file_path):
                 return False
-                
+
             with open(file_path, "r") as f:
                 history = json.load(f)
-                
+
             original_len = len(history)
-            
+
             # Delete only the first matching item to prevent mass wipe of identical tips
             new_history = []
             deleted = False
@@ -3711,7 +3714,7 @@ class BotService:
                         self.processed_transactions.pop(tx_id, None)
                 else:
                     new_history.append(entry)
-                    
+
             if len(new_history) < original_len:
                 with open(file_path, "w") as f:
                     json.dump(new_history, f, indent=2)
@@ -3727,7 +3730,7 @@ class BotService:
         data = {
             "event": {"source": "YouTube", "type": etype},
             "data": {
-                "user": {"name": author, "id": "MockId_12345"}, 
+                "user": {"name": author, "id": "MockId_12345"},
                 "message": message,
                 "userName": author # Legacy field some SB scripts might use
             }
@@ -3742,16 +3745,16 @@ class BotService:
             try:
                 # 1. Fetch Stats
                 await self.fetch_youtube_stats()
-                
+
                 # 2. Determine Sleep Interval
                 config = self.load_config()
                 # Default to 60 seconds (was 600s/10m)
                 interval = config.get("youtube", {}).get("fetch_interval", 60)
-                
+
                 # Safety Limit: Minimum 30s to avoid IP bans if user sets it too low
                 if interval < 30:
                     interval = 30
-                    
+
                 await asyncio.sleep(int(interval))
             except Exception as e:
                 logger.error(f"YouTube Stats Loop Error: {e}")
@@ -3761,7 +3764,7 @@ class BotService:
         """Fetch subscriber count by extracting channel flat info via yt-dlp (Fallback)"""
         url = f"https://www.youtube.com/channel/{channel_id}"
         logger.info(f"Extracting Channel Info using yt-dlp: {url}")
-        
+
         def _extract():
             import yt_dlp
             ydl_opts = {
@@ -3771,7 +3774,7 @@ class BotService:
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
-                
+
         try:
             info = await asyncio.to_thread(_extract)
             if info:
@@ -3785,7 +3788,7 @@ class BotService:
                 logger.warning("yt-dlp extract_info returned None.")
         except Exception as e:
             logger.error(f"Error extracting YouTube stats with yt-dlp: {e}")
-            
+
         return None, None
 
     async def fetch_youtube_stats(self):
@@ -3798,16 +3801,16 @@ class BotService:
         yt_cfg = config.get("youtube", {})
         method = yt_cfg.get("fetch_method", "api") # 'api', 'scrape', or 'oauth'
         channel_id = yt_cfg.get("channel_id")
-        
+
         # Scrape Method
         if method == "scrape":
             if not channel_id: return
             count, logo_url = await self.fetch_youtube_stats_scraping(channel_id)
-            
+
             if count is not None:
                 self.set_subscriber_count(count, save=True)
                 logger.info(f"Updated Subscriber Count (Scraped): {count}")
-                
+
                 # Save Logo if found
                 if logo_url and logo_url != yt_cfg.get("logo_url"):
                     yt_cfg["logo_url"] = logo_url
@@ -3828,7 +3831,7 @@ class BotService:
                 from google.oauth2.credentials import Credentials
                 from google.auth.transport.requests import Request as AuthRequest
                 from googleapiclient.discovery import build
-                
+
                 expiry_val = None
                 if creds_dict.get("expiry"):
                     try:
@@ -3849,7 +3852,7 @@ class BotService:
                     scopes=creds_dict.get("scopes"),
                     expiry=expiry_val
                 )
-                
+
                 # Auto-refresh if expired
                 if creds.expired and creds.refresh_token:
                     logger.info("OAuth token expired, refreshing...")
@@ -3865,7 +3868,7 @@ class BotService:
                         logger.warning(f"Failed to save refreshed token: {save_err}")
                 elif not creds.refresh_token:
                     logger.warning("No refresh_token available. Token cannot be renewed. User should re-login with Google.")
-                
+
                 # Build service and fetch (synchronous call — run in thread to avoid blocking)
                 def _fetch_stats_sync():
                     nonlocal creds
@@ -3881,7 +3884,7 @@ class BotService:
                                 if creds.expiry:
                                     config["youtube"]["oauth_credentials"]["expiry"] = creds.expiry.isoformat()
                                 ConfigManager.save_config(config)
-                                
+
                                 # Retry
                                 service = build('youtube', 'v3', credentials=creds)
                                 ch_resp = service.channels().list(part="statistics,snippet", mine=True).execute()
@@ -3906,7 +3909,7 @@ class BotService:
                         if bc_items:
                             live_chat_id = bc_items[0].get("snippet", {}).get("liveChatId")
                             live_video_id = bc_items[0].get("id")  # This IS the video ID
-                            
+
                             # Fetch video stats for the likes
                             if live_video_id:
                                 try:
@@ -3919,31 +3922,31 @@ class BotService:
                     except Exception as bc_err:
                         logger.debug(f"Could not fetch liveChatId: {bc_err}")
                     return ch_resp, live_chat_id, live_video_id, live_likes_temp
-                
+
                 response, live_chat_id, live_video_id, live_likes_val = await asyncio.to_thread(_fetch_stats_sync)
-                
+
                 # Update like count
                 self.live_likes_count = live_likes_val
-                
+
                 items = response.get("items", [])
                 if items:
                     stats = items[0].get("statistics", {})
                     snippet = items[0].get("snippet", {})
-                    
+
                     # Update Channel ID/Name if missing or changed
                     found_id = items[0].get("id")
                     found_name = snippet.get("title")
                     found_logo = snippet.get("thumbnails", {}).get("high", {}).get("url")
-                    
+
                     should_save = False
                     if found_id and found_id != channel_id:
                         yt_cfg["channel_id"] = found_id
                         should_save = True
-                        
+
                     if found_name and found_name != yt_cfg.get("channel_name"):
                          yt_cfg["channel_name"] = found_name
                          should_save = True
-                         
+
                     if found_logo and found_logo != yt_cfg.get("logo_url"):
                          yt_cfg["logo_url"] = found_logo
                          should_save = True
@@ -3953,20 +3956,20 @@ class BotService:
                         yt_cfg["live_chat_id"] = live_chat_id
                         should_save = True
                         logger.info(f"Updated live_chat_id: {live_chat_id}")
-                    
-                    
+
+
                     if should_save:
                         config["youtube"] = yt_cfg
                         ConfigManager.save_config(config)
                         logger.info(f"Updated Channel Info: {found_name} | Logo Updated")
-                    
+
                     sub_count = stats.get("subscriberCount")
                     if sub_count:
                         self.set_subscriber_count(int(sub_count), save=True)
                         logger.info(f"Fetched Subscriber Count via OAuth: {sub_count} (Channel: {found_name})")
                 else:
                     logger.warning("OAuth: No channel found for authorized user.")
-            
+
             except Exception as e:
                 logger.error(f"OAuth Fetch Error: {e}")
             return
@@ -3988,10 +3991,10 @@ class BotService:
                     if items:
                         stats = items[0].get("statistics", {})
                         snippet = items[0].get("snippet", {})
-                        
+
                         found_name = snippet.get("title")
                         found_logo = snippet.get("thumbnails", {}).get("high", {}).get("url")
-                        
+
                         should_save = False
                         if found_name and found_name != yt_cfg.get("channel_name"):
                              yt_cfg["channel_name"] = found_name
@@ -4000,7 +4003,7 @@ class BotService:
                         if found_logo and found_logo != yt_cfg.get("logo_url"):
                              yt_cfg["logo_url"] = found_logo
                              should_save = True
-                        
+
                         if should_save:
                              config["youtube"] = yt_cfg
                              ConfigManager.save_config(config)
@@ -4010,7 +4013,7 @@ class BotService:
                         if sub_count:
                             self.set_subscriber_count(int(sub_count), save=True)
                             logger.info(f"Fetched Subscriber Count from YouTube API: {sub_count}")
-                            
+
                         # Also attempt to get likes if video_id is set
                         vid_id = yt_cfg.get("video_id")
                         if vid_id:

@@ -3,6 +3,8 @@ import time
 import os
 import asyncio
 import logging
+import threading
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,8 @@ class ViewerService:
         # WebSocket broadcast callback (set by bot_service after startup)
         self._broadcast_func = None
         self._auto_save_started = False
+        self._transfer_lock = threading.RLock()
+        self.transfer_history: List[Dict[str, Any]] = []
 
         # Migration: Ensure all viewers have 'points' and 'loan_balance'
         for v in self.viewers.values():
@@ -439,30 +443,129 @@ class ViewerService:
         self._notify_viewer_update(author, "set_points")
         return True
 
-    def transfer_points(self, sender, receiver, amount):
-        """Transfer points from one viewer to another."""
+    def find_username(self, name_or_mention: str) -> Optional[str]:
+        """Resolve a username or @mention to the exact existing key in viewers dictionary (case-insensitive fallback)."""
+        if not name_or_mention or not isinstance(name_or_mention, str):
+            return None
+        clean = name_or_mention.lstrip('@').strip()
+        if clean in self.viewers:
+            return clean
+        clean_lower = clean.lower()
+        for existing in self.viewers:
+            if existing.lower() == clean_lower:
+                return existing
+        return None
+
+    def transfer_points_detailed(self, sender: str, receiver: str, amount: int) -> Dict[str, Any]:
+        """
+        Atomically transfer points from sender to receiver.
+        Enforces validation, positive integer amount, non-self-transfer, and balance checks under lock.
+        """
         if self._should_bypass_db():
             self._forward_to_cloud("transfer_points", sender=sender, receiver=receiver, amount=amount)
-            return True
-        if amount <= 0: return False
-        if sender not in self.viewers: return False
-        
-        if receiver not in self.viewers: return False
+            return {"success": True, "message": "Forwarded to cloud.", "sender": sender, "receiver": receiver, "amount": amount}
 
-        if self.viewers[sender]["points"] >= amount:
-            self.viewers[sender]["points"] -= amount
-            self.viewers[receiver]["points"] += amount
-            self.viewers[receiver]["rank"] = self.get_rank(self.viewers[receiver].get("count", 0), self.viewers[receiver].get("watch_time", 0))["name"]
-            self.viewers[sender]["rank"] = self.get_rank(self.viewers[sender].get("count", 0), self.viewers[sender].get("watch_time", 0))["name"]
-            
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+            return {
+                "success": False,
+                "error": "invalid_amount",
+                "message": "Transfer amount must be a valid number."
+            }
+        try:
+            int_amount = int(amount)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": "invalid_amount",
+                "message": "Transfer amount must be an integer."
+            }
+
+        if int_amount <= 0:
+            return {
+                "success": False,
+                "error": "invalid_amount",
+                "message": "Transfer amount must be greater than zero."
+            }
+
+        with self._transfer_lock:
+            sender_name = self.find_username(sender)
+            receiver_name = self.find_username(receiver)
+
+            if not sender_name:
+                return {
+                    "success": False,
+                    "error": "sender_not_found",
+                    "message": f"Sender '{sender}' was not found."
+                }
+
+            if not receiver_name:
+                return {
+                    "success": False,
+                    "error": "receiver_not_found",
+                    "message": f"Target viewer '{receiver}' has never visited this stream."
+                }
+
+            if sender_name.lower() == receiver_name.lower():
+                return {
+                    "success": False,
+                    "error": "self_transfer",
+                    "message": "You cannot transfer points to yourself."
+                }
+
+            sender_data = self.viewers[sender_name]
+            receiver_data = self.viewers[receiver_name]
+
+            sender_points = sender_data.get("points", 0)
+            if sender_points < int_amount:
+                return {
+                    "success": False,
+                    "error": "insufficient_points",
+                    "message": f"Insufficient points! You have {sender_points} points, but tried to transfer {int_amount}.",
+                    "available_points": sender_points
+                }
+
+            sender_data["points"] = sender_points - int_amount
+            receiver_data["points"] = receiver_data.get("points", 0) + int_amount
+
+            sender_data["rank"] = self.get_rank(sender_data.get("count", 0), sender_data.get("watch_time", 0))["name"]
+            receiver_data["rank"] = self.get_rank(receiver_data.get("count", 0), receiver_data.get("watch_time", 0))["name"]
+
             self.mark_dirty()
-            self._save_single_viewer(sender, self.viewers[sender])
-            self._save_single_viewer(receiver, self.viewers[receiver])
-            
-            self._notify_viewer_update(sender, "transfer_out")
-            self._notify_viewer_update(receiver, "transfer_in")
-            return True
-        return False
+            self._save_single_viewer(sender_name, sender_data)
+            self._save_single_viewer(receiver_name, receiver_data)
+
+            self._notify_viewer_update(sender_name, "transfer_out")
+            self._notify_viewer_update(receiver_name, "transfer_in")
+
+            record = {
+                "timestamp": time.time(),
+                "sender": sender_name,
+                "receiver": receiver_name,
+                "amount": int_amount,
+                "sender_balance": sender_data["points"],
+                "receiver_balance": receiver_data["points"],
+                "status": "success"
+            }
+            if not hasattr(self, "transfer_history"):
+                self.transfer_history = []
+            self.transfer_history.append(record)
+            if len(self.transfer_history) > 200:
+                self.transfer_history = self.transfer_history[-200:]
+
+            return {
+                "success": True,
+                "message": f"Successfully transferred {int_amount} points to {receiver_name}!",
+                "sender": sender_name,
+                "receiver": receiver_name,
+                "amount": int_amount,
+                "sender_balance": sender_data["points"],
+                "receiver_balance": receiver_data["points"]
+            }
+
+    def transfer_points(self, sender, receiver, amount) -> bool:
+        """Transfer points from one viewer to another (returns bool for backwards compatibility)."""
+        res = self.transfer_points_detailed(sender, receiver, amount)
+        return res.get("success", False)
 
     def delete_viewer(self, author):
         """Remove a viewer from the database."""

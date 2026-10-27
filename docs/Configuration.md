@@ -138,17 +138,6 @@ The engine tries providers in priority order and automatically fails over.
 
 ---
 
-## Telegram
-
-```json
-"telegram": {
-  "enabled": true,
-  "token": "1234567890:ABC...",
-  "chat_id": "-100..."
-}
-```
-
----
 
 ## Auto Messages
 

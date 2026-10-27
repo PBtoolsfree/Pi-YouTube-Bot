@@ -880,16 +880,7 @@ async def restart_bot():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- INTEGRATIONS CONTROL ---
 
-@app.post("/api/integrations/telegram/restart")
-async def restart_telegram():
-    try:
-        await bot.telegram.stop()
-        await bot.telegram.start()
-        return {"status": "success", "message": "Telegram Service Restarted"}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to restart Telegram: {e}")
 
 
 
@@ -1474,201 +1465,7 @@ async def email_disconnect_manual():
     return await bot.disconnect_email()
 
 
-@app.post("/api/sheets/creds")
-async def upload_sheets_creds(payload: Dict[str, str]):
-    """
-    Saves service account JSON to service_account.json
-    """
-    json_content = payload.get("json_content")
-    if not json_content:
-        raise HTTPException(400, "JSON content required")
-    
-    try:
-        # Validate JSON
-        parsed = json.loads(json_content)
-        if "type" not in parsed or parsed["type"] != "service_account":
-             # Loose validation, but good enough
-             pass
-        
-        with open("service_account.json", "w") as f:
-            f.write(json_content) # Just write raw text to preserve formatting/keys
-            
-        return {"status": "success", "message": "Credentials saved to service_account.json"}
-    except json.JSONDecodeError:
-         raise HTTPException(400, "Invalid JSON format")
-    except Exception as e:
-         raise HTTPException(500, str(e))
 
-@app.get("/api/sheets/status")
-async def get_sheets_status():
-    """
-    Checks if creds file exists and if enabled
-    """
-    has_sa_creds = os.path.exists("service_account.json")
-    config = bot.load_config()
-    sheets_config = config.get("google_sheets", {})
-    enabled = sheets_config.get("enabled", False)
-    sheet_id = sheets_config.get("sheet_id", "")
-    
-    # Check for OAuth creds
-    has_oauth_creds = "oauth_credentials" in sheets_config
-    
-    # Fallback check (YouTube creds) - optional, but good for UI state
-    yt_oauth = "oauth_credentials" in config.get("youtube", {})
-    
-    return {
-        "has_credentials": has_sa_creds or has_oauth_creds or yt_oauth,
-        "using_oauth": has_oauth_creds,
-        "enabled": enabled,
-        "sheet_id": sheet_id,
-        "connected": bot.sheets.connected,
-        "last_error": bot.sheets.last_error
-    }
-
-@app.post("/api/sheets/test")
-async def test_sheets_connection():
-    """
-    Forces a connection attempt
-    """
-    success = await bot.sheets.connect()
-    if success:
-        return {"status": "success", "message": f"Connected to Sheet: {bot.sheets.sheet.title if bot.sheets.sheet else 'Unknown'}"}
-    else:
-        return {"status": "error", "message": bot.sheets.last_error or "Unknown Error"}
-
-@app.get("/api/sheets/list")
-async def list_user_spreadsheets():
-    """
-    Fetches list of Google Sheets for the authenticated user via Drive API.
-    Requires OAuth connection (Specific to Sheets or fall back to YouTube).
-    """
-    try:
-        config = bot.load_config()
-        yt_config = config.get("youtube", {})
-        sheets_config = config.get("google_sheets", {})
-        
-        oauth_creds = None
-        
-        # 1. Prefer specific Sheets credentials
-        if "oauth_credentials" in sheets_config:
-            oauth_creds = sheets_config["oauth_credentials"]
-        # 2. Fallback to YouTube credentials (if they have scopes, which they might if user didn't separate)
-        elif "oauth_credentials" in yt_config:
-            oauth_creds = yt_config["oauth_credentials"]
-            
-        if not oauth_creds:
-            raise HTTPException(400, "by authenticating in the Google Sheets tab.")
-            
-        # Create Credentials object
-        from google.oauth2.credentials import Credentials
-        creds = Credentials(
-            token=oauth_creds.get("token"),
-            refresh_token=oauth_creds.get("refresh_token"),
-            token_uri=oauth_creds.get("token_uri"),
-            client_id=oauth_creds.get("client_id"),
-            client_secret=oauth_creds.get("client_secret"),
-            scopes=oauth_creds.get("scopes")
-        )
-        
-        # Use Google Drive API to list sheets
-        # mimetype = 'application/vnd.google-apps.spreadsheet'
-        def _fetch_drive_files():
-            from googleapiclient.discovery import build
-            service = build('drive', 'v3', credentials=creds)
-            return service.files().list(
-                q="mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
-                fields="nextPageToken, files(id, name)",
-                pageSize=20
-            ).execute()
-
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(None, _fetch_drive_files)  # type: ignore
-        
-        items = results.get('files', [])
-        return {"status": "success", "sheets": items}
-        
-    except Exception as e:
-        print(f"List Sheets Error: {e}")
-        raise HTTPException(500, f"Failed to list sheets: {str(e)}")
-
-@app.post("/api/sheets/create")
-async def create_sheets_template(payload: Optional[Dict[str, str]] = None):
-    """
-    Creates a new Google Sheet with the correct headers for transaction logging.
-    Returns the new sheet ID so the frontend can auto-select it.
-    """
-    try:
-        config = bot.load_config()
-        sheets_config = config.get("google_sheets", {})
-        yt_config = config.get("youtube", {})
-
-        oauth_creds = None
-        if "oauth_credentials" in sheets_config:
-            oauth_creds = sheets_config["oauth_credentials"]
-        elif "oauth_credentials" in yt_config:
-            oauth_creds = yt_config["oauth_credentials"]
-
-        if not oauth_creds:
-            raise HTTPException(400, "No OAuth credentials found. Connect your Google account first.")
-
-        from google.oauth2.credentials import Credentials as UserCredentials
-        creds = UserCredentials(
-            token=oauth_creds.get("token"),
-            refresh_token=oauth_creds.get("refresh_token"),
-            token_uri=oauth_creds.get("token_uri"),
-            client_id=oauth_creds.get("client_id"),
-            client_secret=oauth_creds.get("client_secret"),
-            scopes=oauth_creds.get("scopes")
-        )
-
-        # Auto-refresh if needed
-        if not creds.token or (hasattr(creds, 'expired') and creds.expired):
-            from google.auth.transport.requests import Request as AuthRequest
-            await asyncio.to_thread(creds.refresh, AuthRequest())
-
-        sheet_name = (payload or {}).get("name", "Pi Bot Transactions")
-
-        def _create_sheet():
-            import gspread
-            gc = gspread.authorize(creds)
-            spreadsheet = gc.create(sheet_name)
-
-            # Add headers
-            headers = ["Date", "Time", "User", "Amount", "Type", "Message", "Transaction ID"]
-            sheet = spreadsheet.sheet1
-            sheet.append_row(headers)
-
-            # Format header row (bold + freeze)
-            sheet.format("A1:G1", {
-                "textFormat": {"bold": True},
-                "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
-                "horizontalAlignment": "CENTER"
-            })
-            sheet.freeze(rows=1)
-
-            # Auto-resize columns
-            sheet.columns_auto_resize(0, 7)
-
-            return spreadsheet.id, spreadsheet.title
-
-        sheet_id, title = await asyncio.to_thread(_create_sheet)
-
-        # Auto-save the sheet_id to config
-        config["google_sheets"]["sheet_id"] = sheet_id
-        ConfigManager.save_config(config)
-
-        # Auto-connect to the new sheet
-        await bot.sheets.connect()
-
-        return {
-            "status": "success",
-            "sheet_id": sheet_id,
-            "title": title,
-            "message": f"Created sheet '{title}' with headers and connected!"
-        }
-    except Exception as e:
-        print(f"Create Sheet Error: {e}")
-        raise HTTPException(500, f"Failed to create sheet: {str(e)}")
 
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -1783,8 +1580,7 @@ def _get_required_redirect_uris():
     import socket
     scheme = "http"
     uris = [
-        f"{scheme}://localhost:8000/api/auth/youtube/callback",
-        f"{scheme}://localhost:8000/api/auth/sheets/callback"
+        f"{scheme}://localhost:8000/api/auth/youtube/callback"
     ]
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1794,7 +1590,6 @@ def _get_required_redirect_uris():
         s.close()
         nip_host = lan_ip.replace(".", "-") + ".nip.io"
         uris.append(f"{scheme}://{nip_host}:8000/api/auth/youtube/callback")
-        uris.append(f"{scheme}://{nip_host}:8000/api/auth/sheets/callback")
     except Exception:
         pass
     return uris
@@ -1838,8 +1633,7 @@ async def setup_auth(payload: Dict[str, Any]):
             # Detect server LAN IP for nip.io redirect URI
             import socket
             redirect_uris = [
-                "http://localhost:8000/api/auth/youtube/callback",
-                "http://localhost:8000/api/auth/sheets/callback"
+                "http://localhost:8000/api/auth/youtube/callback"
             ]
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1849,7 +1643,6 @@ async def setup_auth(payload: Dict[str, Any]):
                 s.close()
                 nip_host = lan_ip.replace(".", "-") + ".nip.io"
                 redirect_uris.append(f"http://{nip_host}:8000/api/auth/youtube/callback")
-                redirect_uris.append(f"http://{nip_host}:8000/api/auth/sheets/callback")
             except Exception:
                 pass
             
@@ -2021,156 +1814,7 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
             error_msg = "Authorization code expired or already used. Please try signing in again."
         return RedirectResponse(f"/settings?oauth=error&message={urllib.parse.quote(error_msg)}")
 
-# --- SHEETS AUTHENTICATION (SEPARATE ACCOUNT) ---
-SHEETS_CLIENT_SECRET = "sheets_client_secret.json"
 
-@app.post("/api/auth/sheets/setup")
-async def setup_sheets_auth(payload: Dict[str, Any]):
-    """
-    Saves a separate client_secret.json for Google Sheets OAuth.
-    Accepts { client_id, client_secret } for the Sheets-specific OAuth client.
-    """
-    client_id = payload.get("client_id")
-    client_secret = payload.get("client_secret")
-    
-    if not client_id or not client_secret:
-        raise HTTPException(400, "Provide both client_id and client_secret for your Sheets OAuth client.")
-    
-    try:
-        import socket
-        redirect_uris = ["http://localhost:8000/api/auth/sheets/callback"]
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0.2)
-            s.connect(('8.8.8.8', 80))
-            lan_ip = s.getsockname()[0]
-            s.close()
-            nip_host = lan_ip.replace(".", "-") + ".nip.io"
-            redirect_uris.append(f"http://{nip_host}:8000/api/auth/sheets/callback")
-        except Exception:
-            pass
-        
-        data = {
-            "web": {
-                "client_id": (client_id or "").strip(),
-                "project_id": "pi-youtube-bot-sheets",
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "client_secret": (client_secret or "").strip(),
-                "redirect_uris": redirect_uris
-            }
-        }
-        
-        with open(SHEETS_CLIENT_SECRET, "w") as f:
-            json.dump(data, f, indent=4)
-        
-        return {"status": "success", "message": "Sheets credentials saved! You can now connect Google Sheets."}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-@app.get("/api/auth/sheets/credentials-status")
-async def sheets_credentials_status():
-    """Check if sheets_client_secret.json exists."""
-    return {
-        "has_sheets_credentials": os.path.exists(SHEETS_CLIENT_SECRET),
-        "has_youtube_credentials": os.path.exists("client_secret.json")
-    }
-
-
-@app.get("/api/auth/sheets/login")
-async def login_sheets(request: Request):
-    try:
-        from backend.services.auth_service import AuthService
-        current_config = bot.load_config()
-        auth = AuthService(lambda: current_config)
-        
-        # Use separate client secret for Sheets if it exists, otherwise fall back
-        sheets_secret = SHEETS_CLIENT_SECRET if os.path.exists(SHEETS_CLIENT_SECRET) else None
-        
-        # Build redirect URI dynamically
-        host = request.headers.get("host", "localhost:8000")
-        use_localhost = current_config.get("force_localhost_redirect", False)
-        
-        if use_localhost:
-            host = "localhost:8000"
-        else:
-            host = _convert_ip_to_nip_io(host)
-
-        scheme = "http"
-        redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
-        
-        # SPECIFIC SCOPES FOR SHEETS
-        sheets_scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
-        url, state = auth.get_auth_url(redirect_uri=redirect_uri, scopes=sheets_scopes, client_secrets_file=sheets_secret)
-        return RedirectResponse(url)
-    except FileNotFoundError:
-        return {"error": "Missing sheets_client_secret.json (or client_secret.json). Please add it to the bot folder."}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/auth/sheets/callback")
-async def callback_sheets(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
-    import urllib.parse
-    import traceback
-    print(f">>> [Sheets OAuth Callback] HIT! code={code is not None}, state={state is not None}, error={error}")
-    
-    if error:
-        return RedirectResponse(f"/settings?oauth_sheets=error&message={urllib.parse.quote(error)}")
-    
-    if not code:
-        return RedirectResponse("/settings?oauth_sheets=error&message=No%20authorization%20code%20received")
-    
-    try:
-        from backend.services.auth_service import AuthService
-        current_config = bot.load_config()
-        auth = AuthService(lambda: current_config)
-        
-        # Use separate client secret for Sheets if it exists
-        sheets_secret = SHEETS_CLIENT_SECRET if os.path.exists(SHEETS_CLIENT_SECRET) else None
-        
-        host = request.headers.get("host", "localhost:8000")
-        use_localhost = current_config.get("force_localhost_redirect", False)
-        
-        if use_localhost:
-            host = "localhost:8000"
-        else:
-            host = _convert_ip_to_nip_io(host)
-
-        scheme = "http"
-        redirect_uri = f"{scheme}://{host}/api/auth/sheets/callback"
-        
-        sheets_scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
-        # Exchange code for tokens
-        print(f">>> DEBUG: Calling auth.exchange_code with scopes={sheets_scopes}")
-        try:
-             creds = auth.exchange_code(code, redirect_uri, sheets_scopes, client_secrets_file=sheets_secret, state=state)
-        except Exception as e:
-             print(f">>> DEBUG: Error inside exchange_code call: {e}")
-             raise e
-        
-        # Save credentials to config under 'google_sheets'
-        if "google_sheets" not in current_config: current_config["google_sheets"] = {}
-        current_config["google_sheets"]["oauth_credentials"] = creds
-        current_config["google_sheets"]["enabled"] = True
-        ConfigManager.save_config(current_config)
-        
-        # Config is managed via ConfigManager — no module-level 'config' var needed
-        # Note: sheets_service needs to reload config to see this. It usually does on each connect call.
-
-        return RedirectResponse("/settings?oauth_sheets=success") 
-    except Exception as e:
-        print(f">>> [Sheets OAuth Callback] ERROR: {e}")
-        traceback.print_exc()
-        return RedirectResponse(f"/settings?oauth_sheets=error&message={urllib.parse.quote(str(e))}")
 
 # --- BACKUP SYSTEM ---
 import zipfile
@@ -2190,8 +1834,6 @@ MAX_COMPRESSION_RATIO = 100  # Avoid zip bombs
 _BACKUP_FILES = [
     "config.json",
     "client_secret.json",
-    "sheets_client_secret.json",
-    "service_account.json",
     ".env",
     ".env.bak",
     "viewers.db",

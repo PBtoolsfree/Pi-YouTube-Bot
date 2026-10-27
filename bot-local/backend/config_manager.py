@@ -125,6 +125,9 @@ class ConfigManager:
                     with open(ConfigManager._config_path, "r", encoding="utf-8") as fh:
                         new_cfg = json.load(fh)
 
+                    if ConfigManager._migrate_legacy_integrations(new_cfg, ConfigManager._config_path):
+                        mtime = os.path.getmtime(ConfigManager._config_path)
+
                     ConfigManager._config_cache = new_cfg
                     ConfigManager._file_mtime = mtime
                     logger.debug("Config loaded/reloaded from disk.")
@@ -141,6 +144,34 @@ class ConfigManager:
         return copy.deepcopy(ConfigManager._config_cache or {})
 
     on_save = None  # Class-level callback: on_save(new_config)
+
+    @staticmethod
+    def _migrate_legacy_integrations(cfg: Dict[str, Any], path: str) -> bool:
+        """Safely remove deprecated Telegram and Google Sheets configuration and create backup."""
+        legacy_keys = ["telegram", "google_sheets"]
+        found = [k for k in legacy_keys if k in cfg]
+        if not found:
+            return False
+
+        bak_path = path + ".bak_legacy_integrations"
+        try:
+            if not os.path.exists(bak_path):
+                with open(bak_path, "w", encoding="utf-8") as fh:
+                    json.dump(cfg, fh, indent=4, ensure_ascii=False)
+                logger.info("Created legacy config backup at %s", bak_path)
+
+            for k in found:
+                cfg.pop(k, None)
+
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(cfg, fh, indent=4, ensure_ascii=False)
+            os.replace(tmp_path, path)
+            logger.info("Migrated config: safely removed obsolete keys %s", found)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to migrate legacy integrations: %s", exc)
+            return False
 
     @staticmethod
     def save_config(new_config: Dict[str, Any]) -> bool:

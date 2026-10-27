@@ -289,7 +289,7 @@ python3 scripts/backup_manager.py --backup-only
 This saves to `bot-local/backups/manual_backup_<timestamp>/`:
 - `config.json`, `.env`
 - `viewers.db` and any `.db` / `.sqlite` files
-- `client_secret.json`, `sheets_client_secret.json`, `token.json`
+- `client_secret.json`, `token.json`
 - Entire `data/` folder
 
 ### Full archive backup
@@ -302,7 +302,6 @@ tar -czf ~/$BACKUP \
     ~/pibot/bot-local/viewers.db \
     ~/pibot/bot-local/data/ \
     ~/pibot/bot-local/client_secret.json \
-    ~/pibot/bot-local/sheets_client_secret.json \
     2>/dev/null
 echo "✅ Backup saved: ~/$BACKUP"
 ```

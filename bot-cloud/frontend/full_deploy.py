@@ -95,12 +95,11 @@ def deploy():
         f"tar -nm -xvf {REMOTE_HOME}/frontend_dist.tar -C {REMOTE_HOME}/ && "
         f"rm -rf {REMOTE_HOME}/pi-youtube-bot/frontend/dist && "
         f"mv {REMOTE_HOME}/dist {REMOTE_HOME}/pi-youtube-bot/frontend/dist && "
-        f"source {REMOTE_HOME}/pi-youtube-bot/venv/bin/activate 2>/dev/null; pip install psutil gspread oauth2client 2>/dev/null; "
+        f"source {REMOTE_HOME}/pi-youtube-bot/venv/bin/activate 2>/dev/null; pip install psutil 2>/dev/null; "
         f"base64 -d -i {REMOTE_HOME}/api.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/api.py && "
         f"base64 -d -i {REMOTE_HOME}/audio_service.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/audio_service.py && "
         f"base64 -d -i {REMOTE_HOME}/bot_service.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/bot_service.py && "
         f"base64 -d -i {REMOTE_HOME}/config_manager.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/config_manager.py && "
-        f"base64 -d -i {REMOTE_HOME}/sheets_service.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/services/sheets_service.py && "
         f"base64 -d -i {REMOTE_HOME}/redeem_service.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/services/redeem_service.py && "
         f"base64 -d -i {REMOTE_HOME}/viewer_service.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/services/viewer_service.py && "
         f"base64 -d -i {REMOTE_HOME}/youtube_memory.b64 > {REMOTE_HOME}/pi-youtube-bot/backend/services/youtube_memory.py && "
@@ -129,7 +128,6 @@ if __name__ == "__main__":
     encode_file("../backend/audio_service.py", "audio_service.b64")
     encode_file("../backend/bot_service.py", "bot_service.b64")
     encode_file("../backend/config_manager.py", "config_manager.b64")
-    encode_file("../backend/services/sheets_service.py", "sheets_service.b64")
     encode_file("../backend/services/redeem_service.py", "redeem_service.b64")
     encode_file("../backend/services/viewer_service.py", "viewer_service.b64")
     encode_file("../backend/services/youtube_memory.py", "youtube_memory.b64")
@@ -145,7 +143,6 @@ if __name__ == "__main__":
     transfer("audio_service.b64", f"{REMOTE_HOME}/audio_service.b64")
     transfer("bot_service.b64", f"{REMOTE_HOME}/bot_service.b64")
     transfer("config_manager.b64", f"{REMOTE_HOME}/config_manager.b64")
-    transfer("sheets_service.b64", f"{REMOTE_HOME}/sheets_service.b64")
     transfer("redeem_service.b64", f"{REMOTE_HOME}/redeem_service.b64")
     transfer("viewer_service.b64", f"{REMOTE_HOME}/viewer_service.b64")
     transfer("youtube_memory.b64", f"{REMOTE_HOME}/youtube_memory.b64")

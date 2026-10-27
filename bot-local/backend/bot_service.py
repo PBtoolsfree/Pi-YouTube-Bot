@@ -765,11 +765,7 @@ class BotService:
             "streamer_bot": {"status": sb_status, "meta": sb_meta},
             "youtube": {"status": yt_status, "meta": yt_meta},
             "audio": {"status": audio_status, "meta": "TTS Ready"},
-            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"},
-            "google_sheets": {
-                "status": "Connected" if self.sheets.connected else "Disconnected",
-                "meta": self.sheets.sheet.title if self.sheets.sheet else (self.sheets.last_error or "Not Connected")
-            }
+            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"}
         }
 
     async def send_test_chat(self):
@@ -1276,14 +1272,7 @@ class BotService:
                     except Exception as e:
                         logger.error(f"Failed to award points for {display_type}: {e}")
 
-                    # Only log Monetization types to sheets
-                    await self.sheets.log_transaction({
-                        "user": author,
-                        "amount": amount_str,
-                        "type": "Super Chat" if "SuperChat" in display_type else "Super Sticker",
-                        "message": msg_data.get("message") or msg_data.get("comment") or "",
-                        "transaction_id": msg_data.get("eventId") or f"sc_{int(time.time())}"
-                    })
+
 
         # Handle Responses to our requests
         rid = data.get("id", "")
@@ -2454,17 +2443,7 @@ class BotService:
         await self._log_ui("DONATION", log_msg, author=user, meta={"amount": amount})
         logger.info(log_msg)
 
-        # 1.5 Log to Google Sheets (Only if verified or explicit skip_verification with trusted source)
-        # Only log to Sheets if we are NOT in client mode (so Cloud logs it, Pi client skips it)
-        if not is_client:
-            if verified_tag or (skip_verification and transaction_id and not transaction_id.startswith("test_")):
-                 await self.sheets.log_transaction({
-                    "user": user,
-                    "amount": amount,
-                    "type": "Tip",
-                    "message": message,
-                    "transaction_id": transaction_id or f"tip_{int(time.time())}"
-                })
+
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
@@ -2546,15 +2525,7 @@ class BotService:
         await self._log_ui("APP_NOTIFICATION", log_msg, author=user, meta={"amount": amount})
         logger.info(log_msg)
 
-        # 2. Log Transaction (Only if NOT client mode)
-        if not is_client:
-            await self.sheets.log_transaction({
-                "user": user,
-                "amount": amount,
-                "type": "App Notification",
-                "message": message,
-                "transaction_id": tx_id
-            })
+
 
         # Forward to Pi clients if running as Cloud server
         if is_cloud:
