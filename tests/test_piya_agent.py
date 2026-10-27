@@ -624,7 +624,8 @@ def test_expanded_agent_tools_execution():
 
             # Tip page
             tip_res = await agent.execute_tool("get_tip_page_url", {}, caller_name="alice", caller_role="viewer")
-            assert "https://stream.tip.me/tip" in tip_res
+            assert "https://stream.tip.me" in tip_res
+            assert "/tip" not in tip_res
             assert "paytmqr281005@paytm" in tip_res
 
             # Points transfer explanation

@@ -712,6 +712,56 @@ class PokemonService:
 
         return f"@{caller}, '{clean_target}' is neither a known viewer nor a Pokémon in the Pokédex."
 
+    @staticmethod
+    async def get_pokemon_species_info(name: str) -> str:
+        """Return verified Pokédex entry, Power, Type, stream gameplay capabilities, and verified lore."""
+        if not name or not str(name).strip():
+            return "Please specify a Pokémon species name, e.g. Eevee or Pikachu."
+
+        clean_name = str(name).replace("@", "").strip()
+
+        global POKEMON_LIST
+        if not POKEMON_LIST:
+            load_pokemon_list()
+
+        pokedex_match = next((p for p in POKEMON_LIST if p.get("name", "").lower() == clean_name.lower()), None)
+        if not pokedex_match:
+            pokedex_match = next((p for p in POKEMON_LIST if clean_name.lower() in p.get("name", "").lower()), None)
+
+        if pokedex_match:
+            p_name = pokedex_match.get("name", clean_name.title())
+            pwr = pokedex_match.get("power", 10)
+            ptype = pokedex_match.get("type", "Normal")
+
+            info = f"🔍 Pokédex Entry: {p_name} (PWR: {pwr} | Type: {ptype})."
+            if p_name.lower() == "eevee":
+                info += (
+                    " Stream Game: Summon Eevee as your stream companion with '!summon Eevee' "
+                    "or challenge opponents with '!battle @user <points>'. "
+                    "Pokémon Lore: Eevee is an evolution Pokémon with adaptable genetic code that can evolve into 8 different forms: "
+                    "Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Leafeon, Glaceon, and Sylveon!"
+                )
+            elif p_name.lower() == "pikachu":
+                info += (
+                    " Stream Game: Summon Pikachu as your buddy using '!summon Pikachu' "
+                    "and battle other viewers with '!battle @user <points>'. "
+                    "Pokémon Lore: An Electric-type mouse Pokémon famous for Thunderbolt attacks."
+                )
+            elif p_name.lower() == "charizard":
+                info += (
+                    " Stream Game: Charizard possesses high battle power (PWR 15). "
+                    "Summon with '!summon Charizard' and fight with '!battle @user <points>'. "
+                    "Pokémon Lore: A powerful Fire/Flying-type Pokémon capable of melting boulders with fire breath."
+                )
+            else:
+                info += (
+                    f" Stream Game: In this stream game, you can summon {p_name} as your companion with '!summon {p_name}' "
+                    f"and challenge others with '!battle @user <points>'."
+                )
+            return info
+
+        return f"Pokédex mein '{clean_name}' Pokémon nahi mila. Wild Pokémon catch karne ke liye '!catch' use karein!"
+
     async def handle_summon(self, user: str, pokemon_name: str) -> str:
         """Allows a viewer to summon an owned Pokemon to be their active battle buddy on stream."""
         inv = self.get_user_inventory(user)

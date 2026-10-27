@@ -155,7 +155,7 @@ class AgentService:
             "failed_attempts": 0,
             "max_attempts": 3,
         }
-        self._record_audit(caller_name, caller_role, tool_name, bound_args, "confirmation_challenge", f"Challenge: {token}")
+        self._record_audit(caller_name, caller_role, tool_name, bound_args, "confirmation_challenge", "Challenge issued (token redacted)")
         return (
             f"⚠️ High-impact action '{tool_name}' requires independent server-side confirmation. "
             f"A model-generated 'confirm: true' is not accepted. "
@@ -377,8 +377,10 @@ VIEWER TOOLS (Own data & Public Info):
   Attempt to catch a wild Pokémon.
 - TOOL: summon_pokemon {{"pokemon_name": "Pikachu"}}
   Set active buddy Pokémon.
+- TOOL: get_pokemon_info {{"pokemon_name": "Eevee"}}
+  Get verified Pokédex entry, power, abilities, and stream battle actions for a Pokémon species.
 - TOOL: view_pokemon {{"pokemon_name": "Pikachu"}}
-  View details of a Pokémon.
+  View details of a Pokémon or another viewer's collection.
 - TOOL: battle_pokemon {{"target": "username", "points": 50}}
   Challenge another viewer to a Pokémon battle.
 - TOOL: get_leaderboard {{"limit": 5}}
@@ -394,7 +396,7 @@ VIEWER TOOLS (Own data & Public Info):
 - TOOL: redeem_reward {{"reward_name": "Dance Filter"}}
   Redeem a channel reward from the store using caller's points.
 - TOOL: get_tip_page_url {{}}
-  Get the configured donation / tip page link.
+  Get the configured donation / tip page link and UPI payment details.
 - TOOL: get_bot_status {{}}
   Check status of bot systems and services.
 - TOOL: get_system_status {{}}
@@ -529,10 +531,22 @@ CRITICAL INSTRUCTIONS:
                     return str(res)
                 return "❌ Pokémon service not configured."
 
+            elif tool_name == "get_pokemon_info":
+                if not self.is_feature_enabled("pokemon_actions"):
+                    return "❌ Pokémon actions are currently disabled."
+                poke_name = args.get("pokemon_name") or args.get("name") or args.get("pokemon") or args.get("target")
+                if hasattr(self.bot, "pokemon") and self.bot.pokemon:
+                    if hasattr(self.bot.pokemon, "get_pokemon_species_info"):
+                        res = await self.bot.pokemon.get_pokemon_species_info(poke_name)
+                    else:
+                        res = await self.bot.pokemon.handle_view_pokemon(caller_name, poke_name)
+                    return str(res)
+                return "❌ Pokémon service not configured."
+
             elif tool_name == "view_pokemon":
                 if not self.is_feature_enabled("pokemon_actions"):
                     return "❌ Pokémon actions are currently disabled."
-                poke_name = args.get("pokemon_name")
+                poke_name = args.get("pokemon_name") or args.get("name") or args.get("target")
                 if hasattr(self.bot, "pokemon") and self.bot.pokemon:
                     res = await self.bot.pokemon.handle_view_pokemon(caller_name, poke_name)
                     return str(res)
@@ -615,21 +629,29 @@ CRITICAL INSTRUCTIONS:
             elif tool_name == "get_tip_page_url":
                 cfg = self.bot.load_config() if hasattr(self.bot, "load_config") else {}
                 tip_cfg = cfg.get("tip_page", {})
-                domain_cfg = cfg.get("domain", {})
-                cf_cfg = cfg.get("cloudflare", {})
-                base_url = ""
-                if domain_cfg.get("custom_domain"):
-                    base_url = f"https://{domain_cfg['custom_domain'].strip()}"
-                elif cf_cfg.get("tunnel_url"):
-                    base_url = cf_cfg["tunnel_url"].strip()
-                elif tip_cfg.get("url"):
-                    base_url = tip_cfg["url"].strip()
+                custom_url = (tip_cfg.get("custom_url") or tip_cfg.get("url") or cfg.get("public_url") or "").strip()
+                upi_vpa = (tip_cfg.get("upi_vpa") or cfg.get("upi_vpa") or "").strip()
+                instructions = (tip_cfg.get("donation_instructions") or "").strip()
 
-                if base_url:
-                    full_tip_url = f"{base_url.rstrip('/')}/tip"
-                    return f"Support the stream here: {full_tip_url} (UPI VPA: {tip_cfg.get('upi_vpa', 'N/A')})"
-                elif tip_cfg.get("upi_vpa"):
-                    return f"Tip Page: Open /tip on the stream link (UPI ID: {tip_cfg.get('upi_vpa')})"
+                # Fall back to tunnel / custom_domain only if no explicit custom URL was configured
+                if not custom_url:
+                    domain_cfg = cfg.get("domain", {})
+                    cf_cfg = cfg.get("cloudflare", {})
+                    if cf_cfg.get("tunnel_url"):
+                        custom_url = f"{cf_cfg['tunnel_url'].strip().rstrip('/')}/tip"
+                    elif domain_cfg.get("custom_domain"):
+                        custom_url = f"https://{domain_cfg['custom_domain'].strip().rstrip('/')}/tip"
+
+                parts = []
+                if custom_url:
+                    parts.append(f"Tip Page: {custom_url}")
+                if upi_vpa:
+                    parts.append(f"UPI ID: {upi_vpa}")
+                if instructions:
+                    parts.append(f"Instructions: {instructions}")
+
+                if parts:
+                    return "\n".join(parts)
                 return "Tip page is not currently configured."
 
             elif tool_name == "get_bot_status":
@@ -654,6 +676,11 @@ CRITICAL INSTRUCTIONS:
                 if hasattr(self.bot, "brain_service") and self.bot.brain_service:
                     if hasattr(self.bot.brain_service, "delete_user_history"):
                         self.bot.brain_service.delete_user_history(caller_name)
+                try:
+                    from backend.services import youtube_memory
+                    youtube_memory.delete_user_history(caller_name)
+                except Exception as e:
+                    logger.warning(f"Error clearing youtube_memory for {caller_name}: {e}")
                 self._record_audit(caller_name, caller_role, tool_name, args, "success", "History deleted")
                 return f"✅ Chat memory and history for @{caller_name} have been cleared."
 
@@ -819,6 +846,32 @@ CRITICAL INSTRUCTIONS:
         except Exception as e:
             logger.error(f"Restart error: {e}")
 
+    async def _try_grounded_fallback(self, text: str, user_name: str, caller_role: str = "viewer") -> Optional[str]:
+        """Provide verified factual response from local services when conversational LLM is unavailable."""
+        t_lower = text.lower().strip()
+
+        # 1. Pokemon knowledge / abilities check
+        pokemon_match = re.search(r'\b(eevee|pikachu|charizard|mewtwo|gengar|lucario|bulbasaur|squirtle|snorlax|dragonite)\b', t_lower)
+        if pokemon_match and any(kw in t_lower for kw in ["kya", "kar sakta", "batao", "bata", "power", "ability", "stat", "species", "pokemon"]):
+            poke_name = pokemon_match.group(1).title()
+            if hasattr(self.bot, "pokemon") and self.bot.pokemon and hasattr(self.bot.pokemon, "get_pokemon_species_info"):
+                return await self.bot.pokemon.get_pokemon_species_info(poke_name)
+
+        # 2. Points / rank check
+        if any(kw in t_lower for kw in ["points", "rank", "mera point", "mere point"]):
+            if hasattr(self.bot, "viewers") and self.bot.viewers:
+                return await self.execute_tool("get_my_points", {}, caller_name=user_name, caller_role=caller_role)
+
+        # 3. Tip page / donation check
+        if any(kw in t_lower for kw in ["tip", "donation", "donate", "upi", "paytm", "phonepe", "gpay", "google pay"]):
+            return await self.execute_tool("get_tip_page_url", {}, caller_name=user_name, caller_role=caller_role)
+
+        # 4. Leaderboard check
+        if any(kw in t_lower for kw in ["leaderboard", "top 10", "top 5", "top viewer"]):
+            return await self.execute_tool("get_leaderboard", {"limit": 5}, caller_name=user_name, caller_role=caller_role)
+
+        return None
+
     async def process_request(
         self,
         user_name: str,
@@ -885,6 +938,9 @@ CRITICAL INSTRUCTIONS:
             if raw_content is None or str(raw_content).strip() == "":
                 err_msg = response.get("error", "") if isinstance(response, dict) else ""
                 logger.warning(f"AI engine returned no response. Details: {err_msg}")
+                grounded = await self._try_grounded_fallback(text, user_name, caller_role)
+                if grounded:
+                    return grounded
                 return "Arre, abhi AI service temporarily unavailable hai. Kripya thodi der baad poochhein!"
 
             content = str(raw_content).strip()

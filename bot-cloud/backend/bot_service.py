@@ -125,6 +125,53 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
         return True
     return False
 
+def detect_wake_word(message: str, agent_name: str = "Piya", aliases: Optional[List[str]] = None) -> tuple[bool, str]:
+    """
+    Robust wake-word detection for Piya Central Agent.
+    - Matches configured agent name & aliases as standalone tokens (word boundaries).
+    - Case-insensitive, supports punctuation.
+    - Beginning, middle, or end of message.
+    - Does NOT match substrings in unrelated words (e.g. Piyanka, APIya).
+    - Strips wake-word and surrounding punctuation, returning normalized prompt.
+    - Preserves explicit '!' commands (bypasses agent).
+    """
+    if not message or not isinstance(message, str):
+        return False, message
+
+    stripped = message.strip()
+    if stripped.startswith("!"):
+        # Check if it's explicitly an AI prefix like !ai, !ask, !piya
+        cmd_part = stripped[1:].split()[0].lower() if stripped[1:].split() else ""
+        if cmd_part not in {"ai", "ask", agent_name.lower()}:
+            return False, message
+
+    names = [agent_name]
+    if aliases:
+        for a in aliases:
+            if a and a.strip() and a.lower() not in [n.lower() for n in names]:
+                names.append(a.strip())
+
+    matched = False
+    cleaned = stripped
+
+    for n in sorted(names, key=len, reverse=True):
+        esc = re.escape(n)
+        pattern = re.compile(rf'(?:^|(?<=[\s,!?.:;@]))(?:@)?{esc}(?=$|[\s,!?.:;])', re.IGNORECASE)
+        if pattern.search(cleaned):
+            matched = True
+            cleaned = pattern.sub('', cleaned).strip()
+            # Remove leading/trailing stray punctuation like ',', ':', '-', but preserve sentence '?'
+            cleaned = re.sub(r'^[,\s:;!?-]+|[,\s:;-]+$', '', cleaned).strip()
+            # Collapse multiple spaces
+            cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+            break
+
+    # If message was solely the wake word, default prompt to greeting
+    if matched and not cleaned:
+        cleaned = "hello"
+
+    return matched, cleaned
+
 class BotService:
     def __init__(self, audio=None, ai=None, config_path="config.json"):
         self.audio = audio
@@ -1681,7 +1728,7 @@ class BotService:
                 await self._send_chat(msg)
                 await self._log_ui("LOYALTY", msg)
 
-        # 3. AI Triggers
+        # 3. AI Triggers & Wake-Word Handling
         should_respond = force_ai
         prompt = message
         msg_lower = message.lower().strip()
@@ -1695,11 +1742,9 @@ class BotService:
             ai_keywords = [k.lower().strip() for k in ai_triggers.get("keywords", []) if k.strip()]
 
             # Dynamically include configured Agent name as wake keyword
-            agent_wake_name = self.agent.get_agent_name().lower()
-            if agent_wake_name not in ai_keywords:
-                ai_keywords.append(agent_wake_name)
+            agent_wake_name = self.agent.get_agent_name() if hasattr(self, "agent") and self.agent else "Piya"
 
-            # Prefix matching (e.g. "!ai", "!ask", "!piya")
+            # 3A. Prefix matching (e.g. "!ai", "!ask", "!piya")
             for pref in ai_prefixes:
                 if msg_lower.startswith(f"{pref} ") or msg_lower == pref:
                     should_respond = True
@@ -1707,24 +1752,16 @@ class BotService:
                         prompt = message[len(pref):].strip()
                     break
 
-            # Keyword & mention matching (e.g. "piya", "@piya")
+            # 3B. Robust standalone token wake-word matching across beginning, middle, and end of message
             if not should_respond:
-                for kw in ai_keywords:
-                    if msg_lower.startswith(f"@{kw}"):
-                        should_respond = True
-                        prompt = message[len(kw) + 1:].lstrip(" :,").strip()
-                        break
-                    if msg_lower.startswith(f"{kw} ") or msg_lower == kw:
-                        should_respond = True
-                        prompt = message[len(kw):].strip()
-                        break
-                    variations = [f"hey {kw}", f"pi {kw}", f"@{kw}", f"@pi {kw}", f"{kw} bhai", f"{kw} bata", f"{kw} batao", f"{kw} suno"]
-                    if any(v in msg_lower for v in variations):
-                        should_respond = True
-                        break
+                matched, cleaned_prompt = detect_wake_word(message, agent_name=agent_wake_name, aliases=ai_keywords)
+                if matched:
+                    should_respond = True
+                    prompt = cleaned_prompt
 
-            # Highly Engaging Commands (Handled by AI) for any wake keyword
-            for kw in ai_keywords:
+            # 3C. Highly Engaging Commands (Handled by AI) for any wake keyword
+            all_wake_names = [agent_wake_name.lower()] + ai_keywords
+            for kw in all_wake_names:
                 if msg_lower.startswith(f"{kw} roast") or msg_lower.startswith(f"{kw} hype"):
                     should_respond = True
                     force_ai = True

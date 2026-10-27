@@ -759,6 +759,96 @@ async def get_agent_audit(request: Request):
         return {"audit_log": list(reversed(bot.agent.get_audit_trail(50)))}
     return {"audit_log": []}
 
+def _validate_tip_url(url: str) -> None:
+    """Validate tip page URL syntax, scheme, and safety."""
+    if not url or not isinstance(url, str):
+        raise HTTPException(400, "URL must be a non-empty string")
+    url_stripped = url.strip()
+    if not re.match(r"^https?://[^\s/$.?#].[^\s]*$", url_stripped, re.IGNORECASE):
+        raise HTTPException(400, "Invalid URL format. Must start with http:// or https:// and contain a valid domain.")
+    from urllib.parse import urlparse
+    parsed = urlparse(url_stripped)
+    if not parsed.scheme or parsed.scheme.lower() not in ("http", "https"):
+        raise HTTPException(400, "Only http:// and https:// URLs are allowed.")
+    if not parsed.netloc:
+        raise HTTPException(400, "URL must include a valid host / domain.")
+    if parsed.username or parsed.password:
+        raise HTTPException(400, "Embedded credentials in URL are not allowed.")
+
+@app.get("/api/agent/tip-link")
+async def get_agent_tip_link():
+    """Get the configured tip page link, UPI ID, and donation instructions."""
+    cfg = ConfigManager.get_config()
+    tip_cfg = cfg.get("tip_page", {})
+    return {
+        "custom_url": tip_cfg.get("custom_url") or tip_cfg.get("url") or "",
+        "upi_vpa": tip_cfg.get("upi_vpa") or cfg.get("upi_vpa") or "",
+        "donation_instructions": tip_cfg.get("donation_instructions") or "",
+    }
+
+@app.post("/api/agent/tip-link")
+async def update_agent_tip_link(request: Request, payload: Dict[str, Any]):
+    """Update custom tip page link, UPI ID, and donation instructions (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
+    custom_url = str(payload.get("custom_url", "")).strip()
+    upi_vpa = str(payload.get("upi_vpa", "")).strip()
+    instructions = str(payload.get("donation_instructions", "")).strip()
+
+    if custom_url:
+        _validate_tip_url(custom_url)
+
+    cfg = ConfigManager.get_config()
+    tip_cfg = cfg.setdefault("tip_page", {})
+    tip_cfg["custom_url"] = custom_url
+    tip_cfg["url"] = custom_url  # keep canonical and backward compatible
+    if upi_vpa:
+        tip_cfg["upi_vpa"] = upi_vpa
+        cfg["upi_vpa"] = upi_vpa
+    elif "upi_vpa" in payload:
+        tip_cfg["upi_vpa"] = ""
+        cfg["upi_vpa"] = ""
+
+    tip_cfg["donation_instructions"] = instructions
+
+    ConfigManager.save_config(cfg)
+    return {
+        "status": "success",
+        "message": "Tip page settings updated successfully.",
+        "tip_page": {
+            "custom_url": custom_url,
+            "upi_vpa": tip_cfg.get("upi_vpa", ""),
+            "donation_instructions": instructions
+        }
+    }
+
+@app.post("/api/agent/tip-link/verify")
+async def verify_agent_tip_link(request: Request, payload: Dict[str, Any]):
+    """Verify if the custom tip page URL is reachable (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
+    url = str(payload.get("url", "")).strip()
+    if not url:
+        raise HTTPException(400, "URL required for verification.")
+    _validate_tip_url(url)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.head(url)
+            if resp.status_code == 405:
+                resp = await client.get(url)
+            is_ok = 200 <= resp.status_code < 400
+            warning = None if is_ok else f"Server responded with status code {resp.status_code}"
+            return {
+                "reachable": is_ok,
+                "status_code": resp.status_code,
+                "warning": warning
+            }
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "status_code": None,
+            "warning": f"URL reachability check failed: {str(exc)}"
+        }
+
 @app.get("/api/audio/status")
 async def get_audio_status():
     return audio.get_status()
@@ -2630,53 +2720,74 @@ async def callback_youtube(request: Request, code: Optional[str] = None, state: 
 # --- YOUTUBE MEMORY ENDPOINTS ---
 from backend.services import youtube_memory
 
+@app.get("/api/memory/users")
 @app.get("/api/youtube-memory/users")
-async def get_yt_memory_users():
-    """List all YouTube users with message counts."""
+async def get_yt_memory_users(request: Request):
+    """List all YouTube users with message counts (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         users = youtube_memory.get_all_users()
-        return {"users": users}
+        user_names = [u["user"] for u in users]
+        return {"users": user_names, "details": users, "total": len(user_names)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
+@app.get("/api/memory/user/{username}")
 @app.get("/api/youtube-memory/user/{username}")
-async def get_yt_memory_user(username: str, limit: int = 50):
-    """Get conversation history for a specific user."""
+async def get_yt_memory_user(request: Request, username: str, limit: int = 50):
+    """Get conversation history for a specific user (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         messages = youtube_memory.get_user_messages(username, limit)
         return {"user": username, "messages": messages, "count": len(messages)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
+@app.delete("/api/memory/user/{username}")
 @app.delete("/api/youtube-memory/user/{username}")
-async def delete_yt_memory_user(username: str):
-    """Delete all history for a user."""
+async def delete_yt_memory_user(request: Request, username: str):
+    """Delete all history for a user (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         deleted = youtube_memory.delete_user_history(username)
         return {"status": "success", "deleted": deleted}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
+@app.get("/api/memory/stats")
 @app.get("/api/youtube-memory/stats")
-async def get_yt_memory_stats():
-    """Get YouTube memory statistics."""
+async def get_yt_memory_stats(request: Request):
+    """Get YouTube memory statistics (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         return youtube_memory.get_memory_stats()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
+@app.post("/api/memory/cleanup")
 @app.post("/api/youtube-memory/cleanup")
-async def trigger_yt_memory_cleanup():
-    """Manually trigger cleanup of messages older than 7 days."""
+async def trigger_yt_memory_cleanup(request: Request):
+    """Manually trigger cleanup of messages older than 7 days (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         yt_deleted = youtube_memory.cleanup_old_messages(7)
-        brain_deleted = bot.brain.cleanup_old_chats(7)
+        brain_deleted = bot.brain.cleanup_old_chats(7) if hasattr(bot, "brain") and hasattr(bot.brain, "cleanup_old_chats") else 0
         return {
             "status": "success",
             "youtube_deleted": yt_deleted,
             "brain_deleted": brain_deleted,
             "message": f"Cleaned up {yt_deleted + brain_deleted} old messages"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -2684,40 +2795,50 @@ async def trigger_yt_memory_cleanup():
 # ---------------------------------------------------------------------------
 
 @app.get("/api/chat/logs")
-async def get_chat_logs(n: int = 50):
-    """Return the last N chat messages from YouTube Memory."""
+async def get_chat_logs(request: Request, n: int = 50, limit: Optional[int] = None):
+    """Return the last N chat messages from YouTube Memory (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
+    effective_limit = limit if limit is not None else n
     try:
         # Get all users' recent messages combined
         all_users = youtube_memory.get_all_users()
         all_msgs = []
         for u in all_users:
-            msgs = youtube_memory.get_user_messages(u["user"], limit=n)
+            msgs = youtube_memory.get_user_messages(u["user"], limit=effective_limit)
             all_msgs.extend(msgs)
         # Sort by timestamp desc, take top N
         all_msgs.sort(key=lambda m: m.get("timestamp", 0), reverse=True)
-        return all_msgs[:n]
+        sliced = all_msgs[:effective_limit]
+        return {"messages": sliced, "total": len(all_msgs)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @app.get("/api/chat/logs/stats")
-async def get_chat_log_stats():
-    """Return chat session stats from YouTube Memory."""
+async def get_chat_log_stats(request: Request):
+    """Return chat session stats from YouTube Memory (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     try:
         return youtube_memory.get_memory_stats()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @app.get("/api/chat/logs/files")
-async def list_chat_log_files():
-    """Deprecated — YouTube Memory uses SQLite, no file list."""
+async def list_chat_log_files(request: Request):
+    """Deprecated — YouTube Memory uses SQLite, no file list (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     return {"files": [], "note": "Migrated to YouTube Memory (SQLite)"}
 
 
 @app.get("/api/chat/logs/export")
-async def export_chat_logs_csv():
-    """Export YouTube Memory as CSV."""
+async def export_chat_logs_csv(request: Request):
+    """Export YouTube Memory as CSV (Owner/Admin authenticated)."""
+    _verify_admin_access(request)
     import csv
     import tempfile
     try:

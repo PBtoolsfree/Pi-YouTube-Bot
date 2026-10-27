@@ -112,11 +112,13 @@ class AIEngine:
                 0, {"role": "system", "content": effective_system_prompt}
             )
 
-        # Build execution plan (enabled providers × compatible conversational enabled models, sorted by priority)
+        # Build execution plan (enabled providers sorted by priority × compatible conversational models sorted by priority)
         plan: List[tuple] = []
-        for prov in providers:
-            if not prov.get("enabled", True):
-                continue
+        enabled_providers = sorted(
+            [p for p in providers if p.get("enabled", True)],
+            key=lambda p: p.get("priority", 999),
+        )
+        for prov in enabled_providers:
             models = sorted(
                 [
                     m for m in prov.get("models", [])
@@ -180,19 +182,24 @@ class AIEngine:
 
             except Exception as exc:
                 latency = time.time() - step_start
+                # Sanitize error to prevent leaking api keys or auth headers
+                err_str = str(exc)
+                key = provider.get("api_key", "")
+                if key and key in err_str:
+                    err_str = err_str.replace(key, "[REDACTED]")
                 logger.warning(
                     "Provider %s/%s failed (%.2fs): %s",
                     prov_name,
                     model_id,
                     latency,
-                    exc,
+                    err_str,
                 )
                 trace.append(
                     {
                         "provider": prov_name,
                         "model": model_id,
                         "status": "error",
-                        "error": str(exc),
+                        "error": err_str,
                         "latency": float(f"{latency:.3f}"),
                         "timestamp": time.time(),
                     }
@@ -267,7 +274,25 @@ class AIEngine:
         resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+
+        choices = data.get("choices")
+        if not choices or not isinstance(choices, list) or len(choices) == 0:
+            err_msg = data.get("error", {}).get("message") if isinstance(data.get("error"), dict) else "No choices in model response"
+            raise ValueError(f"Provider returned empty choices: {err_msg}")
+
+        msg = choices[0].get("message", {})
+        content = msg.get("content")
+        if content is None:
+            refusal = msg.get("refusal")
+            if refusal:
+                raise ValueError(f"Model refused request: {refusal}")
+            raise ValueError("Provider message content is null")
+
+        content_str = str(content).strip()
+        if not content_str:
+            raise ValueError("Provider message content is empty")
+
+        return content_str
 
     async def _call_ollama(
         self,
@@ -282,4 +307,8 @@ class AIEngine:
         client = await self._get_client()
         resp = await client.post(url, json=payload)
         resp.raise_for_status()
-        return resp.json()["message"]["content"]
+        data = resp.json()
+        content = data.get("message", {}).get("content")
+        if content is None or not str(content).strip():
+            raise ValueError("Ollama returned empty response")
+        return str(content).strip()

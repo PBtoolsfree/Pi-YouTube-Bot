@@ -8,7 +8,8 @@ import {
     CheckCircle2, AlertTriangle, Clock, Users, Award,
     PhoneCall, Cpu, Activity, Shield, BarChart3, Trash2,
     ChevronRight, Terminal, Mic, MicOff, Play, Square,
-    Database, Search, User, ArrowLeft, Settings2, Sparkles, Coins, Swords
+    Database, Search, User, ArrowLeft, Settings2, Sparkles, Coins, Swords,
+    CreditCard, ExternalLink, Globe
 } from 'lucide-react'
 
 const API_URL = import.meta?.env?.VITE_API_URL || '/api'
@@ -28,6 +29,7 @@ export default function AgentPage() {
         { id: 'overview', label: '⚡ Piya Control Center' },
         { id: 'chat', label: '💬 Chat Logs' },
         { id: 'memory', label: '🧠 YouTube Memory' },
+        { id: 'tippage', label: '💳 Tip Page Link' },
         { id: 'commands', label: '🤖 Bot Commands' },
     ]
 
@@ -83,6 +85,7 @@ export default function AgentPage() {
             {activeSection === 'overview' && <PiyaOverviewSection />}
             {activeSection === 'chat' && <ChatLogsSection />}
             {activeSection === 'memory' && <YouTubeMemorySection />}
+            {activeSection === 'tippage' && <TipPageLinkSection />}
             {activeSection === 'commands' && <BotCommandsSection />}
         </div>
     )
@@ -587,7 +590,8 @@ function ChatLogsSection() {
     const fetchLogs = async () => {
         try {
             const res = await axios.get(`${API_URL}/chat/logs?limit=50`)
-            setMessages(res.data?.messages || [])
+            const rawMsgs = Array.isArray(res.data) ? res.data : (res.data?.messages || [])
+            setMessages(rawMsgs)
         } catch (e) {
             console.error(e)
         } finally {
@@ -677,11 +681,13 @@ function YouTubeMemorySection() {
     const fetchMemory = async () => {
         try {
             const [st, u] = await Promise.all([
-                axios.get(`${API_URL}/memory/stats`),
-                axios.get(`${API_URL}/memory/users`)
+                axios.get(`${API_URL}/memory/stats`).catch(() => axios.get(`${API_URL}/youtube-memory/stats`)),
+                axios.get(`${API_URL}/memory/users`).catch(() => axios.get(`${API_URL}/youtube-memory/users`))
             ])
             setStats(st.data)
-            setUsers(u.data?.users || [])
+            const rawUsers = u.data?.users || []
+            const userList = rawUsers.map(item => (typeof item === 'string' ? item : item.user || item.username || ''))
+            setUsers(userList.filter(Boolean))
         } catch (e) {
             console.error(e)
         }
@@ -694,7 +700,7 @@ function YouTubeMemorySection() {
     const loadUserHistory = async (user) => {
         setSelectedUser(user)
         try {
-            const res = await axios.get(`${API_URL}/memory/user/${user}`)
+            const res = await axios.get(`${API_URL}/memory/user/${user}`).catch(() => axios.get(`${API_URL}/youtube-memory/user/${user}`))
             setHistory(res.data?.messages || [])
         } catch (e) {
             console.error(e)
@@ -705,7 +711,7 @@ function YouTubeMemorySection() {
         if (!confirm("Run 7-day memory cleanup now?")) return
         setCleaning(true)
         try {
-            const res = await axios.post(`${API_URL}/memory/cleanup`)
+            const res = await axios.post(`${API_URL}/memory/cleanup`).catch(() => axios.post(`${API_URL}/youtube-memory/cleanup`))
             alert(res.data?.message || "Cleanup complete.")
             fetchMemory()
         } catch (e) {
@@ -788,6 +794,253 @@ function YouTubeMemorySection() {
                     </CardContent>
                 </Card>
             </div>
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────
+// TIP PAGE LINK SECTION
+// ─────────────────────────────────────────────
+function TipPageLinkSection() {
+    const [customUrl, setCustomUrl] = useState('')
+    const [upiVpa, setUpiVpa] = useState('')
+    const [instructions, setInstructions] = useState('')
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [verifying, setVerifying] = useState(false)
+    const [verifyResult, setVerifyResult] = useState(null)
+    const [statusMessage, setStatusMessage] = useState(null)
+    const [errorMessage, setErrorMessage] = useState(null)
+
+    const fetchTipLink = async () => {
+        try {
+            setLoading(true)
+            const res = await axios.get(`${API_URL}/agent/tip-link`)
+            if (res.data) {
+                setCustomUrl(res.data.custom_url || '')
+                setUpiVpa(res.data.upi_vpa || '')
+                setInstructions(res.data.donation_instructions || '')
+            }
+        } catch (e) {
+            console.error('Failed to fetch tip link settings', e)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchTipLink()
+    }, [])
+
+    const handleSave = async () => {
+        setStatusMessage(null)
+        setErrorMessage(null)
+
+        const trimmed = customUrl.trim()
+        if (trimmed) {
+            if (!/^https?:\/\//i.test(trimmed)) {
+                setErrorMessage('URL must start with http:// or https://')
+                return
+            }
+            try {
+                const parsed = new URL(trimmed)
+                if (parsed.username || parsed.password) {
+                    setErrorMessage('Embedded credentials in URL are not allowed')
+                    return
+                }
+            } catch (err) {
+                setErrorMessage('Invalid URL format. Please check and try again.')
+                return
+            }
+        }
+
+        setSaving(true)
+        try {
+            const res = await axios.post(`${API_URL}/agent/tip-link`, {
+                custom_url: trimmed,
+                upi_vpa: upiVpa.trim(),
+                donation_instructions: instructions.trim()
+            })
+            setStatusMessage('Tip Page link settings saved successfully!')
+            setErrorMessage(null)
+            if (res.data?.tip_page) {
+                setCustomUrl(res.data.tip_page.custom_url || '')
+                setUpiVpa(res.data.tip_page.upi_vpa || '')
+                setInstructions(res.data.tip_page.donation_instructions || '')
+            }
+        } catch (e) {
+            setErrorMessage(e.response?.data?.detail || e.message || 'Failed to save tip link')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleVerifyReachability = async () => {
+        const trimmed = customUrl.trim()
+        if (!trimmed) {
+            setErrorMessage('Please enter a Custom Tip Page URL first')
+            return
+        }
+        setVerifying(true)
+        setVerifyResult(null)
+        try {
+            const res = await axios.post(`${API_URL}/agent/tip-link/verify`, { url: trimmed })
+            setVerifyResult(res.data)
+        } catch (e) {
+            setVerifyResult({
+                reachable: false,
+                warning: e.response?.data?.detail || e.message || 'Reachability test failed'
+            })
+        } finally {
+            setVerifying(false)
+        }
+    }
+
+    const openPreview = () => {
+        const trimmed = customUrl.trim()
+        if (trimmed) {
+            window.open(trimmed, '_blank', 'noopener,noreferrer')
+        }
+    }
+
+    return (
+        <div className="space-y-4 max-w-4xl">
+            <Card className="bg-zinc-900 border-zinc-800 shadow-md">
+                <CardHeader className="pb-3 border-b border-zinc-800/80">
+                    <CardTitle className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-violet-400" /> Dedicated Tip Page & Payment Configuration
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-4">
+                    <p className="text-xs text-zinc-400">
+                        Configure the authoritative public donation URL and payment details for PB HERO LIVE.
+                        Piya will return this exact link without modifying or appending extra paths.
+                    </p>
+
+                    {statusMessage && (
+                        <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-xs text-emerald-300 flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                            <span>{statusMessage}</span>
+                        </div>
+                    )}
+
+                    {errorMessage && (
+                        <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/60 text-xs text-rose-300 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                            <span>{errorMessage}</span>
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">
+                                Custom Tip Page URL (Complete Public Link)
+                            </label>
+                            <div className="flex gap-2">
+                                <Input
+                                    value={customUrl}
+                                    onChange={(e) => {
+                                        setCustomUrl(e.target.value)
+                                        setVerifyResult(null)
+                                        setErrorMessage(null)
+                                    }}
+                                    placeholder="https://yourdomain.com/tip"
+                                    className="bg-zinc-950 border-zinc-700 text-xs font-mono h-9 flex-1"
+                                />
+                                <Button
+                                    type="button"
+                                    onClick={openPreview}
+                                    disabled={!customUrl.trim()}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs border-zinc-700 hover:bg-zinc-800 text-zinc-300"
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5 mr-1" /> Preview
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={handleVerifyReachability}
+                                    disabled={verifying || !customUrl.trim()}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs border-zinc-700 hover:bg-zinc-800 text-zinc-300"
+                                >
+                                    {verifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <Globe className="h-3.5 w-3.5 mr-1" />}
+                                    Test Link
+                                </Button>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 mt-1 block">
+                                Enter the full public link including scheme (e.g., https://pbherolive.com/tip).
+                            </span>
+                        </div>
+
+                        {verifyResult && (
+                            <div className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${
+                                verifyResult.reachable
+                                    ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
+                                    : 'bg-amber-950/40 border-amber-800/50 text-amber-300'
+                            }`}>
+                                {verifyResult.reachable ? (
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                ) : (
+                                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                    <p className="font-semibold">
+                                        {verifyResult.reachable
+                                            ? `Link reachable (HTTP ${verifyResult.status_code || 200})`
+                                            : 'Reachability Warning'}
+                                    </p>
+                                    {verifyResult.warning && (
+                                        <p className="text-[11px] opacity-90 mt-0.5">{verifyResult.warning}</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div>
+                            <label className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">
+                                UPI ID / VPA (Optional)
+                            </label>
+                            <Input
+                                value={upiVpa}
+                                onChange={(e) => setUpiVpa(e.target.value)}
+                                placeholder="creator@upi or paytmqr281005@paytm"
+                                className="bg-zinc-950 border-zinc-700 text-xs font-mono h-9"
+                            />
+                            <span className="text-[10px] text-zinc-500 mt-1 block">
+                                Viewers asking how to donate via UPI will receive this ID.
+                            </span>
+                        </div>
+
+                        <div>
+                            <label className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">
+                                Donation Instructions (Optional)
+                            </label>
+                            <Input
+                                value={instructions}
+                                onChange={(e) => setInstructions(e.target.value)}
+                                placeholder="Scan the QR on stream or use UPI via PhonePe, GPay, or Paytm."
+                                className="bg-zinc-950 border-zinc-700 text-xs h-9"
+                            />
+                            <span className="text-[10px] text-zinc-500 mt-1 block">
+                                Concise instructions for payment methods supported on your stream.
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                        <Button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs px-5 h-9"
+                        >
+                            {saving ? <RefreshCw className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Save Changes
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }
