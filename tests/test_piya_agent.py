@@ -436,3 +436,210 @@ def test_safe_default_feature_states():
         assert agent.is_feature_enabled("auto_chat") is False
         assert DEFAULT_AGENT_CONFIG["switches"]["auto_chat"] is False
         assert DEFAULT_AGENT_CONFIG["auto_chat"]["enabled"] is False
+
+
+def test_resolve_role_signature_with_user_id_regression():
+    """14. Regression: resolve_role must accept user_id without TypeError and resolve correctly."""
+    cfg = get_test_config()
+    cfg["agent"]["operators"].append("UC_OPERATOR_CHANNEL_ID")
+    cfg["agent"]["moderators"].append("UC_MOD_CHANNEL_ID")
+    bot = DummyBot()
+
+    with patch.object(ConfigManager, "get_config", side_effect=lambda *args, **kwargs: cfg):
+        agent = AgentService(bot)
+
+        # Exact production call site pattern that previously raised TypeError:
+        # caller_role = self.agent.resolve_role(author, user_id=channel_id, is_mod=is_mod, is_owner=is_owner)
+        role_viewer = agent.resolve_role(
+            "pradipbag6209",
+            user_id="UCGSYPK8jBHSD6SMNIhfGIMQ",
+            is_mod=False,
+            is_owner=False
+        )
+        assert role_viewer == "viewer"
+
+        # Explicit owner flag from Streamer.bot metadata
+        role_owner_flag = agent.resolve_role(
+            "any_chatter",
+            user_id="UC_ANY",
+            is_owner=True
+        )
+        assert role_owner_flag == "owner"
+
+        # Explicit moderator flag from Streamer.bot metadata
+        role_mod_flag = agent.resolve_role(
+            "regular_user",
+            user_id="UC_REGULAR",
+            is_mod=True
+        )
+        assert role_mod_flag == "moderator"
+
+        # Operator resolved by verified channel ID
+        role_op_id = agent.resolve_role(
+            "stream_helper",
+            user_id="UC_OPERATOR_CHANNEL_ID"
+        )
+        assert role_op_id == "owner"
+
+        # Moderator resolved by verified channel ID
+        role_mod_id = agent.resolve_role(
+            "stream_police",
+            user_id="UC_MOD_CHANNEL_ID"
+        )
+        assert role_mod_id == "moderator"
+
+
+def test_agent_get_status_overview_safe_fields():
+    """15. Verify get_status_overview returns safe operational fields and zero sensitive secrets."""
+    bot = DummyBot()
+    cfg = get_test_config()
+    with patch.object(ConfigManager, "get_config", side_effect=lambda *args, **kwargs: cfg):
+        agent = AgentService(bot)
+        overview = agent.get_status_overview()
+
+        assert overview["enabled"] is True
+        assert overview["name"] == "Piya"
+        assert "switches" in overview
+        assert "metrics" in overview
+        assert "recent_actions" in overview
+        assert "enabled" in overview["auto_chat"]
+
+        # Confirm non-leakage
+        overview_str = json.dumps(overview).lower()
+        assert "api_key" not in overview_str
+        assert "password" not in overview_str
+        assert "secret" not in overview_str
+        assert "confirmation_token" not in overview_str
+
+    # Verify unconfigured bot has auto_chat disabled by default
+    with patch.object(ConfigManager, "get_config", return_value={}):
+        default_agent = AgentService(bot)
+        default_overview = default_agent.get_status_overview()
+        assert default_overview["auto_chat"]["enabled"] is False
+
+
+def test_conversational_model_filtering():
+    """16. Verify is_conversational_model correctly rejects classifiers and embedding models."""
+    from backend.ai_service import is_conversational_model
+
+    # Valid conversational chat models
+    assert is_conversational_model("gemini-3-flash-preview") is True
+    assert is_conversational_model("gpt-4o") is True
+    assert is_conversational_model("llama-3.3-70b-versatile") is True
+    assert is_conversational_model("recursive/flint-v1.0:free") is True
+
+    # Incompatible non-conversational models
+    assert is_conversational_model("meta-llama/llama-prompt-guard-2-22m") is False
+    assert is_conversational_model("nvidia/nemotron-3.5-embed-1b:free") is False
+    assert is_conversational_model("text-embedding-3-small") is False
+    assert is_conversational_model("cohere-rerank-v3") is False
+    assert is_conversational_model("whisper-large-v3") is False
+
+
+def test_ai_engine_plan_skips_non_conversational_models():
+    """17. Verify AIEngine.chat plan skips non-conversational models."""
+    from backend.ai_service import AIEngine
+
+    mixed_topology = {
+        "ai_topology": {
+            "providers": [
+                {
+                    "id": "groq",
+                    "name": "groq",
+                    "type": "openai",
+                    "enabled": True,
+                    "models": [
+                        {"id": "meta-llama/llama-prompt-guard-2-22m", "enabled": True, "priority": 1}
+                    ]
+                },
+                {
+                    "id": "openrouter_embed",
+                    "name": "openrouter",
+                    "type": "openai",
+                    "enabled": True,
+                    "models": [
+                        {"id": "nvidia/nemotron-3.5-embed-1b:free", "enabled": True, "priority": 1}
+                    ]
+                }
+            ]
+        }
+    }
+
+    async def _test():
+        with patch.object(ConfigManager, "get_config", return_value=mixed_topology):
+            engine = AIEngine()
+            res = await engine.chat("Hello!")
+            # Plan has 0 conversational models -> returns error dict gracefully without calling HTTP
+            assert res["response"] is None
+            assert "No enabled conversational providers available" in res["error"]
+
+    asyncio.run(_test())
+
+
+def test_trigger_pipeline_and_safe_fallback():
+    """18. Verify trigger messages pipeline and safe fallback when LLM is unavailable."""
+    bot = DummyBot()
+    cfg = get_test_config()
+
+    async def _test():
+        with patch.object(ConfigManager, "get_config", side_effect=lambda *args, **kwargs: cfg):
+            agent = AgentService(bot)
+
+            # A: Normal chat query through agent
+            bot.ai_engine = MockAIEngine(canned_response="Haan ji, main online hoon! Kaise madad kar sakti hoon?")
+            res_hello = await agent.process_request("pradipbag6209", "UC123", "Piya hello, kya tum online ho?")
+            assert "online hoon" in res_hello
+
+            # B: Tool-driven points query
+            bot.ai_engine = MockAIEngine(canned_response="TOOL: get_my_points {}\nMain check karti hoon!")
+            res_points = await agent.process_request("alice", "UC_ALICE", "@Piya mere points aur rank batao")
+            assert "Action has been executed successfully" in res_points or "500" in res_points
+
+            # C: Fallback when all providers fail (returns None response)
+            failing_engine = MagicMock()
+            failing_engine.chat = AsyncMock(return_value={"response": None, "error": "All providers failed."})
+            res_fail = await agent.process_request("pradipbag6209", "UC123", "Piya hello", ai_engine=failing_engine)
+            assert "temporarily unavailable" in res_fail
+
+    asyncio.run(_test())
+
+
+def test_expanded_agent_tools_execution():
+    """19. Verify newly added tools (redeem_reward, get_tip_page_url, explain_points_transfer, get_system_status)."""
+    bot = DummyBot()
+    cfg = get_test_config()
+    cfg["tip_page"] = {"upi_vpa": "paytmqr281005@paytm", "url": "https://stream.tip.me"}
+    bot.load_config = MagicMock(return_value=cfg)
+    bot.is_sb_connected = True
+    bot.live_chat_id = "test_live_chat"
+
+    # Setup mock redeem service
+    bot.redeem_svc = MagicMock()
+    bot.redeem_svc.find_by_name = MagicMock(return_value={"id": "dance_filter", "name": "Dance Filter", "cost": 50})
+    bot.redeem_svc.trigger_redeem = AsyncMock(return_value={"ok": True})
+
+    async def _test():
+        with patch.object(ConfigManager, "get_config", side_effect=lambda *args, **kwargs: cfg):
+            agent = AgentService(bot)
+
+            # Tip page
+            tip_res = await agent.execute_tool("get_tip_page_url", {}, caller_name="alice", caller_role="viewer")
+            assert "https://stream.tip.me/tip" in tip_res
+            assert "paytmqr281005@paytm" in tip_res
+
+            # Points transfer explanation
+            exp_res = await agent.execute_tool("explain_points_transfer", {}, caller_name="alice", caller_role="viewer")
+            assert "!give @username" in exp_res
+
+            # System status
+            status_res = await agent.execute_tool("get_system_status", {}, caller_name="alice", caller_role="viewer")
+            status_data = json.loads(status_res)
+            assert status_data["streamer_bot_connected"] is True
+            assert status_data["live_chat_active"] is True
+
+            # Redeem reward
+            redeem_res = await agent.execute_tool("redeem_reward", {"reward_name": "Dance Filter"}, caller_name="alice", caller_role="viewer")
+            assert "successfully redeemed" in redeem_res
+            assert "Dance Filter" in redeem_res
+
+    asyncio.run(_test())

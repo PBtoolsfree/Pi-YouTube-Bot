@@ -248,28 +248,35 @@ class AgentService:
         default_val = False if switch_name == "auto_chat" else True
         return bool(switches.get(switch_name, default_val))
 
-    def resolve_role(self, username: str, is_owner: bool = False, is_mod: bool = False) -> str:
+    def resolve_role(
+        self,
+        username: str,
+        user_id: Optional[str] = None,
+        is_owner: bool = False,
+        is_mod: bool = False
+    ) -> str:
         """Resolve caller role from trusted event metadata, not prompt text."""
         if not username:
             return "viewer"
         
         u_clean = username.lower().strip().lstrip("@")
+        u_id_clean = user_id.lower().strip() if user_id else ""
         cfg = self._get_agent_cfg()
 
         # Check explicit flags first
         if is_owner:
             return "owner"
         
-        # Check operators list in config
+        # Check operators list in config (username or verified channel/user ID)
         operators = [op.lower().strip().lstrip("@") for op in cfg.get("operators", [])]
-        if u_clean in operators:
+        if u_clean in operators or (u_id_clean and u_id_clean in operators):
             return "owner"
 
         if is_mod:
             return "moderator"
 
         moderators = [m.lower().strip().lstrip("@") for m in cfg.get("moderators", [])]
-        if u_clean in moderators:
+        if u_clean in moderators or (u_id_clean and u_id_clean in moderators):
             return "moderator"
 
         return "viewer"
@@ -299,6 +306,44 @@ class AgentService:
     def get_audit_trail(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Return the recent audit trail entries."""
         return list(self.audit_log)[-limit:]
+
+    def get_status_overview(self) -> Dict[str, Any]:
+        """Return safe, non-sensitive status overview of the agent."""
+        cfg = self._get_agent_cfg()
+        audit_trail = self.get_audit_trail(limit=20)
+        recent_actions = []
+        for entry in audit_trail:
+            recent_actions.append({
+                "timestamp": entry.get("timestamp", 0),
+                "user": entry.get("actor", "unknown"),
+                "role": entry.get("role", "viewer"),
+                "tool": entry.get("tool", "unknown"),
+                "status": entry.get("status", "unknown"),
+                "result": str(entry.get("result", ""))[:200]
+            })
+        recent_actions.reverse()
+
+        metrics = {
+            "requests_total": self.metrics.get("requests_total", 0),
+            "tool_executions": self.metrics.get("tool_executions", 0),
+            "denied_total": self.metrics.get("denied_total", 0),
+            "errors_total": self.metrics.get("errors_total", 0),
+            "avg_latency_ms": round(self.metrics.get("avg_latency_ms", 0.0), 1),
+            "last_latency_ms": round(self.metrics.get("last_latency_ms", 0.0), 1) if "last_latency_ms" in self.metrics else 0
+        }
+
+        return {
+            "enabled": self.is_feature_enabled("agent_enabled"),
+            "name": self.get_agent_name(),
+            "personality": cfg.get("personality", "helpful and friendly"),
+            "language": cfg.get("language", "Hinglish"),
+            "reply_length": cfg.get("reply_length", "concise"),
+            "tone": cfg.get("tone", "supportive"),
+            "switches": cfg.get("switches", {}),
+            "auto_chat": cfg.get("auto_chat", {}),
+            "metrics": metrics,
+            "recent_actions": recent_actions
+        }
 
     def get_tools_schema(self) -> str:
         """Generate the system prompt containing Piya's identity and available tools schema."""
@@ -342,10 +387,18 @@ VIEWER TOOLS (Own data & Public Info):
   List active stream chat games and how to play.
 - TOOL: explain_commands {{}}
   Explain available chat commands.
+- TOOL: explain_points_transfer {{}}
+  Explain how to transfer points to another user.
 - TOOL: get_available_redeems {{}}
   List reward redeems from the channel store.
+- TOOL: redeem_reward {{"reward_name": "Dance Filter"}}
+  Redeem a channel reward from the store using caller's points.
+- TOOL: get_tip_page_url {{}}
+  Get the configured donation / tip page link.
 - TOOL: get_bot_status {{}}
   Check status of bot systems and services.
+- TOOL: get_system_status {{}}
+  Get live status of integrations (Streamer.bot, audio, live stream).
 - TOOL: delete_my_history {{}}
   Clear caller's AI chat history and memory.
 
@@ -519,6 +572,9 @@ CRITICAL INSTRUCTIONS:
                     return "❌ Support guide is currently disabled."
                 return "Commands: !points, !give @user <pts>, !catch, !mypokemon, !battle @user <pts>, !top, !redeem <id>, !help"
 
+            elif tool_name == "explain_points_transfer":
+                return "Points transfer karne ke liye chat mein type karein: '!give @username <amount>' ya mujhse bolein: '@Piya @username ko <amount> points transfer karo'."
+
             elif tool_name == "get_available_redeems":
                 if not self.is_feature_enabled("loyalty_actions"):
                     return "❌ Redeems are currently disabled."
@@ -529,11 +585,70 @@ CRITICAL INSTRUCTIONS:
                     return json.dumps(clean, indent=2)
                 return "No channel redeems configured."
 
+            elif tool_name == "redeem_reward":
+                if not self.is_feature_enabled("loyalty_actions"):
+                    return "❌ Reward redemptions are currently disabled."
+                reward_name = args.get("reward_name") or args.get("name") or args.get("reward")
+                if not reward_name:
+                    return "❌ Reward name required."
+                if hasattr(self.bot, "redeem_svc") and self.bot.redeem_svc:
+                    reward = self.bot.redeem_svc.find_by_name(reward_name)
+                    if not reward:
+                        return f"❌ Reward '{reward_name}' not found. Ask 'what rewards are available' to see the shop."
+                    viewer_svc = getattr(self.bot, "viewers", None)
+                    sb_ws = getattr(self.bot, "sb_ws", None)
+                    b_func = getattr(self.bot, "broadcast_func", None)
+                    res = await self.bot.redeem_svc.trigger_redeem(
+                        reward["id"], caller_name, viewer_svc, sb_ws=sb_ws, broadcast_func=b_func
+                    )
+                    if res.get("ok"):
+                        msg = f"🎉 @{caller_name} successfully redeemed '{reward['name']}' for {reward['cost']} points!"
+                        self._record_audit(caller_name, caller_role, tool_name, args, "success", msg)
+                        return msg
+                    else:
+                        err = res.get("error", "Redeem failed")
+                        msg = f"❌ Redeem failed: {err}"
+                        self._record_audit(caller_name, caller_role, tool_name, args, "failed", msg)
+                        return msg
+                return "❌ Redeem service unavailable."
+
+            elif tool_name == "get_tip_page_url":
+                cfg = self.bot.load_config() if hasattr(self.bot, "load_config") else {}
+                tip_cfg = cfg.get("tip_page", {})
+                domain_cfg = cfg.get("domain", {})
+                cf_cfg = cfg.get("cloudflare", {})
+                base_url = ""
+                if domain_cfg.get("custom_domain"):
+                    base_url = f"https://{domain_cfg['custom_domain'].strip()}"
+                elif cf_cfg.get("tunnel_url"):
+                    base_url = cf_cfg["tunnel_url"].strip()
+                elif tip_cfg.get("url"):
+                    base_url = tip_cfg["url"].strip()
+
+                if base_url:
+                    full_tip_url = f"{base_url.rstrip('/')}/tip"
+                    return f"Support the stream here: {full_tip_url} (UPI VPA: {tip_cfg.get('upi_vpa', 'N/A')})"
+                elif tip_cfg.get("upi_vpa"):
+                    return f"Tip Page: Open /tip on the stream link (UPI ID: {tip_cfg.get('upi_vpa')})"
+                return "Tip page is not currently configured."
+
             elif tool_name == "get_bot_status":
                 if not self.is_feature_enabled("viewer_support"):
                     return "❌ Status checks disabled."
                 status = self.bot.get_status() if hasattr(self.bot, "get_status") else {}
                 return json.dumps({"status": "online", "details": status})
+
+            elif tool_name == "get_system_status":
+                if not self.is_feature_enabled("viewer_support"):
+                    return "❌ System status checks are disabled."
+                sb_connected = getattr(self.bot, "is_sb_connected", False)
+                audio_active = bool(getattr(self.bot, "audio", None))
+                live_chat = bool(getattr(self.bot, "live_chat_id", None))
+                return json.dumps({
+                    "streamer_bot_connected": sb_connected,
+                    "audio_active": audio_active,
+                    "live_chat_active": live_chat
+                })
 
             elif tool_name == "delete_my_history":
                 if hasattr(self.bot, "brain_service") and self.bot.brain_service:
@@ -726,7 +841,7 @@ CRITICAL INSTRUCTIONS:
 
         # Resolve role if not explicitly provided
         if caller_role is None:
-            caller_role = self.resolve_role(user_name)
+            caller_role = self.resolve_role(user_name, user_id=user_id)
 
         # Intercept direct confirmation of a pending high-impact action (only when tools are enabled)
         clean_text = text.strip()
@@ -755,7 +870,7 @@ CRITICAL INSTRUCTIONS:
 
         engine = ai_engine or getattr(self.bot, "ai_engine", None)
         if not engine:
-            return "AI engine unavailable."
+            return "Arre, abhi AI service temporarily offline hai. Kripya thodi der baad poochhein!"
 
         # Build prompt with tools schema
         system_prompt = self.get_tools_schema() + f"\nAuthenticated Context: User='{user_name}' (ID: '{user_id}', Role: '{caller_role}')"
@@ -766,10 +881,16 @@ CRITICAL INSTRUCTIONS:
 
         try:
             response = await engine.chat(messages, system_prompt=system_prompt)
-            content = response.get("response", "") if isinstance(response, dict) else str(response)
+            raw_content = response.get("response") if isinstance(response, dict) else response
+            if raw_content is None or str(raw_content).strip() == "":
+                err_msg = response.get("error", "") if isinstance(response, dict) else ""
+                logger.warning(f"AI engine returned no response. Details: {err_msg}")
+                return "Arre, abhi AI service temporarily unavailable hai. Kripya thodi der baad poochhein!"
+
+            content = str(raw_content).strip()
 
             # Check for tool call directives
-            lines = content.strip().split("\n")
+            lines = content.split("\n")
             tool_lines = [l.strip() for l in lines if l.strip().startswith("TOOL:")]
 
             if tool_lines:
@@ -818,7 +939,12 @@ CRITICAL INSTRUCTIONS:
                 })
 
                 final_resp = await engine.chat(messages)
-                final_text = final_resp.get("response", "") if isinstance(final_resp, dict) else str(final_resp)
+                raw_final = final_resp.get("response") if isinstance(final_resp, dict) else final_resp
+                if raw_final is None or str(raw_final).strip() == "":
+                    clean_results = [str(r.get('result', '')) for r in executed_results if r.get('result')]
+                    return " ".join(clean_results) or "Action completed."
+
+                final_text = str(raw_final).strip()
 
                 # Sanitize output
                 clean_lines = [l for l in final_text.split("\n") if not l.strip().startswith("TOOL:")]
@@ -830,4 +956,4 @@ CRITICAL INSTRUCTIONS:
         except Exception as e:
             logger.error(f"Error in Agent process_request: {e}", exc_info=True)
             self.metrics["errors_total"] += 1
-            return f"I had a little hiccup processing that: {str(e)}"
+            return "Arre, request process karte waqt ek chhota issue aaya. Kripya dobara try karein!"

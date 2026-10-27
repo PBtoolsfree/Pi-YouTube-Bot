@@ -1796,12 +1796,17 @@ class BotService:
 
             if response:
                 self.session_stats["ai_responses"] = int(self.session_stats.get("ai_responses", 0)) + 1
-                await self._send_chat(f"@{author} {response}")
-                await self._log_ui("AI", f"{self.agent.get_agent_name()}: {response}", author=self.agent.get_agent_name())
+                chat_reply = response.strip()
+                if chat_reply.lower().startswith(f"@{author.lower()}"):
+                    full_reply = chat_reply
+                else:
+                    full_reply = f"@{author} {chat_reply}"
+                await self._send_chat(full_reply)
+                await self._log_ui("AI", f"{self.agent.get_agent_name()}: {full_reply}", author=self.agent.get_agent_name())
 
                 # Speak TTS if enabled
                 if self.agent.is_feature_enabled("tts_actions") and self.audio:
-                    await self.audio.speak(response, "public")
+                    await self.audio.speak(chat_reply, "public")
 
                 # YouTube Memory & Brain Updates
                 if yt_row_id and self.yt_memory_enabled and self.agent.is_feature_enabled("chat_history"):

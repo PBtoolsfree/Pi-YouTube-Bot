@@ -9,6 +9,38 @@ from .config_manager import ConfigManager
 logger = logging.getLogger(__name__)
 
 
+INCOMPATIBLE_MODEL_KEYWORDS = (
+    "prompt-guard",
+    "guard",
+    "moderation",
+    "classifier",
+    "embed",
+    "embedding",
+    "bge-",
+    "text-embedding",
+    "rerank",
+    "whisper",
+    "tts",
+    "dall-e",
+    "flux",
+)
+
+
+def is_conversational_model(model_id: str, model_cfg: Optional[Dict[str, Any]] = None) -> bool:
+    """Determine whether a model is suitable for conversational chat completions.
+
+    Rejects moderation classifiers, embedding models, rerankers, and audio/image models.
+    """
+    if not model_id or not isinstance(model_id, str):
+        return False
+    if model_cfg and isinstance(model_cfg, dict):
+        cap = model_cfg.get("capability") or model_cfg.get("type")
+        if cap and str(cap).lower() not in ("chat", "conversational", "completion", "text"):
+            return False
+    m_lower = model_id.lower().strip()
+    return not any(kw in m_lower for kw in INCOMPATIBLE_MODEL_KEYWORDS)
+
+
 class AIEngine:
     """
     Multi-provider AI engine with automatic failover.
@@ -80,17 +112,29 @@ class AIEngine:
                 0, {"role": "system", "content": effective_system_prompt}
             )
 
-        # Build execution plan (enabled providers × enabled models, sorted by priority)
+        # Build execution plan (enabled providers × compatible conversational enabled models, sorted by priority)
         plan: List[tuple] = []
         for prov in providers:
             if not prov.get("enabled", True):
                 continue
             models = sorted(
-                [m for m in prov.get("models", []) if m.get("enabled", True)],
+                [
+                    m for m in prov.get("models", [])
+                    if m.get("enabled", True) and is_conversational_model(m.get("id", ""), m)
+                ],
                 key=lambda m: m.get("priority", 999),
             )
             for mod in models:
                 plan.append((prov, mod))
+
+        if not plan:
+            logger.warning("No enabled providers with compatible conversational models found.")
+            return {
+                "response": None,
+                "error": "No enabled conversational providers available.",
+                "trace": [],
+                "latency": 0.0,
+            }
 
         trace: List[Dict[str, Any]] = []
         start_time = time.time()
@@ -176,7 +220,10 @@ class AIEngine:
                 "message": "No enabled models found for this provider.",
             }
 
-        model_id = models[0].get("id", "")
+        # Prefer testing a conversational model if present
+        conv_models = [m for m in models if is_conversational_model(m.get("id", ""), m)]
+        target_model = conv_models[0] if conv_models else models[0]
+        model_id = target_model.get("id", "")
         messages = [{"role": "user", "content": "Hello"}]
 
         try:

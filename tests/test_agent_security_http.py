@@ -358,6 +358,43 @@ class TestAgentSecurityHttp(unittest.TestCase):
         self.assertEqual(resp_auth.status_code, 200)
         self.assertEqual(resp_auth.json()["status"], "added")
 
+    def test_11_agent_status_endpoint_auth_and_safety(self):
+        """11. /api/agent/status enforces authentication and never leaks credentials or sensitive data."""
+        # Unauthenticated public request -> 401
+        resp_unauth = self.client.get(
+            "/api/agent/status",
+            headers={"cf-connecting-ip": "1.2.3.4"}
+        )
+        self.assertEqual(resp_unauth.status_code, 401)
+
+        # Bad credentials -> 401
+        resp_bad = self.client.get(
+            "/api/agent/status",
+            headers={**self.bad_auth_header, "cf-connecting-ip": "1.2.3.4"}
+        )
+        self.assertEqual(resp_bad.status_code, 401)
+
+        # Authenticated request -> 200 with safe fields
+        resp_auth = self.client.get(
+            "/api/agent/status",
+            headers={**self.auth_header, "cf-connecting-ip": "1.2.3.4"}
+        )
+        self.assertEqual(resp_auth.status_code, 200)
+        data = resp_auth.json()
+        self.assertIn("enabled", data)
+        self.assertIn("name", data)
+        self.assertIn("switches", data)
+        self.assertIn("metrics", data)
+        self.assertIn("recent_actions", data)
+
+        # Confirm non-leakage of secrets
+        resp_str = resp_auth.text.lower()
+        self.assertNotIn("api_key", resp_str)
+        self.assertNotIn("dashboard_password", resp_str)
+        self.assertNotIn("secret", resp_str)
+        self.assertNotIn("confirmation_token", resp_str)
+        self.assertNotIn("supersecretsecuritytestpassword", resp_str)
+
 
 if __name__ == "__main__":
     unittest.main()
