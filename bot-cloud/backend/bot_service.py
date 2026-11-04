@@ -189,6 +189,7 @@ class BotService:
 
         # Health Tracking for Background Workers
         self.worker_health: Dict[str, Any] = {}
+        self._managed_loop_tasks: Dict[str, asyncio.Task] = {}
 
         # Dynamic Events State
         self._secret_word = None
@@ -284,6 +285,13 @@ class BotService:
         self.last_pi_heartbeat = 0.0
         self.last_stream_state_timestamp = 0.0
 
+        # Agent Random Chat Tracking
+        self.recent_chat_messages = collections.deque(maxlen=50)
+        self._recent_auto_replies = collections.deque(maxlen=10)
+        self._last_auto_chat_time = 0.0
+        self._user_last_auto_chat: dict[str, float] = {}
+        self._session_auto_chat_count = 0
+
     @property
     def is_stream_live(self) -> bool:
         """
@@ -322,6 +330,11 @@ class BotService:
             if not self.is_sb_connected:
                 return False
             return bool(getattr(self, "is_stream_live_state", False) or getattr(self, "_remote_stream_live", False))
+
+    @property
+    def is_live(self) -> bool:
+        """Alias for is_stream_live to ensure consistent stream state checks across the codebase."""
+        return self.is_stream_live
 
     @property
     def is_sb_connected(self):
@@ -405,6 +418,13 @@ class BotService:
         if getattr(self, "cloud_alert_client", None):
             self.cloud_alert_client.stop()
 
+        # Cancel all managed background loops
+        if hasattr(self, "_managed_loop_tasks"):
+            for loop_name, loop_task in list(self._managed_loop_tasks.items()):
+                if loop_task and not loop_task.done():
+                    loop_task.cancel()
+            self._managed_loop_tasks.clear()
+
         # Save Session Report
         try:
             report = self.session_stats.copy()
@@ -430,6 +450,13 @@ class BotService:
 
     def _spawn_managed_loop(self, name: str, coro_func: Callable):
         """Spawns an async loop with health tracking and auto-restart capabilities."""
+        if not hasattr(self, "_managed_loop_tasks"):
+            self._managed_loop_tasks = {}
+        existing_task = self._managed_loop_tasks.get(name)
+        if existing_task and not existing_task.done():
+            logger.debug(f"Managed loop '{name}' is already running; skipping duplicate spawn.")
+            return existing_task
+
         self.worker_health[name] = {"status": "starting", "last_active": time.time(), "restarts": 0}
 
         async def _wrapper():
@@ -453,7 +480,9 @@ class BotService:
                 self.worker_health[name]["restarts"] += 1
                 await asyncio.sleep(5)
 
-        return self._spawn_task(_wrapper())
+        task = self._spawn_task(_wrapper())
+        self._managed_loop_tasks[name] = task
+        return task
 
     async def _banking_loop(self):
         """Processes daily interest and fines for active loans."""
@@ -542,6 +571,7 @@ class BotService:
             self._spawn_managed_loop("leaderboard_mod_sync", self._leaderboard_mod_sync_loop)
             self._spawn_managed_loop("goal_monitoring", self._goal_monitoring_loop)
             self._spawn_managed_loop("auto_message", self._auto_message_loop)
+            self._spawn_managed_loop("random_chat", self._random_chat_loop)
 
         if run_mode in ["local", "standalone"]:
             logger.info(f"Running in {run_mode.capitalize()} Mode. Starting Hardware/Local Services (Audio, Streamer.bot).")
@@ -575,6 +605,136 @@ class BotService:
             except Exception as e:
                 logger.error(f"[AutoMsg] Error: {e}")
             await asyncio.sleep(30)  # Check every 30 seconds
+
+    async def _random_chat_loop(self):
+        """Proactive, periodic spontaneous conversation scheduler with eligible viewers."""
+        logger.info("Piya Random Chat background scheduler started.")
+        while self.is_running:
+            try:
+                # 1. Check if agent and auto_chat are enabled
+                if not hasattr(self, "agent") or not self.agent:
+                    await asyncio.sleep(10)
+                    continue
+
+                if not self.agent.is_feature_enabled("agent_enabled"):
+                    await asyncio.sleep(10)
+                    continue
+
+                auto_cfg = self.agent.get_config().get("auto_chat", {})
+                is_enabled = self.agent.is_feature_enabled("auto_chat") and auto_cfg.get("enabled", False)
+                if not is_enabled:
+                    await asyncio.sleep(5)
+                    continue
+
+                # 2. Stream live requirement
+                stream_live_only = auto_cfg.get("stream_live_only", True)
+                is_live = getattr(self, "is_live", False)
+                if stream_live_only and not is_live:
+                    await asyncio.sleep(15)
+                    continue
+
+                # 3. Session reply limit
+                max_session = int(auto_cfg.get("max_session_replies", 50))
+                session_count = getattr(self, "_session_auto_chat_count", 0)
+                if session_count >= max_session:
+                    await asyncio.sleep(30)
+                    continue
+
+                # 4. Global cooldown
+                now = time.time()
+                global_cd = float(auto_cfg.get("global_cooldown", 45))
+                last_global = getattr(self, "_last_auto_chat_time", 0.0)
+                if now - last_global < global_cd:
+                    await asyncio.sleep(max(2.0, global_cd - (now - last_global)))
+                    continue
+
+                # 5. Viewer Selection & Eligibility
+                config = self.load_config()
+                mod_cfg = config.get("moderation", {})
+                ignore_list = [u.lower().strip().lstrip("@") for u in mod_cfg.get("ignore_list", [])]
+                bot_name_lower = self.agent.get_agent_name().lower()
+                user_cd = float(auto_cfg.get("user_cooldown", 120))
+                if not hasattr(self, "_user_last_auto_chat"):
+                    self._user_last_auto_chat = {}
+
+                # Find eligible candidates from recent chat messages or session chatters
+                eligible_candidates = []
+                recent_messages = list(getattr(self, "recent_chat_messages", []))
+                for item in reversed(recent_messages):
+                    u = (item.get("author") or "").lower().strip().lstrip("@")
+                    msg = item.get("message") or ""
+                    ts = item.get("timestamp", now)
+                    if not u or u in ignore_list or u == bot_name_lower or "bot" in u:
+                        continue
+                    if msg.startswith(("!", "/")):
+                        continue
+                    if now - self._user_last_auto_chat.get(u, 0.0) < user_cd:
+                        continue
+                    if now - ts > 300:
+                        continue
+                    eligible_candidates.append((u, item.get("author", u), msg, item.get("user_id", "")))
+                    if len(eligible_candidates) >= 5:
+                        break
+
+                if not eligible_candidates and hasattr(self, "session_chatters"):
+                    for u, count in self.session_chatters.items():
+                        u_lower = u.lower().strip().lstrip("@")
+                        if u_lower in ignore_list or u_lower == bot_name_lower or "bot" in u_lower:
+                            continue
+                        if now - self._user_last_auto_chat.get(u_lower, 0.0) < user_cd:
+                            continue
+                        eligible_candidates.append((u_lower, u, "", ""))
+
+                if not eligible_candidates:
+                    await asyncio.sleep(10)
+                    continue
+
+                import random
+                selected_candidate = random.choice(eligible_candidates)
+                sel_u_lower, sel_author, sel_msg, sel_id = selected_candidate
+
+                prompt_text = sel_msg if sel_msg else f"Namaste @{sel_author}! Stream enjoy kar rahe ho?"
+
+                auto_reply = await self.agent.process_request(
+                    sel_author, sel_id, prompt_text,
+                    caller_role="viewer",
+                    allow_tools=False,
+                    is_auto_chat=True
+                )
+
+                if auto_reply and auto_reply.strip():
+                    clean_reply = auto_reply.strip()
+                    max_len = int(auto_cfg.get("max_length", 150))
+                    if len(clean_reply) > max_len:
+                        clean_reply = clean_reply[:max_len].rsplit(" ", 1)[0]
+
+                    if not hasattr(self, "_recent_auto_replies"):
+                        self._recent_auto_replies = collections.deque(maxlen=10)
+
+                    if clean_reply in self._recent_auto_replies:
+                        logger.info("Suppressed duplicate auto_chat message.")
+                        await asyncio.sleep(5)
+                        continue
+
+                    self._recent_auto_replies.append(clean_reply)
+                    self._last_auto_chat_time = time.time()
+                    self._user_last_auto_chat[sel_u_lower] = time.time()
+                    self._session_auto_chat_count = session_count + 1
+
+                    full_msg = clean_reply if clean_reply.startswith(f"@{sel_author}") else f"@{sel_author} {clean_reply}"
+                    await self._send_chat(full_msg)
+                    await self._log_ui("AUTO_CHAT", f"{self.agent.get_agent_name()} to @{sel_author}: {clean_reply}")
+
+                    if self.agent.is_feature_enabled("tts_actions") and self.audio:
+                        await self.audio.speak(clean_reply, "public")
+
+                await asyncio.sleep(max(5.0, global_cd / 2.0))
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[RandomChatLoop] Error: {e}", exc_info=True)
+                await asyncio.sleep(15)
 
     async def _memory_cleanup_loop(self):
         """Purge YouTube memory & brain chat_history older than 7 days. Runs every 6 hours."""
@@ -1530,6 +1690,15 @@ class BotService:
         if msg_id:
             self.message_dedup_cache.append(msg_id)
 
+        # Record recent message for agent context and spontaneous conversation
+        if hasattr(self, "recent_chat_messages"):
+            self.recent_chat_messages.append({
+                "author": author,
+                "user_id": channel_id,
+                "message": message,
+                "timestamp": now
+            })
+
         # GOALS LOGIC - REWARD WINDOW
         try:
             cfg = self.load_config()
@@ -1866,7 +2035,7 @@ class BotService:
             auto_switched = self.agent.is_feature_enabled("auto_chat") and auto_cfg.get("enabled", False)
             if auto_switched:
                 stream_live_only = auto_cfg.get("stream_live_only", True)
-                is_live = getattr(self, "is_live", True)
+                is_live = getattr(self, "is_live", False)
                 if not stream_live_only or is_live:
                     mod_cfg = config.get("moderation", {})
                     ignore_list = [u.lower() for u in mod_cfg.get("ignore_list", [])]
@@ -1898,7 +2067,16 @@ class BotService:
                                         is_auto_chat=True
                                     )
                                     if auto_reply:
+                                        clean_reply = auto_reply.strip()
                                         max_len = int(auto_cfg.get("max_length", 150))
+                                        if len(clean_reply) > max_len:
+                                            clean_reply = clean_reply[:max_len].rsplit(" ", 1)[0]
+                                        if not hasattr(self, "_recent_auto_replies"):
+                                            self._recent_auto_replies = collections.deque(maxlen=10)
+                                        if clean_reply in self._recent_auto_replies:
+                                            return None
+                                        self._recent_auto_replies.append(clean_reply)
+                                        auto_reply = clean_reply
                                         if len(auto_reply) > max_len:
                                             auto_reply = auto_reply[:max_len].rsplit(" ", 1)[0]
 

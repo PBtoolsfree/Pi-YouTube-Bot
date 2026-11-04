@@ -98,6 +98,23 @@ class AgentService:
         self._pending_confirmations: Dict[str, Dict[str, Any]] = {}
         self._confirmation_lock = asyncio.Lock()
         self._failed_confirmation_attempts: Dict[str, List[float]] = defaultdict(list)
+        self.user_contexts: Dict[str, deque] = defaultdict(lambda: deque(maxlen=6))
+        self.context_ttl: float = 600.0
+
+    def _get_clean_user_context(self, user_key: str) -> List[Dict[str, Any]]:
+        """Get recent non-expired context turns for a specific user."""
+        now = time.time()
+        turns = self.user_contexts.get(user_key, deque())
+        return [t for t in turns if now - t.get("timestamp", 0) <= self.context_ttl]
+
+    def _record_user_context(self, user_key: str, user_text: str, agent_reply: str, metadata: Optional[Dict[str, Any]] = None):
+        """Record conversation turn bound to authenticated user context."""
+        self.user_contexts[user_key].append({
+            "timestamp": time.time(),
+            "user": user_text,
+            "agent": agent_reply,
+            "meta": metadata or {}
+        })
 
     def _cleanup_expired_confirmations(self):
         """Purge expired confirmation challenges."""
@@ -235,6 +252,10 @@ class AgentService:
         except Exception as e:
             logger.warning(f"Failed to load agent config from bot: {e}")
             return DEFAULT_AGENT_CONFIG
+
+    def get_config(self) -> Dict[str, Any]:
+        """Fetch current agent configuration merged with defaults."""
+        return self._get_agent_cfg()
 
     def get_agent_name(self) -> str:
         """Return the configurable display name of the Agent (default: Piya)."""
@@ -374,15 +395,19 @@ VIEWER TOOLS (Own data & Public Info):
 - TOOL: get_my_active_pokemon {{}}
   Show caller's currently active Pokémon companion.
 - TOOL: catch_pokemon {{}}
-  Attempt to catch a wild Pokémon.
+  Attempt to catch a wild Pokémon that is currently spawned.
 - TOOL: summon_pokemon {{"pokemon_name": "Pikachu"}}
   Set active buddy Pokémon.
 - TOOL: get_pokemon_info {{"pokemon_name": "Eevee"}}
   Get verified Pokédex entry, power, abilities, and stream battle actions for a Pokémon species.
 - TOOL: view_pokemon {{"pokemon_name": "Pikachu"}}
   View details of a Pokémon or another viewer's collection.
+- TOOL: attack_pokemon {{"target": "username", "pokemon_name": "Pikachu"}}
+  Attack an opponent's Pokémon in a duel or skirmish using caller's active Pokémon.
 - TOOL: battle_pokemon {{"target": "username", "points": 50}}
   Challenge another viewer to a Pokémon battle.
+- TOOL: accept_battle {{"pokemon_name": "Pikachu"}}
+  Accept an incoming Pokémon battle challenge from another viewer.
 - TOOL: get_leaderboard {{"limit": 5}}
   Show top stream viewers by points.
 - TOOL: get_games_guide {{}}
@@ -409,6 +434,8 @@ MODERATOR & OWNER TOOLS:
   Ban a disruptive user from chat.
 - TOOL: timeout_user {{"username": "spammer", "duration": 300}}
   Timeout a user for given seconds.
+- TOOL: trigger_obs_action {{"action_name": "Alert"}}
+  Trigger an OBS / Streamer.bot streaming action or source (Requires Moderator role).
 - TOOL: add_loyalty {{"username": "user", "amount": 100}}
   Add loyalty points to a user (Requires Owner role and server confirmation).
 - TOOL: add_loyalty_all {{"amount": 500}}
@@ -510,19 +537,19 @@ CRITICAL INSTRUCTIONS:
                         return f"@{caller_name} has no active Pokémon buddy set."
                     return f"Active buddy for @{caller_name}: {active.get('name', 'None')} (Power: {active.get('power', 0)})"
 
-            elif tool_name == "catch_pokemon":
+            elif tool_name in ["catch_pokemon", "capture_pokemon", "catch", "pokeball", "catch_wild_pokemon"]:
                 if not self.is_feature_enabled("pokemon_actions"):
                     return "❌ Pokémon actions are currently disabled."
                 if hasattr(self.bot, "pokemon") and self.bot.pokemon:
                     res = await self.bot.pokemon.handle_catch(caller_name)
-                    self._record_audit(caller_name, caller_role, tool_name, args, "success", res)
+                    self._record_audit(caller_name, caller_role, "catch_pokemon", args, "success", res)
                     return str(res)
                 return "❌ Pokémon service not configured."
 
             elif tool_name == "summon_pokemon":
                 if not self.is_feature_enabled("pokemon_actions"):
                     return "❌ Pokémon actions are currently disabled."
-                poke_name = args.get("pokemon_name")
+                poke_name = args.get("pokemon_name") or args.get("name")
                 if not poke_name:
                     return "❌ Pokémon name required."
                 if hasattr(self.bot, "pokemon") and self.bot.pokemon:
@@ -530,6 +557,50 @@ CRITICAL INSTRUCTIONS:
                     self._record_audit(caller_name, caller_role, tool_name, args, "success", res)
                     return str(res)
                 return "❌ Pokémon service not configured."
+
+            elif tool_name in ["attack_pokemon", "battle_attack", "poke_attack"]:
+                if not self.is_feature_enabled("pokemon_actions"):
+                    return "❌ Pokémon actions are currently disabled."
+                if not hasattr(self.bot, "pokemon") or not self.bot.pokemon:
+                    return "❌ Pokémon service unavailable."
+
+                target = args.get("target") or args.get("opponent") or args.get("user")
+                poke_name = args.get("pokemon_name") or args.get("name")
+
+                # If caller specified a specific pokemon name, verify ownership
+                caller_poke = self.bot.pokemon.get_active_pokemon(caller_name)
+                if poke_name:
+                    user_poke = self.bot.pokemon.get_user_pokemon(caller_name, poke_name)
+                    if not user_poke:
+                        return f"@{caller_name}, aapke paas '{poke_name}' nahi hai! Pehle use catch karein ya apna active Pokemon use karein."
+                    if not caller_poke or caller_poke.get("name", "").lower() != poke_name.lower():
+                        await self.bot.pokemon.handle_summon(caller_name, user_poke["name"])
+                        caller_poke = user_poke
+
+                if not caller_poke:
+                    inv = self.bot.pokemon.get_user_inventory(caller_name)
+                    if not inv:
+                        return f"@{caller_name}, you don't own any Pokémon to attack with! Catch one with !catch."
+                    caller_poke = inv[0]
+
+                # Resolve target: args -> pending battle -> context
+                if not target:
+                    pending = getattr(self.bot.pokemon, "pending_battles", {})
+                    for ch, b in pending.items():
+                        if b.get("target", "").lower() == caller_name.lower():
+                            target = ch
+                            break
+                        elif ch.lower() == caller_name.lower():
+                            target = b.get("target")
+                            break
+
+                if not target or str(target).strip() == "" or str(target).lower() in ("none", "null", "unknown"):
+                    return f"@{caller_name}, kiske Pokemon par attack karna hai? Please opponent ka naam batayein (e.g. '@Piya @opponent par attack karo') ya random duel ke liye '!battle random' use karein."
+
+                clean_target = str(target).lstrip("@").strip()
+                res = await self.bot.pokemon.handle_attack(caller_name, clean_target)
+                self._record_audit(caller_name, caller_role, "attack_pokemon", {"target": clean_target, "pokemon": caller_poke.get("name")}, "success", res)
+                return str(res)
 
             elif tool_name == "get_pokemon_info":
                 if not self.is_feature_enabled("pokemon_actions"):
@@ -552,16 +623,39 @@ CRITICAL INSTRUCTIONS:
                     return str(res)
                 return "❌ Pokémon service not configured."
 
-            elif tool_name == "battle_pokemon":
+            elif tool_name in ["battle_pokemon", "challenge_pokemon", "start_battle"]:
                 if not self.is_feature_enabled("pokemon_actions"):
                     return "❌ Pokémon actions are currently disabled."
-                target = args.get("target") or args.get("opponent")
-                points = args.get("points", 50)
-                if hasattr(self.bot, "pokemon") and self.bot.pokemon:
-                    res = await self.bot.pokemon.handle_battle(caller_name, target, points)
-                    self._record_audit(caller_name, caller_role, tool_name, args, "success", res)
-                    return str(res)
-                return "❌ Pokémon service not configured."
+                if not hasattr(self.bot, "pokemon") or not self.bot.pokemon:
+                    return "❌ Pokémon service unavailable."
+                target = args.get("target") or args.get("opponent") or "random"
+                points = args.get("points") or args.get("bet") or 50
+                poke_name = args.get("pokemon_name") or args.get("name")
+                try:
+                    points_int = int(points)
+                except (ValueError, TypeError):
+                    points_int = 50
+
+                clean_target = str(target).lstrip("@").strip()
+                if hasattr(self.bot.pokemon, "handle_battle_challenge"):
+                    res = await self.bot.pokemon.handle_battle_challenge(caller_name, clean_target, points_int, poke_name)
+                else:
+                    res = await self.bot.pokemon.handle_battle(caller_name, clean_target, points_int)
+                self._record_audit(caller_name, caller_role, "battle_pokemon", args, "success", res)
+                return str(res)
+
+            elif tool_name in ["accept_battle", "accept_pokemon_battle"]:
+                if not self.is_feature_enabled("pokemon_actions"):
+                    return "❌ Pokémon actions are currently disabled."
+                if not hasattr(self.bot, "pokemon") or not self.bot.pokemon:
+                    return "❌ Pokémon service unavailable."
+                poke_name = args.get("pokemon_name") or args.get("name")
+                if hasattr(self.bot.pokemon, "handle_accept"):
+                    res = await self.bot.pokemon.handle_accept(caller_name, poke_name)
+                else:
+                    res = f"@{caller_name}, battle accept feature is not available."
+                self._record_audit(caller_name, caller_role, "accept_battle", args, "success", res)
+                return str(res)
 
             elif tool_name == "get_leaderboard":
                 if not self.is_feature_enabled("loyalty_actions"):
@@ -661,16 +755,35 @@ CRITICAL INSTRUCTIONS:
                 return json.dumps({"status": "online", "details": status})
 
             elif tool_name == "get_system_status":
-                if not self.is_feature_enabled("viewer_support"):
-                    return "❌ System status checks are disabled."
+                if not self.is_feature_enabled("integration_tools"):
+                    return "❌ Integration status checks are disabled."
                 sb_connected = getattr(self.bot, "is_sb_connected", False)
                 audio_active = bool(getattr(self.bot, "audio", None))
                 live_chat = bool(getattr(self.bot, "live_chat_id", None))
+                pokemon_active = bool(getattr(self.bot, "pokemon", None))
                 return json.dumps({
                     "streamer_bot_connected": sb_connected,
                     "audio_active": audio_active,
-                    "live_chat_active": live_chat
+                    "live_chat_active": live_chat,
+                    "pokemon_active": pokemon_active
                 })
+
+            elif tool_name in ["trigger_obs_action", "obs_action", "streamer_bot_action"]:
+                if not self.is_feature_enabled("obs_actions"):
+                    return "❌ OBS / Streamer.bot actions are currently disabled."
+                if not self.has_permission(caller_role, "moderator"):
+                    self.metrics["denied_total"] += 1
+                    self._record_audit(caller_name, caller_role, tool_name, args, "denied", "Requires moderator role")
+                    return "❌ Permission denied: Moderator role required to trigger OBS actions."
+                action_name = args.get("action_name") or args.get("action")
+                if not action_name:
+                    return "❌ Action name required."
+                if hasattr(self.bot, "_trigger_sb_action"):
+                    await self.bot._trigger_sb_action(action_name)
+                    msg = f"🎬 Triggered OBS/Streamer.bot action: '{action_name}'"
+                    self._record_audit(caller_name, caller_role, tool_name, args, "success", msg)
+                    return msg
+                return "❌ OBS / Streamer.bot integration unavailable."
 
             elif tool_name == "delete_my_history":
                 if hasattr(self.bot, "brain_service") and self.bot.brain_service:
@@ -846,27 +959,134 @@ CRITICAL INSTRUCTIONS:
         except Exception as e:
             logger.error(f"Restart error: {e}")
 
+    def classify_intent(self, text: str, user_name: str, context: Optional[List[Dict[str, Any]]] = None) -> Optional[tuple[str, Dict[str, Any]]]:
+        """Smart natural-language intent detector for Hindi, Hinglish, and English requests.
+
+        Extracts targets, pokemon species, and point amounts while resolving context references (e.g. 'usse').
+        """
+        if not text:
+            return None
+
+        t = text.lower().strip()
+
+        # Helper: Extract species name mentioned in text
+        pokemon_match = re.search(r'\b(pikachu|charizard|mewtwo|gengar|lucario|bulbasaur|squirtle|snorlax|dragonite|eevee|blastoise|venusaur|mew|jigglypuff|onix|machamp|alakazam|gyarados)\b', t)
+        extracted_pokemon = pokemon_match.group(1).title() if pokemon_match else None
+
+        # Helper: Extract @username or 'opponent' target
+        user_match = re.search(r'@([a-zA-Z0-9_]+)', text)
+        extracted_target = user_match.group(1) if user_match else None
+
+        # Resolve context references (e.g. "usse", "us pokemon ko", "it", "him")
+        context_pokemon = None
+        context_target = None
+        if context:
+            for turn in reversed(context):
+                meta = turn.get("meta", {})
+                if not context_pokemon and meta.get("pokemon"):
+                    context_pokemon = meta.get("pokemon")
+                if not context_target and meta.get("target"):
+                    context_target = meta.get("target")
+
+        resolved_pokemon = extracted_pokemon or (context_pokemon if any(w in t for w in ["usse", "use", "it", "him", "her", "us pokemon", "iss"]) else None)
+        resolved_target = extracted_target or (context_target if any(w in t for w in ["usse", "opponent", "usko", "uske", "unhe", "target"]) else None)
+
+        # 1. POKÉMON CAPTURE
+        # "mere liye ek Pokemon capture kar do", "Mere liye Pokemon pakdo", "wild Pokemon capture karo", "capture karo", "catch pokemon"
+        if any(kw in t for kw in ["capture", "pakdo", "pakad", "catch", "pokeball"]) and any(w in t for w in ["pokemon", "wild", "mere liye", "ek", "kar do", "karo", "pakadne"]):
+            return "catch_pokemon", {}
+        if re.search(r'\b(catch|capture|pakad|pakdo)\b.*\bpokemon\b', t) or re.search(r'\bpokemon\b.*\b(catch|capture|pakad|pakdo)\b', t):
+            return "catch_pokemon", {}
+
+        # 2. POKÉMON ATTACK
+        # "Mere Pokemon se opponent par attack karwao", "Pikachu se attack karo", "Opponent ke Pokemon par attack karo",
+        # "Us Pokemon ko hit karo", "Next attack use karo", "Eevee se attack karwao"
+        if any(kw in t for kw in ["attack", "hamla", "hit karo", "hit kar", "war karo", "ladwao", "ladwa do"]):
+            args = {}
+            if resolved_target:
+                args["target"] = resolved_target
+            if resolved_pokemon:
+                args["pokemon_name"] = resolved_pokemon
+            return "attack_pokemon", args
+
+        # 3. POKÉMON BATTLE / CHALLENGE
+        # "Mera Pokemon battle mein bhejo", "Battle start karo", "Mujhe battle jeetna hai, mera Pokemon use karo", "challenge karo"
+        if ("battle" in t or "duel" in t) and any(w in t for w in ["start", "bhejo", "karo", "jeetna", "shuru", "challenge", "fight"]):
+            pts_match = re.search(r'\b(\d+)\s*(?:pts|points|bet)?\b', t)
+            pts = int(pts_match.group(1)) if pts_match else 50
+            args = {"points": pts}
+            if resolved_target:
+                args["target"] = resolved_target
+            if resolved_pokemon:
+                args["pokemon_name"] = resolved_pokemon
+            return "battle_pokemon", args
+
+        # 4. POKÉMON ACCEPT BATTLE
+        if "accept" in t and ("battle" in t or "challenge" in t or "fight" in t or t == "accept"):
+            args = {}
+            if resolved_pokemon:
+                args["pokemon_name"] = resolved_pokemon
+            return "accept_battle", args
+
+        # 5. POKÉMON INVENTORY
+        # "Mere Pokemon inventory mein kya hai", "Mere paas kaunsa Pokemon hai", "Mera Pokemon collection", "meri pokemon list"
+        if any(kw in t for kw in ["inventory", "collection", "mere paas kaun", "mere pokemon", "kaunse pokemon", "mera pokemon", "mera konsa pokemon", "mere paas konsa pokemon"]) and not any(w in t for w in ["active", "attack", "battle", "capture", "pakdo", "ladwa"]):
+            return "get_my_pokemon", {}
+
+        # 6. POKÉMON ACTIVE BUDDY
+        # "Mera active Pokemon kaun sa hai", "Active buddy kaun hai"
+        if "active" in t and any(w in t for w in ["pokemon", "buddy", "companion"]):
+            return "get_my_active_pokemon", {}
+
+        # 7. POKÉMON SPECIES INFO
+        if extracted_pokemon and any(kw in t for kw in ["kya kar sakta", "power", "ability", "stat", "species", "abilities", "info", "details"]):
+            return "get_pokemon_info", {"pokemon_name": extracted_pokemon}
+
+        # 8. POKÉMON SUMMON
+        if ("summon" in t or "buddy banao" in t or "active banao" in t) and resolved_pokemon:
+            return "summon_pokemon", {"pokemon_name": resolved_pokemon}
+
+        # 9. VIEWER POINTS & BALANCE
+        if any(kw in t for kw in ["mere points", "mera points", "mera balance", "meri rank", "points batao", "points kitne", "points kya"]):
+            return "get_my_points", {}
+
+        # 10. LEADERBOARD
+        if any(kw in t for kw in ["leaderboard", "top 10", "top 5", "top viewers", "top rankers"]):
+            return "get_leaderboard", {"limit": 5}
+
+        # 11. TIP PAGE / DONATION
+        if any(kw in t for kw in ["tip page", "donation link", "donate", "upi id", "paytm", "gpay", "google pay", "phonepe"]) and any(w in t for w in ["kya", "link", "batao", "page", "url", "id", "kaha", "bhejo"]):
+            return "get_tip_page_url", {}
+
+        # 12. BOT / INTEGRATION STATUS
+        if any(kw in t for kw in ["system status", "integration status", "streamer.bot status", "integrations"]):
+            return "get_system_status", {}
+
+        return None
+
     async def _try_grounded_fallback(self, text: str, user_name: str, caller_role: str = "viewer") -> Optional[str]:
         """Provide verified factual response from local services when conversational LLM is unavailable."""
-        t_lower = text.lower().strip()
+        context = self._get_clean_user_context(user_name.lower())
+        detected = self.classify_intent(text, user_name, context)
+        if detected:
+            tool_name, args = detected
+            return await self.execute_tool(tool_name, args, caller_name=user_name, caller_role=caller_role)
 
-        # 1. Pokemon knowledge / abilities check
+        t_lower = text.lower().strip()
+        # Fallback species check
         pokemon_match = re.search(r'\b(eevee|pikachu|charizard|mewtwo|gengar|lucario|bulbasaur|squirtle|snorlax|dragonite)\b', t_lower)
         if pokemon_match and any(kw in t_lower for kw in ["kya", "kar sakta", "batao", "bata", "power", "ability", "stat", "species", "pokemon"]):
             poke_name = pokemon_match.group(1).title()
             if hasattr(self.bot, "pokemon") and self.bot.pokemon and hasattr(self.bot.pokemon, "get_pokemon_species_info"):
                 return await self.bot.pokemon.get_pokemon_species_info(poke_name)
 
-        # 2. Points / rank check
         if any(kw in t_lower for kw in ["points", "rank", "mera point", "mere point"]):
             if hasattr(self.bot, "viewers") and self.bot.viewers:
                 return await self.execute_tool("get_my_points", {}, caller_name=user_name, caller_role=caller_role)
 
-        # 3. Tip page / donation check
         if any(kw in t_lower for kw in ["tip", "donation", "donate", "upi", "paytm", "phonepe", "gpay", "google pay"]):
             return await self.execute_tool("get_tip_page_url", {}, caller_name=user_name, caller_role=caller_role)
 
-        # 4. Leaderboard check
         if any(kw in t_lower for kw in ["leaderboard", "top 10", "top 5", "top viewer"]):
             return await self.execute_tool("get_leaderboard", {"limit": 5}, caller_name=user_name, caller_role=caller_role)
 
@@ -879,18 +1099,24 @@ CRITICAL INSTRUCTIONS:
         text: str,
         ai_engine=None,
         caller_role: Optional[str] = None,
-        allow_tools: bool = True
+        allow_tools: bool = True,
+        is_auto_chat: bool = False,
+        recent_chat_context: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """Main entry point for processing a natural language message through Piya.
 
-        Handles system prompt assembly, LLM call, multi-tool parsing and execution,
-        and follow-up response synthesis.
+        Handles system prompt assembly, conversation memory, intent detection,
+        LLM call, multi-tool parsing and execution, and follow-up response synthesis.
         """
         start_time = time.time()
         self.metrics["requests_total"] += 1
 
         if not self.is_feature_enabled("agent_enabled"):
             return "Agent is currently disabled."
+
+        # Safety boundary: Random chat never executes tools
+        if is_auto_chat:
+            allow_tools = False
 
         # Resolve role if not explicitly provided
         if caller_role is None:
@@ -904,33 +1130,64 @@ CRITICAL INSTRUCTIONS:
                 code = confirm_match.group(1).upper()
                 return await self.confirm_pending_action(user_name, caller_role, code)
 
-        # Rate limit checks for non-owners
+        # Rate limit checks for non-owners (bypassed for random chat scheduler)
         now = time.time()
         cfg = self._get_agent_cfg()
         rate_limits = cfg.get("rate_limits", {})
         global_cd = rate_limits.get("global_cooldown", 0)
         user_cd = rate_limits.get("user_cooldown", 0)
 
-        if caller_role != "owner":
+        if caller_role != "owner" and not is_auto_chat:
             if now - self.last_global_request < global_cd:
                 return "Agent is taking a quick breath, please wait a moment."
             last_u = self.last_user_request.get(user_name.lower(), 0)
             if now - last_u < user_cd:
                 return f"@{user_name}, please wait {int(user_cd - (now - last_u))}s before asking again."
 
-        self.last_global_request = now
-        self.last_user_request[user_name.lower()] = now
+        if not is_auto_chat:
+            self.last_global_request = now
+            self.last_user_request[user_name.lower()] = now
+
+        user_key = (user_id or user_name).lower().strip()
+        context_turns = self._get_clean_user_context(user_key)
+
+        # Detect intent via natural language intent classifier
+        detected = self.classify_intent(clean_text, user_name, context_turns) if allow_tools else None
+
+        # Check normal_llm switch: if purely conversational (no tool intent) and normal_llm is disabled
+        if not is_auto_chat and not self.is_feature_enabled("normal_llm") and not detected:
+            return "Arre, conversational chat abhi stream settings mein disabled hai. Aap bot commands ya Pokémon actions try kar sakte hain!"
 
         engine = ai_engine or getattr(self.bot, "ai_engine", None)
         if not engine:
+            if detected:
+                tool_name, planned_args = detected
+                return await self.execute_tool(tool_name, planned_args, caller_name=user_name, caller_role=caller_role, allow_tools=allow_tools)
+            grounded = await self._try_grounded_fallback(text, user_name, caller_role)
+            if grounded:
+                return grounded
             return "Arre, abhi AI service temporarily offline hai. Kripya thodi der baad poochhein!"
 
-        # Build prompt with tools schema
-        system_prompt = self.get_tools_schema() + f"\nAuthenticated Context: User='{user_name}' (ID: '{user_id}', Role: '{caller_role}')"
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text}
-        ]
+        # Build prompt with tools schema and authenticated context
+        name = self.get_agent_name()
+        if is_auto_chat:
+            system_prompt = (
+                f"You are {name}, a witty and friendly YouTube live stream assistant. "
+                f"You are spontaneously chiming in to chat with viewer @{user_name} based on their recent message. "
+                f"Reply in 1 short, cheerful Hinglish sentence (under 120 chars). "
+                f"Do NOT execute any tools and do NOT output TOOL lines."
+            )
+        else:
+            system_prompt = self.get_tools_schema() + f"\nAuthenticated Context: User='{user_name}' (ID: '{user_id}', Role: '{caller_role}')"
+            if detected:
+                tool_hint, hint_args = detected
+                system_prompt += f"\nDetected Natural Language Request: TOOL: {tool_hint} {json.dumps(hint_args)}"
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for turn in context_turns:
+            messages.append({"role": "user", "content": turn["user"]})
+            messages.append({"role": "assistant", "content": turn["agent"]})
+        messages.append({"role": "user", "content": text})
 
         try:
             response = await engine.chat(messages, system_prompt=system_prompt)
@@ -938,19 +1195,26 @@ CRITICAL INSTRUCTIONS:
             if raw_content is None or str(raw_content).strip() == "":
                 err_msg = response.get("error", "") if isinstance(response, dict) else ""
                 logger.warning(f"AI engine returned no response. Details: {err_msg}")
+                if detected:
+                    tool_name, planned_args = detected
+                    tool_res = await self.execute_tool(tool_name, planned_args, caller_name=user_name, caller_role=caller_role, allow_tools=allow_tools)
+                    self._record_user_context(user_key, text, tool_res, {"tool": tool_name})
+                    return tool_res
                 grounded = await self._try_grounded_fallback(text, user_name, caller_role)
                 if grounded:
+                    self._record_user_context(user_key, text, grounded)
                     return grounded
                 return "Arre, abhi AI service temporarily unavailable hai. Kripya thodi der baad poochhein!"
 
             content = str(raw_content).strip()
 
-            # Check for tool call directives
+            # Check for tool call directives from model
             lines = content.split("\n")
             tool_lines = [l.strip() for l in lines if l.strip().startswith("TOOL:")]
 
+            # If model didn't output TOOL: directive but an explicit action intent was detected, enforce tool execution
+            executed_results = []
             if tool_lines:
-                executed_results = []
                 for tool_line in tool_lines:
                     try:
                         raw = tool_line.replace("TOOL:", "", 1).strip()
@@ -982,14 +1246,40 @@ CRITICAL INSTRUCTIONS:
                     except Exception as err:
                         executed_results.append({"tool": "parse_error", "result": str(err)})
 
-                # Synthesize final natural response
+            elif detected and allow_tools:
+                # Deterministic tool execution for recognized intents (prevents model hallucination)
+                tool_name, planned_args = detected
+                tool_res = await self.execute_tool(
+                    tool_name=tool_name,
+                    args=planned_args,
+                    caller_name=user_name,
+                    caller_role=caller_role,
+                    allow_tools=allow_tools
+                )
+                executed_results.append({"tool": tool_name, "args": planned_args, "result": tool_res})
+                if hasattr(self.bot, "broadcast_func") and callable(self.bot.broadcast_func):
+                    await self.bot.broadcast_func({
+                        "event": "AGENT_ACTION",
+                        "data": {
+                            "tool": tool_name,
+                            "args": planned_args,
+                            "result": tool_res,
+                            "user": user_name
+                        }
+                    })
+
+            if executed_results:
+                # Synthesize final natural response strictly bounded to actual tool outcome
                 results_summary = "\n".join([f"- Tool '{r['tool']}': {r.get('result', '')}" for r in executed_results])
                 messages.append({"role": "assistant", "content": content})
                 messages.append({
                     "role": "system",
                     "content": (
                         f"Tool Execution Results:\n{results_summary}\n\n"
-                        f"Now answer @{user_name} concisely in {cfg.get('language', 'Hinglish')}, confirming the result. "
+                        f"CRITICAL REQUIREMENT: Answer @{user_name} concisely in {cfg.get('language', 'Hinglish')}, confirming the result. "
+                        f"You MUST report the EXACT outcome from the Tool Execution Results. "
+                        f"If the tool result says it failed, broke free, had insufficient points, or was denied, you must faithfully state that failure. "
+                        f"NEVER say a Pokemon was caught, an attack succeeded, or points were added unless the Tool Execution Result explicitly says so. "
                         f"Do NOT output any TOOL commands."
                     )
                 })
@@ -998,18 +1288,29 @@ CRITICAL INSTRUCTIONS:
                 raw_final = final_resp.get("response") if isinstance(final_resp, dict) else final_resp
                 if raw_final is None or str(raw_final).strip() == "":
                     clean_results = [str(r.get('result', '')) for r in executed_results if r.get('result')]
-                    return " ".join(clean_results) or "Action completed."
+                    final_reply = " ".join(clean_results) or "Action completed."
+                else:
+                    final_text = str(raw_final).strip()
+                    clean_lines = [l for l in final_text.split("\n") if not l.strip().startswith("TOOL:")]
+                    final_reply = "\n".join(clean_lines).strip() or "Action completed."
 
-                final_text = str(raw_final).strip()
+                # Record conversation context
+                meta = {"tool": executed_results[0]["tool"]}
+                if "target" in executed_results[0].get("args", {}):
+                    meta["target"] = executed_results[0]["args"]["target"]
+                if "pokemon_name" in executed_results[0].get("args", {}):
+                    meta["pokemon"] = executed_results[0]["args"]["pokemon_name"]
+                self._record_user_context(user_key, text, final_reply, meta)
+                return final_reply
 
-                # Sanitize output
-                clean_lines = [l for l in final_text.split("\n") if not l.strip().startswith("TOOL:")]
-                res_output = "\n".join(clean_lines).strip()
-                return res_output or "Action completed."
-
+            # Plain conversational reply
+            self._record_user_context(user_key, text, content)
             return content.strip()
 
         except Exception as e:
             logger.error(f"Error in Agent process_request: {e}", exc_info=True)
             self.metrics["errors_total"] += 1
+            if detected:
+                tool_name, planned_args = detected
+                return await self.execute_tool(tool_name, planned_args, caller_name=user_name, caller_role=caller_role, allow_tools=allow_tools)
             return "Arre, request process karte waqt ek chhota issue aaya. Kripya dobara try karein!"

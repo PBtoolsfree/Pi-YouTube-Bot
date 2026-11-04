@@ -368,8 +368,7 @@ function PiyaOverviewSection() {
                             </div>
                             <Switch
                                 checked={Boolean(autoChat.enabled && (switches.auto_chat ?? false))}
-                                onCheckedChange={(val) => {
-                                    handleUpdateAutoChat('enabled', val)
+                                onCheckedChange={() => {
                                     handleToggleSwitch('auto_chat')
                                 }}
                             />

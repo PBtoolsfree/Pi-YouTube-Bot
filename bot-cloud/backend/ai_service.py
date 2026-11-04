@@ -261,7 +261,15 @@ class AIEngine:
         messages: List[Dict[str, str]],
     ) -> str:
         api_key: str = provider.get("api_key", "")
-        base_url: str = provider.get("base_url") or "https://api.openai.com/v1"
+        prov_type = provider.get("type", "").lower()
+        base_url: str = provider.get("base_url") or ""
+        if not base_url:
+            if prov_type == "gemini":
+                base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+            elif prov_type == "groq":
+                base_url = "https://api.groq.com/openai/v1"
+            else:
+                base_url = "https://api.openai.com/v1"
         url = f"{base_url.rstrip('/')}/chat/completions"
 
         headers = {

@@ -729,7 +729,10 @@ async def toggle_agent_switch(request: Request, payload: Dict[str, Any]):
     switches = agent_cfg.setdefault("switches", {})
     default_val = False if switch == "auto_chat" else True
     curr = switches.get(switch, default_val)
-    new_val = not curr
+    if "enabled" in payload:
+        new_val = bool(payload["enabled"])
+    else:
+        new_val = not curr
     switches[switch] = new_val
     if switch == "auto_chat":
         agent_cfg.setdefault("auto_chat", {})["enabled"] = new_val
