@@ -18,7 +18,7 @@ cd "$INSTALL_DIR"
 log "===== Pi YouTubeBot Starting (v$(cat VERSION 2>/dev/null || echo unknown)) ====="
 
 # Optional: pull latest on start (controlled by config or env var)
-if [[ "${PIBOT_AUTO_UPDATE_ON_START:-true}" == "true" ]]; then
+if [[ "${PIBOT_AUTO_UPDATE_ON_START:-false}" == "true" ]]; then
     if git fetch origin "$BRANCH" --quiet 2>/dev/null; then
         LOCAL=$(git rev-parse HEAD 2>/dev/null)
         REMOTE=$(git rev-parse "origin/$BRANCH" 2>/dev/null)

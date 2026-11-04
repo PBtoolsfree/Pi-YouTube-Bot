@@ -13,12 +13,16 @@ Covers:
      - Owner confirmation tokens, moderator boundaries, viewer privacy
 """
 
+from __future__ import annotations
 import os
 import sys
 import time
 import json
 import asyncio
-import pytest
+try:
+    import pytest
+except ImportError:
+    pytest = None
 from unittest.mock import MagicMock, AsyncMock, patch
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

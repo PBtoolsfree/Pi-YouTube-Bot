@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import json
 import logging
@@ -5,7 +6,7 @@ import re
 import secrets
 import time
 from collections import deque, defaultdict
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 logger = logging.getLogger("AgentService")
 
@@ -96,10 +97,16 @@ class AgentService:
         self.last_user_request: Dict[str, float] = {}
         self.last_global_request: float = 0.0
         self._pending_confirmations: Dict[str, Dict[str, Any]] = {}
-        self._confirmation_lock = asyncio.Lock()
+        self._confirmation_lock: Optional[asyncio.Lock] = None
         self._failed_confirmation_attempts: Dict[str, List[float]] = defaultdict(list)
         self.user_contexts: Dict[str, deque] = defaultdict(lambda: deque(maxlen=6))
         self.context_ttl: float = 600.0
+
+    @property
+    def confirmation_lock(self) -> asyncio.Lock:
+        if self._confirmation_lock is None:
+            self._confirmation_lock = asyncio.Lock()
+        return self._confirmation_lock
 
     def _get_clean_user_context(self, user_key: str) -> List[Dict[str, Any]]:
         """Get recent non-expired context turns for a specific user."""
@@ -192,7 +199,7 @@ class AgentService:
         if len(self._failed_confirmation_attempts[actor_key]) >= 5:
             return "❌ Too many failed confirmation attempts. Confirmation is temporarily locked for 60 seconds."
 
-        async with self._confirmation_lock:
+        async with self.confirmation_lock:
             self._cleanup_expired_confirmations()
             rec = self._pending_confirmations.get(code)
             if not rec:
@@ -959,7 +966,7 @@ CRITICAL INSTRUCTIONS:
         except Exception as e:
             logger.error(f"Restart error: {e}")
 
-    def classify_intent(self, text: str, user_name: str, context: Optional[List[Dict[str, Any]]] = None) -> Optional[tuple[str, Dict[str, Any]]]:
+    def classify_intent(self, text: str, user_name: str, context: Optional[List[Dict[str, Any]]] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
         """Smart natural-language intent detector for Hindi, Hinglish, and English requests.
 
         Extracts targets, pokemon species, and point amounts while resolving context references (e.g. 'usse').

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import collections
 import logging
@@ -8,7 +9,7 @@ import traceback
 import os
 import time
 import httpx
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Tuple
 
 import sys
 
@@ -125,7 +126,7 @@ def is_valid_command(cmd_name: str, config: dict) -> bool:
         return True
     return False
 
-def detect_wake_word(message: str, agent_name: str = "Piya", aliases: Optional[List[str]] = None) -> tuple[bool, str]:
+def detect_wake_word(message: str, agent_name: str = "Piya", aliases: Optional[List[str]] = None) -> Tuple[bool, str]:
     """
     Robust wake-word detection for Piya Central Agent.
     - Matches configured agent name & aliases as standalone tokens (word boundaries).
@@ -248,7 +249,7 @@ class BotService:
         self.mod_locks = {} # {username: Lock}
 
         # Session Analytics
-        self.session_stats: dict[str, Any] = {
+        self.session_stats: Dict[str, Any] = {
             "start_time": time.time(),
             "messages_processed": 0,
             "timeouts_triggered": 0,
@@ -257,7 +258,7 @@ class BotService:
             "peak_viewers": 0,
             "top_chatter": {"name": None, "count": 0}
         }
-        self.session_chatters: dict[str, int] = {} # {name: count}
+        self.session_chatters: Dict[str, int] = {} # {name: count}
 
         # Subscriber Tracking
         # Try to load from a persistent file or config, else 0
@@ -273,7 +274,7 @@ class BotService:
         self._load_processed_ids()
 
         # Custom Command Cooldowns
-        self._custom_cmd_cooldowns: dict[str, float] = {}
+        self._custom_cmd_cooldowns: Dict[str, float] = {}
 
         # Live YouTube Stream Likes
         self.live_likes_count = -1
@@ -289,7 +290,7 @@ class BotService:
         self.recent_chat_messages = collections.deque(maxlen=50)
         self._recent_auto_replies = collections.deque(maxlen=10)
         self._last_auto_chat_time = 0.0
-        self._user_last_auto_chat: dict[str, float] = {}
+        self._user_last_auto_chat: Dict[str, float] = {}
         self._session_auto_chat_count = 0
 
     @property
@@ -3856,7 +3857,7 @@ class BotService:
         """
         try:
             file_path = "data/donations.json"
-            history: list[dict[str, Any]] = []
+            history: List[Dict[str, Any]] = []
 
             if not os.path.exists("data"):
                 os.makedirs("data")
