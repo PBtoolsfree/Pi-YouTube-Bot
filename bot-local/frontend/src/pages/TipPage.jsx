@@ -65,6 +65,7 @@ export default function TipPage() {
     const [safeMode, setSafeMode] = useState(false) // Toggle between mode=00 and mode=04
     const [txStartTime, setTxStartTime] = useState(null) // New: Track when transaction started
     const [verifyError, setVerifyError] = useState(null) // New: Store verification error messages
+    const [intentId, setIntentId] = useState(null) // PB HERO Smart Donation Intent
     const qrRef = useRef(null)
 
     // Supabase Client (Initialized from Env Vars for Vercel)
@@ -106,6 +107,23 @@ export default function TipPage() {
             interval = setInterval(async () => {
                 try {
                     const apiBase = import.meta.env?.VITE_API_URL || ""
+
+                    // 1. Check PB HERO Donation Intent status
+                    if (intentId) {
+                        try {
+                            const intentRes = await axios.get(`${apiBase}/api/donation/intent/${intentId}/status`)
+                            if (intentRes.data?.is_verified) {
+                                console.log("Donation Intent Verified via Central Manager!", intentRes.data)
+                                clearInterval(interval)
+                                setStep(3)
+                                return
+                            }
+                        } catch (err) {
+                            // Fallback to email verification
+                        }
+                    }
+
+                    // 2. Corroborate with verify-email
                     const res = await axios.post(`${apiBase}/api/payment/verify-email`, {
                         amount: parseFloat(amount),
                         user: name || "Anonymous",
@@ -116,18 +134,6 @@ export default function TipPage() {
                     if (res.data.verified) {
                         console.log("Payment Verified!", res.data)
                         clearInterval(interval)
-
-                        // We need to trigger the alert/db insert here too!
-                        // But handleSendAlert is defined below. 
-                        // For now, let's just setStep(3) to fix the crash.
-                        // Ideally we should move handleSendAlert up or duplicate the logic locally.
-                        // I will duplicate the logic locally to be safe and self-contained for now
-                        // or better yet, just define handleSendAlert via useref or move it? 
-                        // Moving large functions is risky. I'll just do the axios/supabase call here.
-
-                        // actually, verify-email MIGHT be enough if the backend handled it, 
-                        // but currently verify-email just returns true/false.
-                        // IMPORTANT: The user wants to see the success screen.
                         setStep(3)
                     }
                 } catch (e) {
@@ -136,7 +142,7 @@ export default function TipPage() {
             }, 5000) // Poll every 5 seconds
         }
         return () => clearInterval(interval)
-    }, [step, amount, name, message, loading, txStartTime])
+    }, [step, amount, name, message, loading, txStartTime, intentId])
 
     // Auto-Redirect from Success (Moved Up)
     useEffect(() => {
@@ -174,8 +180,8 @@ export default function TipPage() {
     const payeeName = config.tip_page?.upi_name || config.upi_name || "Streamer"
 
     // Generate a unique transaction ref to avoid "static QR" restrictions
-    // This often fixes "Gallery upload limit" errors in GPay
-    const tr = `TR${Math.floor(Math.random() * 1000000000)}`
+    // Uses the registered PB HERO Donation Intent ID when available
+    const tr = intentId || `TR${Math.floor(Math.random() * 1000000000)}`
 
     // Format amount safely to 2 decimal places as per UPI standards
     const formattedAmount = safeFixed(amount, 2, "0.00")
@@ -242,6 +248,21 @@ export default function TipPage() {
         }
 
         // Default UPI (Direct QR)
+        setLoading(true)
+        try {
+            const apiBase = import.meta.env?.VITE_API_URL || ""
+            const intentRes = await axios.post(`${apiBase}/api/donation/intent`, {
+                amount: parseFloat(amount),
+                donor_name: name || "Anonymous",
+                message: message || ""
+            })
+            if (intentRes.data?.intent_id) {
+                setIntentId(intentRes.data.intent_id)
+            }
+        } catch (e) {
+            console.warn("Could not register intent with backend, proceeding with fallback QR:", e)
+        }
+        setLoading(false)
         setTxStartTime(Date.now()) // Start Verification Clock
         setStep(2)
     }

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PB HERO Bridge</string>
+    <string name="notification_service_name">PB HERO Notification Bridge Service</string>
+</resources>
+

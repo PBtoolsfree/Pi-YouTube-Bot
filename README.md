@@ -23,7 +23,7 @@ It handles AI chat responses, live donation alerts, TTS audio, Telegram notifica
 |----------|---------|
 | 💬 **AI Chat** | Gemini, OpenAI, OpenRouter, Groq, Ollama — automatic failover |
 | 🔊 **TTS Audio** | Edge-TTS neural voices · UDP stream to gaming PC · local playback |
-| 💸 **Donations** | PhonePe payment gateway · Paytm/UPI notification forwarding · email scanning |
+| 💸 **Donations** | PB HERO Smart Donation System (Paytm Business Bridge + Gmail IMAP + Tip Page Intents) · PhonePe gateway · Edge-TTS |
 | 📊 **Dashboard** | Real-time React dashboard · config editor · queue control |
 | 📱 **Telegram** | Alerts (donations, subs) · remote control commands |
 | 🌐 **Cloudflare** | Secure public tip page · no port forwarding required |
@@ -151,6 +151,38 @@ bash scripts/update_cloud.sh
 > 1. Add an Ingress Rule in OCI Virtual Cloud Network (VCN) subnet allowing TCP port `8000`.
 > 2. Open port `8000` in the OS firewall by running `sudo iptables -I INPUT 6 -p tcp --dport 8000 -j ACCEPT && sudo netfilter-persistent save`.
 > Detailed guide: [Cloud-Deployment.md](docs/Cloud-Deployment.md)
+
+---
+
+## 6.2 PB HERO Smart Donation System (Paytm Business Bridge & Email Observer)
+
+A production-ready donation system that verifies Paytm Business UPI QR payments without paid payment gateway fees.
+
+### Architecture Overview:
+1. **Tip Page Intent**: Viewers open `/tip` (or scan your stream's Paytm QR code). When clicking Next, an intent is registered on the Cloud Donation Manager (`POST /api/donation/intent`).
+2. **Android Notification Bridge App (`PB HERO Notification Bridge`)**: Intercepts instant push notifications from `com.paytm.business`, signs requests with HMAC-SHA256, and posts to `/api/webhook/paytm-bridge`.
+3. **Paytm Business Email Observer**: Checks Gmail IMAP in the background (at 15s, 30s, 60s, 90s, 120s) to extract customer name and UTR.
+4. **Dual Announcement Dispatch**:
+   - **Cloud Bot**: Real-time OBS donation overlay animation (`/ws/overlay`).
+   - **Local Bot**: Edge-TTS announcement on your streaming PC (`/ws/pi-client`).
+   - **Zero Duplicates**: Strictly tracked canonical events prevent double playback.
+
+### Android Bridge App Installation:
+- **Pre-built APK**: `artifacts/PB-HERO-Notification-Bridge.apk` (or download directly from your dashboard at `/PB-HERO-Notification-Bridge.apk`).
+- **Wireless ADB Install**:
+  ```bash
+  # 1. On your phone, go to Developer Options -> Wireless debugging -> Pair device with pairing code
+  adb pair 172.168.30.140:<PAIRING_PORT> <6_DIGIT_PAIRING_CODE>
+  # 2. Connect to the connection port shown on the main Wireless debugging screen
+  adb connect 172.168.30.140:<CONNECT_PORT>
+  # 3. Install APK
+  adb install -r artifacts/PB-HERO-Notification-Bridge.apk
+  ```
+- **Permission Setup**:
+  1. Open **PB HERO Bridge** on your phone.
+  2. Tap **Enable in System Settings** and grant **Notification Access**.
+  3. Under Battery Settings, set PB HERO Bridge to **Unrestricted / Do Not Optimize**.
+  4. In the **Apps** tab, verify `com.paytm.business` is checked.
 
 ---
 

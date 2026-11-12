@@ -98,3 +98,11 @@ sheets_client_secret.json
 !frontend/dist/
 frontend/dist
 *.zip
+
+# ── Android Build Artifacts ──────────────────────────────────
+.gradle/
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+android-app/**/build/

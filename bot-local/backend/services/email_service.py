@@ -5,9 +5,14 @@ import re
 import datetime
 import logging
 import time
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
 
 class EmailService:
     def __init__(self, config_loader):
@@ -16,23 +21,24 @@ class EmailService:
         self.connected = False
         self.last_check = 0
         self.last_error = None
-        
+
     def _connect(self):
         try:
             self.last_error = None
             config = self.config_loader()
             email_cfg = config.get("email_verification", {})
-            
-            username = email_cfg.get("email")
-            password = email_cfg.get("app_password")
-            imap_server = email_cfg.get("imap_server", "imap.gmail.com")
-            
+
+            username = email_cfg.get("email") or email_cfg.get("user")
+            password = email_cfg.get("app_password") or email_cfg.get("password")
+            imap_server = email_cfg.get("imap_server") or email_cfg.get("host", "imap.gmail.com")
+            port = int(email_cfg.get("port", 993))
+
             if not username or not password:
                 self.last_error = "Missing email or app_password"
                 logger.warning(self.last_error)
                 return False
-                
-            self.mail = imaplib.IMAP4_SSL(imap_server)
+
+            self.mail = imaplib.IMAP4_SSL(imap_server, port)
             self.mail.login(username, password)
             self.connected = True
             logger.info(f"Connected to IMAP as {username}")
@@ -56,69 +62,142 @@ class EmailService:
     def _disconnect(self):
         if self.mail:
             try:
-                self.mail.close() # Close selected mailbox first if any
+                self.mail.close()
             except Exception:
                 pass
             try:
-                self.mail.logout() # Goodbye
+                self.mail.logout()
             except Exception:
                 pass
         self.connected = False
         self.mail = None
 
-    def verify_payment(self, expected_amount, sender_hint=None, time_window_minutes=10, min_timestamp=None):
+    @staticmethod
+    def parse_transaction_content(subject: str, body: str, msg_id: str, email_date: Optional[datetime.datetime] = None) -> Optional[Dict[str, Any]]:
         """
-        Searches for a payment confirmation email matching the amount within the last X minutes.
-        If min_timestamp (float/int unix epoch) is provided, emails before this time are ignored.
-        Returns: (Verified (bool), Details (dict/str), Message-ID (str/None))
+        Robustly parses email subject and body (HTML or plain text) to extract:
+        amount, payer_name, utr, order_id, status, timestamp.
+        Supports Paytm for Business, PhonePe, and generic UPI notifications in English and Hindi.
+        """
+        full_text = f"{subject} \n {body}"
+        clean_text = " ".join(full_text.split())
+        clean_lower = clean_text.lower()
+
+        # Check for failure indications first
+        if any(w in clean_lower for w in ["payment failed", "transaction failed", "payment declined", "declined by bank", "refunded"]):
+            status = "FAILED"
+        else:
+            status = "SUCCESS"
+
+        # 1. Amount Extraction
+        amount = 0.0
+        amount_patterns = [
+            r'(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)',
+            r'([\d,]+(?:\.\d{1,2})?)\s*(?:₹|Rs\.?|INR)',
+            r'(?:payment of|received|credited with|amount of)\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)',
+            r'(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:प्राप्त|सफल|credited)'
+        ]
+        for pat in amount_patterns:
+            m = re.search(pat, clean_text, re.IGNORECASE)
+            if m:
+                try:
+                    val = float(m.group(1).replace(',', '').strip())
+                    if val > 0:
+                        amount = val
+                        break
+                except Exception:
+                    pass
+
+        if amount <= 0:
+            return None
+
+        # 2. Payer Name Extraction
+        payer_name = None
+        name_patterns = [
+            r'(?:Customer Name|Payer Name|Paid by|Sender Name|From)\s*[:\-]\s*([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|$)',
+            r'\b(?:from|by)\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|$)',
+            r'received\s+from\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|\s+using\b|$)',
+            r'(?:payment from|sent by)\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|$)',
+            r'([A-Za-z0-9\u0900-\u097F ]{2,40})\s+ने\s+(?:₹|Rs\.?)?[\d,.]+\s+(?:का भुगतान|भेजे)',
+            r'([A-Za-z0-9\u0900-\u097F ]{2,40})\s+से\s+(?:₹|Rs\.?)?[\d,.]+\s+प्राप्त'
+        ]
+        for pat in name_patterns:
+            m = re.search(pat, clean_text, re.IGNORECASE)
+            if m:
+                cand = m.group(1).strip()
+                # Clean up noise
+                cand = re.sub(r'^(mr\.|mrs\.|ms\.|shri)\s+', '', cand, flags=re.IGNORECASE).strip()
+                if len(cand) >= 2 and not any(k in cand.lower() for k in ['paytm', 'phonepe', 'bank', 'account', 'wallet', 'nodal', 'qr']):
+                    payer_name = cand
+                    break
+
+        # 3. UTR / UPI Ref / Transaction ID Extraction
+        utr = None
+        utr_patterns = [
+            r'(?:UPI\s*Ref(?:erence)?(?:\s*No\.?|\s*ID)?|Bank\s*Ref(?:erence)?(?:\s*No\.?|\s*ID)?|UTR(?:\s*No\.?)?|Txn\s*ID|Transaction\s*ID|Ref\s*No\.?)\s*[:\-]?\s*([0-9]{10,24})',
+            r'\b(?:UPI|UTR)[/\-]?([0-9]{12})\b',
+            r'Reference\s*Number\s*[:\-]?\s*([0-9]{10,24})'
+        ]
+        for pat in utr_patterns:
+            m = re.search(pat, clean_text, re.IGNORECASE)
+            if m:
+                utr = m.group(1).strip()
+                break
+
+        # 4. Order ID Extraction
+        order_id = None
+        order_patterns = [
+            r'Order\s*(?:ID|No\.?)\s*[:\-]?\s*([A-Za-z0-9_\-]{6,32})',
+            r'Merchant\s*Ref\s*[:\-]?\s*([A-Za-z0-9_\-]{6,32})'
+        ]
+        for pat in order_patterns:
+            m = re.search(pat, clean_text, re.IGNORECASE)
+            if m:
+                order_id = m.group(1).strip()
+                break
+
+        ts = email_date.timestamp() if email_date else time.time()
+
+        return {
+            "amount": amount,
+            "payer_name": payer_name,
+            "utr": utr,
+            "order_id": order_id,
+            "status": status,
+            "timestamp": ts,
+            "message_id": msg_id,
+            "subject": subject
+        }
+
+    def search_paytm_emails(
+        self,
+        time_window_minutes: int = 15,
+        target_amount: Optional[float] = None,
+        min_timestamp: Optional[float] = None,
+        processed_ids: Optional[Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetches and parses Paytm/UPI payment confirmation emails received within time_window_minutes.
+        Returns a list of parsed transaction records.
         """
         if not self.connected:
             if not self._connect():
-                return False, f"Could not connect: {self.last_error or 'Unknown Error'}", None
+                logger.error(f"[EmailService] Could not connect: {self.last_error}")
+                return []
 
+        records = []
         try:
             self.mail.select("inbox")
-            
-            # IMAP Search is by DATE (Day granularity). So we fetch today's emails first.
-            date_str = (datetime.date.today()).strftime("%d-%b-%Y")
-            logger.info(f"Searching emails since: {date_str}")
+            date_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d-%b-%Y")
             status, messages = self.mail.search(None, f'(SINCE "{date_str}")')
-            
-            if status != "OK":
-                logger.warning("IMAP Search Failed or No Emails")
-                return False, "No emails found today", None
+            if status != "OK" or not messages[0]:
+                return []
 
             email_ids = messages[0].split()
-            logger.info(f"Found {len(email_ids)} emails today")
-            # Look at the last 20 emails
-            recent_ids = email_ids[-20:] if len(email_ids) > 20 else email_ids
-            
-            # Regex Patterns for Common UPI Apps
-            patterns = [
-                r"received\s+₹?(\d+(?:\.\d{1,2})?)", 
-                r"received\s+Rs\.?\s*(\d+(?:\.\d{1,2})?)",
-                r"credited\s+with\s+₹?(\d+(?:\.\d{1,2})?)",
-                r"payment\s+of\s+₹?(\d+(?:\.\d{1,2})?)\s+received",
-                r"Rs\.\s*(\d+(?:\.\d{1,2})?)\s+paid", # Paytm Business: "Rs. 1.00 paid at..."
-                r"Payment\s+Received\s+₹\s*(\d+(?:\.\d{1,2})?)", # Paytm Business subject tail
-                r"received\s+₹\s*(\d+(?:\.\d{1,2})?)", # Generic "received ₹ 1.00"
-                r"paid\s+at.*Rs\.\s*(\d+(?:\.\d{1,2})?)" # "paid at ... Rs. 1.00"
-            ]
+            recent_ids = email_ids[-30:] if len(email_ids) > 30 else email_ids
 
-            now = datetime.datetime.now(datetime.timezone.utc) # Use UTC for reference
+            now = datetime.datetime.now(datetime.timezone.utc)
             cutoff = now - datetime.timedelta(minutes=time_window_minutes)
-
-            # Convert min_timestamp to UTC Aware Datetime
-            min_dt = None
-            if min_timestamp:
-                try:
-                    ts = float(min_timestamp)
-                    if ts > 1e11: ts /= 1000 # Convert ms to seconds
-                    # Creates UTC aware datetime from timestamp
-                    min_dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
-                    logger.info(f"Filtering emails before {min_dt} (UTC)")
-                except Exception as e:
-                    logger.warning(f"Invalid min_timestamp: {e}")
 
             for e_id in reversed(recent_ids):
                 try:
@@ -126,107 +205,124 @@ class EmailService:
                     for response_part in msg_data:
                         if isinstance(response_part, tuple):
                             msg = email.message_from_bytes(response_part[1])
-                            
-                            # Extract Message-ID
-                            msg_id = msg.get("Message-ID", "").strip()
-                            if not msg_id:
-                                msg_id = f"NO_ID_{e_id.decode()}" # Fallback
-                            
-                            # Parse Subject
-                            subject = decode_header(msg["Subject"])[0][0]
-                            if isinstance(subject, bytes):
-                                subject = subject.decode()
-                            
-                            logger.info(f"Checking Email ID {e_id.decode()} (Msg-ID: {msg_id}): {subject}")
-                            
-                            # Strict Date Check
+                            msg_id = msg.get("Message-ID", "").strip() or f"NO_ID_{e_id.decode()}"
+
+                            # Deduplication check
+                            if processed_ids and msg_id in processed_ids:
+                                continue
+
+                            # Subject decoding
+                            raw_subject = msg["Subject"] or ""
+                            decoded_parts = decode_header(raw_subject)
+                            subject = ""
+                            for text_chunk, enc in decoded_parts:
+                                if isinstance(text_chunk, bytes):
+                                    subject += text_chunk.decode(enc or 'utf-8', errors='replace')
+                                else:
+                                    subject += str(text_chunk)
+
+                            # Date check
+                            from email.utils import parsedate_to_datetime
                             try:
-                                from email.utils import parsedate_to_datetime
                                 email_date = parsedate_to_datetime(msg["Date"])
-                                
-                                # Ensure email_date is comparable (UTC)
                                 if email_date.tzinfo is None:
-                                    # Fallback for naive date: assume server local, convert to UTC?
-                                    # But parsedate usually returns aware.
                                     email_date = email_date.replace(tzinfo=datetime.timezone.utc)
                                 else:
                                     email_date = email_date.astimezone(datetime.timezone.utc)
-
-                                logger.info(f"  -> Email Date: {email_date}")
-
-                                # 1. Check Window (sanity check)
                                 if email_date < cutoff:
-                                    continue # Too old
-                                
-                                # 2. Check Min Timestamp (Transaction Start) - STRICT
-                                if min_dt: 
-                                    # Allow 1-2 seconds of clock skew/latency tolerance? 
-                                    # No, let's keep it strict. 
-                                    # If email came BEFORE transaction started -> Invalid.
-                                    if email_date < min_dt:
-                                        logger.info(f"  -> Skipped: Email date {email_date} is before transaction start {min_dt}")
-                                        continue
-                                    
-                            except Exception as e_date:
-                                logger.warning(f"Date parsing failed: {e_date}")
-                                # If critical timestamp check is required but failed, skip to be safe?
-                                if min_timestamp: 
                                     continue
-                                pass
+                            except Exception:
+                                email_date = now
 
-                            # Filter by Subject keywords
-                            subject_lower = subject.lower()
-                            keywords = ["payment", "received", "credited", "sent you", "money", "rupees", "rs.", "paytm", "phonepe", "gpay", "google pay", "paid"]
-                            if not any(k in subject_lower for k in keywords):
-                                continue
-
-                            # Get Body
+                            # Body extraction
                             body = ""
                             if msg.is_multipart():
                                 for part in msg.walk():
                                     ctype = part.get_content_type()
                                     cdispo = str(part.get("Content-Disposition"))
-
                                     if ctype == "text/plain" and "attachment" not in cdispo:
-                                        body = part.get_payload(decode=True).decode()
-                                        break 
+                                        payload = part.get_payload(decode=True)
+                                        if payload:
+                                            body += payload.decode('utf-8', errors='replace') + "\n"
                                     elif ctype == "text/html" and "attachment" not in cdispo:
-                                        html = part.get_payload(decode=True).decode()
-                                        soup = BeautifulSoup(html, "html.parser")
-                                        body = soup.get_text()
+                                        payload = part.get_payload(decode=True)
+                                        if payload:
+                                            html_text = payload.decode('utf-8', errors='replace')
+                                            if BeautifulSoup:
+                                                soup = BeautifulSoup(html_text, "html.parser")
+                                                body += soup.get_text() + "\n"
+                                            else:
+                                                body += re.sub(r'<[^>]+>', ' ', html_text) + "\n"
                             else:
-                                body = msg.get_payload(decode=True).decode()
+                                payload = msg.get_payload(decode=True)
+                                if payload:
+                                    body = payload.decode('utf-8', errors='replace')
 
-                            # Regex Check Amount
-                            full_text = f"{subject} {body}"
-                            clean_text = " ".join(full_text.split())
-                            logger.info(f"Full Text for Regex: {clean_text[:100]}...")
-
-                            for pat in patterns:
-                                match = re.search(pat, clean_text, re.IGNORECASE)
-                                if match:
-                                    amount_found = float(match.group(1))
-                                    logger.info(f"  -> Match Found! Pattern: {pat}, Amount: {amount_found}")
-                                    
-                                    if abs(amount_found - float(expected_amount)) < 1.0:
-                                        logger.info(f"PAYMENT VERIFIED: Found {amount_found} in '{subject}'")
-                                        return True, f"Verified via email: {subject}", msg_id
-                                        
+                            parsed = self.parse_transaction_content(subject, body, msg_id, email_date)
+                            if parsed and parsed["status"] == "SUCCESS":
+                                if target_amount is not None:
+                                    if abs(parsed["amount"] - float(target_amount)) < 0.01:
+                                        records.append(parsed)
+                                else:
+                                    records.append(parsed)
                 except Exception as ex:
-                    logger.error(f"Error checking email {e_id}: {ex}")
+                    logger.warning(f"[EmailService] Error checking email {e_id}: {ex}")
                     continue
 
-            return False, "No matching payment found in recent emails.", None
-
         except Exception as e:
-            logger.error(f"Verification Check Failed: {e}")
-            self._disconnect() 
-            return False, str(e), None
+            logger.error(f"[EmailService] search_paytm_emails failed: {e}")
+            self._disconnect()
 
-    def check_for_payment_email(self, amount, time_window=60, min_timestamp=None):
+        return records
+
+    def verify_payment(self, expected_amount, sender_hint=None, time_window_minutes=10, min_timestamp=None, processed_ids=None):
         """
-        Public wrapper for verify_payment to be used by the API.
-        Checks for a payment of 'amount' within the last 'time_window' minutes.
+        Searches for a payment confirmation email matching expected_amount.
+        Preserves backwards compatibility with existing callers.
+        Returns: (Verified (bool), Details (dict/str), Message-ID (str/None))
         """
-        success, message, msg_id = self.verify_payment(amount, time_window_minutes=time_window, min_timestamp=min_timestamp)
-        return {"verified": success, "message": message, "message_id": msg_id}
+        records = self.search_paytm_emails(
+            time_window_minutes=time_window_minutes,
+            target_amount=expected_amount,
+            min_timestamp=min_timestamp,
+            processed_ids=processed_ids
+        )
+
+        if records:
+            match = records[0]
+            desc = f"Verified via email: {match['subject']} (Payer: {match.get('payer_name') or 'Unknown'}, UTR: {match.get('utr') or 'N/A'})"
+            return True, desc, match["message_id"]
+
+        return False, "No matching payment found in recent emails.", None
+
+    def check_for_payment_email(self, amount, time_window=60, min_timestamp=None, processed_ids=None):
+        """
+        Public wrapper for verify_payment used by API routes.
+        Returns a dict enriched with payer_name, utr, and details.
+        """
+        records = self.search_paytm_emails(
+            time_window_minutes=time_window,
+            target_amount=amount,
+            min_timestamp=min_timestamp,
+            processed_ids=processed_ids
+        )
+
+        if records:
+            match = records[0]
+            return {
+                "verified": True,
+                "message": f"Verified via email: {match['subject']}",
+                "message_id": match["message_id"],
+                "payer_name": match.get("payer_name"),
+                "utr": match.get("utr"),
+                "details": match
+            }
+
+        return {
+            "verified": False,
+            "message": "No matching payment email found.",
+            "message_id": None,
+            "payer_name": None,
+            "utr": None,
+            "details": None
+        }
