@@ -1996,7 +1996,8 @@ class BotService:
         sb_cfg = config.get("streamer_bot", {})
         if not sb_cfg.get("enabled"):
             logger.debug("[CHAT] Streamer.bot disabled — falling back to YouTube API.")
-            asyncio.create_task(self.youtube_api.send_chat_message(message))
+            if getattr(self, "youtube_api", None):
+                asyncio.create_task(self.youtube_api.send_chat_message(message))
             return
 
         payload = json.dumps({
@@ -2042,12 +2043,14 @@ class BotService:
                         logger.info(f"[CHAT] Sent via ephemeral SB DoAction: {message[:60]}")
                     except Exception as e:
                         logger.warning(f"[CHAT-TEMP] SendMessage failed: {e}")
-                        logger.info("[CHAT] Falling back to YouTube API")
-                        asyncio.create_task(self.youtube_api.send_chat_message(message))
+                        if getattr(self, "youtube_api", None):
+                            logger.info("[CHAT] Falling back to YouTube API")
+                            asyncio.create_task(self.youtube_api.send_chat_message(message))
             except Exception as e:
                 logger.error(f"[CHAT] All Streamer.bot methods failed: {e}")
-                logger.info("[CHAT] Falling back to YouTube API")
-                asyncio.create_task(self.youtube_api.send_chat_message(message))
+                if getattr(self, "youtube_api", None):
+                    logger.info("[CHAT] Falling back to YouTube API")
+                    asyncio.create_task(self.youtube_api.send_chat_message(message))
 
     async def handle_pi_client_event(self, event, websocket=None):
         etype = event.get("type")
