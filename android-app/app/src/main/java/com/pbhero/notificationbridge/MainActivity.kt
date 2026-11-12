@@ -72,12 +72,14 @@ fun MainAppScreen() {
     var hasNotifPermission by remember { mutableStateOf(false) }
     var connectionStatus by remember { mutableStateOf("Ready") }
     var eventCounts by remember { mutableStateOf(Triple(0, 0, 0)) }
+    var trafficMetrics by remember { mutableStateOf(Triple(0, 0, 0)) }
     var eventsList by remember { mutableStateOf<List<PaymentEventEntity>>(emptyList()) }
 
     fun refreshState() {
         val packages = NotificationManagerCompat.getEnabledListenerPackages(context)
         hasNotifPermission = packages.contains(context.packageName)
         eventCounts = db.getCounts()
+        trafficMetrics = db.getTrafficMetrics()
         eventsList = db.getAllEvents(30)
     }
 
@@ -161,6 +163,7 @@ fun MainAppScreen() {
                 0 -> DashboardScreen(
                     hasPermission = hasNotifPermission,
                     counts = eventCounts,
+                    traffic = trafficMetrics,
                     connectionStatus = connectionStatus,
                     onGrantPermission = {
                         context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -223,6 +226,7 @@ fun MainAppScreen() {
 fun DashboardScreen(
     hasPermission: Boolean,
     counts: Triple<Int, Int, Int>,
+    traffic: Triple<Int, Int, Int>,
     connectionStatus: String,
     onGrantPermission: () -> Unit,
     onTestConnection: () -> Unit,
@@ -234,6 +238,7 @@ fun DashboardScreen(
     val app = context.applicationContext as PBHeroApp
     val keystore = app.keystoreManager
     val dateFormat = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+    val fullDateFormat = SimpleDateFormat("dd MMM, hh:mm:ss a", Locale.getDefault())
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -300,6 +305,62 @@ fun DashboardScreen(
             }
         }
 
+        // Section: Notification Traffic & Frequency Metrics
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PbSurfaceVariant),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbCyan))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = PbCyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("NOTIFICATION TRAFFIC & TIMING", color = PbCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (keystore.isAutoDismissEnabled) PbSuccess.copy(alpha = 0.2f) else PbWarning.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                if (keystore.isAutoDismissEnabled) "AUTO-CLEAR ON" else "AUTO-CLEAR OFF",
+                                color = if (keystore.isAutoDismissEnabled) PbSuccess else PbWarning,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CountCard("Today", traffic.first, PbCyan, Modifier.weight(1f))
+                        CountCard("Past 1h", traffic.second, PbPurple, Modifier.weight(1f))
+                        CountCard("Past 24h", traffic.third, PbTextPrimary, Modifier.weight(1f))
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    StatusRow(
+                        "Last Received",
+                        if (keystore.lastReceivedTime > 0)
+                            "${fullDateFormat.format(Date(keystore.lastReceivedTime))} (${formatRelativeTime(keystore.lastReceivedTime)})"
+                        else "No notifications yet"
+                    )
+                    StatusRow("Auto-Dismiss Shade", if (keystore.isAutoDismissEnabled) "Active (Clears Notification Drawer)" else "Disabled")
+                    StatusRow("Duplicate Guard", "Active (Prevents Re-reading Same Payment)")
+                    StatusRow("Stale Time Filter", if (keystore.isFilterStaleEnabled) "Active (Discards >10m Old Alerts)" else "Disabled")
+                }
+            }
+        }
+
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = PbSurface),
@@ -313,8 +374,8 @@ fun DashboardScreen(
                     StatusRow("Cloud Server", keystore.serverUrl)
                     StatusRow("Connection", connectionStatus)
                     StatusRow("Allowed Apps", "${keystore.allowedPackages.size} app(s) whitelisted")
-                    StatusRow("Last Notification", if (keystore.lastReceivedTime > 0) dateFormat.format(Date(keystore.lastReceivedTime)) else "None")
-                    StatusRow("Last Delivery", if (keystore.lastDeliveredTime > 0) dateFormat.format(Date(keystore.lastDeliveredTime)) else "None")
+                    StatusRow("Last Notification", if (keystore.lastReceivedTime > 0) "${dateFormat.format(Date(keystore.lastReceivedTime))} (${formatRelativeTime(keystore.lastReceivedTime)})" else "None")
+                    StatusRow("Last Delivery", if (keystore.lastDeliveredTime > 0) "${dateFormat.format(Date(keystore.lastDeliveredTime))} (${formatRelativeTime(keystore.lastDeliveredTime)})" else "None")
                 }
             }
         }
@@ -498,7 +559,7 @@ fun PackageSelectorScreen(keystore: com.pbhero.notificationbridge.data.security.
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun HistoryScreen(events: List<PaymentEventEntity>, onRefresh: () -> Unit) {
-    val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    val fullDateFormat = SimpleDateFormat("dd MMM, hh:mm:ss a", Locale.getDefault())
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -554,8 +615,17 @@ fun HistoryScreen(events: List<PaymentEventEntity>, onRefresh: () -> Unit) {
                                 }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Payer: ${event.payerName ?: "Unknown"}", color = PbTextPrimary, fontSize = 12.sp)
-                            Text("Time: ${dateFormat.format(Date(event.timestamp))} | Ref: ${event.refInfo ?: "N/A"}", color = PbTextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            Text("Payer: ${event.payerName ?: "Unknown"}", color = PbTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Captured: ${fullDateFormat.format(Date(event.timestamp))} (${formatRelativeTime(event.timestamp)})",
+                                color = PbCyan,
+                                fontSize = 11.sp
+                            )
+                            if (!event.refInfo.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("Ref / UTR: ${event.refInfo}", color = PbTextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            }
                         }
                     }
                 }
@@ -801,6 +871,65 @@ fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.Keystor
             }
         }
 
+        // Section: Notification Dismissal & Timing Settings
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PbSurface),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbBorder))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = PbCyan, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("NOTIFICATION AUTO-DISMISS & TIMING", color = PbCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    var autoDismiss by remember { mutableStateOf(keystore.isAutoDismissEnabled) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Auto-Clear Status Bar Notifications", color = PbTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Swipes away Paytm notification once captured to prevent repeated capture or duplicate donations.", color = PbTextSecondary, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = autoDismiss,
+                            onCheckedChange = {
+                                autoDismiss = it
+                                keystore.isAutoDismissEnabled = it
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    var filterStale by remember { mutableStateOf(keystore.isFilterStaleEnabled) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Ignore Stale Notifications (> 10 mins)", color = PbTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Discards historical notifications already in drawer when phone boots or reconnects.", color = PbTextSecondary, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = filterStale,
+                            onCheckedChange = {
+                                filterStale = it
+                                keystore.isFilterStaleEnabled = it
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
         // Section: Device Provisioning Details & Diagnostic Buttons
         item {
             Card(
@@ -940,4 +1069,19 @@ fun StepCard(step: String, title: String, description: String, buttonText: Strin
         }
     }
 }
+
+fun formatRelativeTime(timestamp: Long): String {
+    if (timestamp <= 0) return "None"
+    val diff = System.currentTimeMillis() - timestamp
+    if (diff < 5000) return "Just now"
+    val seconds = diff / 1000
+    if (seconds < 60) return "${seconds}s ago"
+    val minutes = seconds / 60
+    if (minutes < 60) return "${minutes}m ago"
+    val hours = minutes / 60
+    if (hours < 24) return "${hours}h ago"
+    val days = hours / 24
+    return "${days}d ago"
+}
+
 

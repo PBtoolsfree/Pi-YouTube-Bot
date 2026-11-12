@@ -52,9 +52,32 @@ class PBHeroNotificationListener : NotificationListenerService() {
             return
         }
 
+        val postTime = if (sbn.postTime > 0) sbn.postTime else System.currentTimeMillis()
+
+        // 3. Stale Notification Guard (ignore notifications older than 10 mins e.g. on phone reboot)
+        if (keystore.isFilterStaleEnabled) {
+            val ageMs = System.currentTimeMillis() - postTime
+            if (ageMs > 10 * 60 * 1000) {
+                Log.w(TAG, "Ignoring stale notification (${ageMs / 1000}s old).")
+                if (keystore.isAutoDismissEnabled) {
+                    try { cancelNotification(sbn.key) } catch (e: Exception) {}
+                }
+                return
+            }
+        }
+
+        // 4. Duplicate Guard (prevent re-capturing duplicate notification if someone pays same amount or repeats)
+        if (app.database.hasDuplicateEvent(parsed.amount, parsed.payerName, parsed.refInfo, postTime)) {
+            Log.w(TAG, "Duplicate payment event detected (₹${parsed.amount}, ref: ${parsed.refInfo}). Dismissing notification.")
+            if (keystore.isAutoDismissEnabled) {
+                try { cancelNotification(sbn.key) } catch (e: Exception) {}
+            }
+            return
+        }
+
         keystore.lastReceivedTime = System.currentTimeMillis()
 
-        // 3. Store Event in Local DB Queue
+        // 5. Store Event in Local DB Queue
         val eventId = "NOTIF-${System.currentTimeMillis()}-${UUID.randomUUID().toString().substring(0, 6).uppercase()}"
         val entity = PaymentEventEntity(
             eventId = eventId,
@@ -64,14 +87,24 @@ class PBHeroNotificationListener : NotificationListenerService() {
             amount = parsed.amount,
             payerName = parsed.payerName,
             refInfo = parsed.refInfo,
-            timestamp = sbn.postTime,
+            timestamp = postTime,
             status = "PENDING"
         )
 
         app.database.insertEvent(entity)
         Log.i(TAG, "Enqueued Payment Event $eventId: ₹${parsed.amount} from ${parsed.payerName ?: "Unknown"}")
 
-        // 4. Trigger WorkManager Delivery Worker with Network Constraint
+        // 6. Auto-Dismiss / Clear Notification from Status Bar
+        if (keystore.isAutoDismissEnabled) {
+            try {
+                cancelNotification(sbn.key)
+                Log.i(TAG, "Notification automatically dismissed from status bar: ${sbn.key}")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not dismiss notification ${sbn.key}: ${e.message}")
+            }
+        }
+
+        // 7. Trigger WorkManager Delivery Worker with Network Constraint
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
