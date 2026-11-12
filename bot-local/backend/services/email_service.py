@@ -47,7 +47,21 @@ class EmailService:
             self.last_error = str(e)
             logger.error(f"IMAP Connection Failed: {e}")
             self.connected = False
+            self.mail = None
             return False
+
+    def _ensure_connected(self) -> bool:
+        """
+        Validates existing connection with NOOP; reconnects freshly if dropped or stale.
+        """
+        if self.mail and self.connected:
+            try:
+                status, _ = self.mail.noop()
+                if status == "OK":
+                    return True
+            except Exception:
+                self._disconnect()
+        return self._connect()
 
     def check_connection(self):
         """
@@ -114,10 +128,11 @@ class EmailService:
         # 2. Payer Name Extraction
         payer_name = None
         name_patterns = [
-            r'(?:Customer Name|Payer Name|Paid by|Sender Name|From)\s*[:\-]\s*([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|$)',
-            r'\b(?:from|by)\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|$)',
-            r'received\s+from\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|\s+using\b|$)',
-            r'(?:payment from|sent by)\s+([A-Za-z0-9 ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|$)',
+            r'(?:Customer Name|Payer Name|Paid by|Sender Name)\s*[:\-]?\s*([A-Za-z0-9._\-@ ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|\s+in account of\b|$)',
+            r'(?:From)\s*[:\-]?\s*(?:BHIM\s*UPI\s*)?([A-Za-z0-9._\-@ ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|\s+in account of\b|$)',
+            r'\b(?:from|by)\s+([A-Za-z0-9._\-@ ]{2,40}?)(?:[,\n\r<|]|\s+via\b|\s+on\b|\s+using\b|\s+in account of\b|$)',
+            r'received\s+from\s+([A-Za-z0-9._\-@ ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|\s+using\b|\s+in account of\b|$)',
+            r'(?:payment from|sent by)\s+([A-Za-z0-9._\-@ ]{2,40}?)(?:[,\n\r<|]|\s+on\b|\s+via\b|$)',
             r'([A-Za-z0-9\u0900-\u097F ]{2,40})\s+ने\s+(?:₹|Rs\.?)?[\d,.]+\s+(?:का भुगतान|भेजे)',
             r'([A-Za-z0-9\u0900-\u097F ]{2,40})\s+से\s+(?:₹|Rs\.?)?[\d,.]+\s+प्राप्त'
         ]
@@ -127,7 +142,8 @@ class EmailService:
                 cand = m.group(1).strip()
                 # Clean up noise
                 cand = re.sub(r'^(mr\.|mrs\.|ms\.|shri)\s+', '', cand, flags=re.IGNORECASE).strip()
-                if len(cand) >= 2 and not any(k in cand.lower() for k in ['paytm', 'phonepe', 'bank', 'account', 'wallet', 'nodal', 'qr']):
+                cand = re.sub(r'^bhim\s+upi\s+', '', cand, flags=re.IGNORECASE).strip()
+                if len(cand) >= 2 and not any(k in cand.lower() for k in ['paytm', 'phonepe', 'bank', 'wallet', 'nodal', 'soundbox']):
                     payer_name = cand
                     break
 
@@ -147,8 +163,8 @@ class EmailService:
         # 4. Order ID Extraction
         order_id = None
         order_patterns = [
-            r'Order\s*(?:ID|No\.?)\s*[:\-]?\s*([A-Za-z0-9_\-]{6,32})',
-            r'Merchant\s*Ref\s*[:\-]?\s*([A-Za-z0-9_\-]{6,32})'
+            r'Order\s*(?:ID|No\.?)\s*[:\-]?\s*([A-Za-z0-9_\-]{6,48})',
+            r'Merchant\s*Ref\s*[:\-]?\s*([A-Za-z0-9_\-]{6,48})'
         ]
         for pat in order_patterns:
             m = re.search(pat, clean_text, re.IGNORECASE)
@@ -171,7 +187,7 @@ class EmailService:
 
     def search_paytm_emails(
         self,
-        time_window_minutes: int = 15,
+        time_window_minutes: int = 60,
         target_amount: Optional[float] = None,
         min_timestamp: Optional[float] = None,
         processed_ids: Optional[Any] = None
@@ -180,21 +196,29 @@ class EmailService:
         Fetches and parses Paytm/UPI payment confirmation emails received within time_window_minutes.
         Returns a list of parsed transaction records.
         """
-        if not self.connected:
-            if not self._connect():
-                logger.error(f"[EmailService] Could not connect: {self.last_error}")
-                return []
+        if not self._ensure_connected():
+            logger.error(f"[EmailService] Could not connect: {self.last_error}")
+            return []
 
         records = []
         try:
-            self.mail.select("inbox")
+            status, _ = self.mail.select("inbox")
+            if status != "OK":
+                self._disconnect()
+                if not self._connect():
+                    return []
+                status, _ = self.mail.select("inbox")
+
             date_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d-%b-%Y")
             status, messages = self.mail.search(None, f'(SINCE "{date_str}")')
-            if status != "OK" or not messages[0]:
+            if status != "OK" or not messages or not messages[0]:
+                status, messages = self.mail.search(None, "ALL")
+
+            if status != "OK" or not messages or not messages[0]:
                 return []
 
             email_ids = messages[0].split()
-            recent_ids = email_ids[-30:] if len(email_ids) > 30 else email_ids
+            recent_ids = email_ids[-40:] if len(email_ids) > 40 else email_ids
 
             now = datetime.datetime.now(datetime.timezone.utc)
             cutoff = now - datetime.timedelta(minutes=time_window_minutes)

@@ -1039,6 +1039,11 @@ async def get_donations_route(limit: int = 100):
     legacy = bot.get_donation_history(limit=limit)
     return await donation_manager.get_unified_history(limit=limit, legacy_history=legacy)
 
+@app.post("/api/donations/sync-emails")
+async def sync_donations_emails_route():
+    verified_count = await donation_manager.sync_pending_emails()
+    return {"status": "success", "verified_count": verified_count}
+
 @app.delete("/api/donations")
 async def clear_donations_route():
     bot.clear_donation_history()

@@ -87,22 +87,46 @@ object PaytmBusinessParser {
             )
         }
 
-        // 3. Payer Name Extraction (optional, null if absent)
+        // 3. Payer Name Extraction
         var payerName: String? = null
-        for (pat in NAME_PATTERNS) {
-            val m = pat.matcher(combined)
-            if (m.find()) {
-                val cand = m.group(1)?.trim()
-                if (!cand.isNullOrEmpty() && cand.length >= 2) {
-                    val lowerCand = cand.lowercase()
-                    if (!lowerCand.contains("paytm") && !lowerCand.contains("business") &&
-                        !lowerCand.contains("soundbox") && !lowerCand.contains("qr") &&
-                        !lowerCand.contains("bank") && !lowerCand.contains("account")) {
-                        payerName = cand
-                        break
+
+        // Check title first (e.g. "₹25.00 Received from PRADIP BAG")
+        if (!title.isNullOrBlank()) {
+            val titleMatcher = Pattern.compile("""(?:from|by)\s+([A-Za-z0-9 ]{2,35})""", Pattern.CASE_INSENSITIVE).matcher(title)
+            if (titleMatcher.find()) {
+                val cand = titleMatcher.group(1)?.trim()
+                if (!cand.isNullOrEmpty() && cand.length >= 2 && !cand.contains("paytm", ignoreCase = true)) {
+                    payerName = cand
+                }
+            }
+        }
+
+        if (payerName == null) {
+            for (pat in NAME_PATTERNS) {
+                val m = pat.matcher(combined)
+                if (m.find()) {
+                    val cand = m.group(1)?.trim()
+                    if (!cand.isNullOrEmpty() && cand.length >= 2) {
+                        val lowerCand = cand.lowercase()
+                        if (!lowerCand.contains("paytm") && !lowerCand.contains("business") &&
+                            !lowerCand.contains("soundbox") && !lowerCand.contains("qr") &&
+                            !lowerCand.contains("bank") && !lowerCand.contains("account")) {
+                            payerName = cand
+                            break
+                        }
                     }
                 }
             }
+        }
+
+        // Clean up common noise and suffixes like "Received" or "on 12 Nov..."
+        if (payerName != null) {
+            payerName = payerName
+                .replace(Regex("""\s+Received\b.*""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""\s+on\s+\d+.*""", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("""\s+at\s+\d+.*""", RegexOption.IGNORE_CASE), "")
+                .trim()
+            if (payerName.isEmpty()) payerName = null
         }
 
         // 4. Reference / UTR Extraction

@@ -20,11 +20,30 @@ class PBHeroNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "PBHeroNotifListener"
+        private val recentlyProcessedKeys = java.util.concurrent.ConcurrentHashMap<String, Long>()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
+
+        val sbnKey = sbn.key ?: "${sbn.packageName}_${sbn.id}_${sbn.postTime}"
+        val now = System.currentTimeMillis()
+
+        // Clean up keys older than 30 seconds
+        val it = recentlyProcessedKeys.entries.iterator()
+        while (it.hasNext()) {
+            val entry = it.next()
+            if (now - entry.value > 30000) it.remove()
+        }
+
+        // De-bounce rapid consecutive calls for same notification (e.g. within 5 seconds)
+        val lastSeen = recentlyProcessedKeys[sbnKey]
+        if (lastSeen != null && (now - lastSeen) < 5000) {
+            Log.d(TAG, "De-bounced duplicate onNotificationPosted for key: $sbnKey")
+            return
+        }
+        recentlyProcessedKeys[sbnKey] = now
 
         val app = applicationContext as? PBHeroApp ?: return
         val keystore = app.keystoreManager
@@ -98,9 +117,14 @@ class PBHeroNotificationListener : NotificationListenerService() {
         if (keystore.isAutoDismissEnabled) {
             try {
                 cancelNotification(sbn.key)
-                Log.i(TAG, "Notification automatically dismissed from status bar: ${sbn.key}")
+                Log.i(TAG, "Notification automatically dismissed by key: ${sbn.key}")
             } catch (e: Exception) {
-                Log.w(TAG, "Could not dismiss notification ${sbn.key}: ${e.message}")
+                Log.w(TAG, "Could not dismiss notification by key ${sbn.key}: ${e.message}")
+            }
+            try {
+                cancelNotification(sbn.packageName, sbn.tag, sbn.id)
+            } catch (e: Exception) {
+                // Ignore fallback error
             }
         }
 

@@ -178,6 +178,31 @@ class DonationManager:
             if amount < float(self.config.get("min_amount", 1.0)):
                 return {"status": "ignored", "reason": f"Amount ₹{amount} is below minimum threshold."}
 
+            # Backend Semantic Deduplication Guard (Prevents identical alerts within 120s)
+            notif_title = (notification_data.get("notification_title") or "").strip()
+            notif_text = (notification_data.get("notification_text") or "").strip()
+            notif_ref = (notification_data.get("ref_info") or "").strip()
+            now_ts = time.time()
+
+            for existing_id, existing in list(self.notifications.items()):
+                if abs(existing.get("amount", 0.0) - amount) < 0.01:
+                    # Match by ref_info if both have it
+                    if notif_ref and existing.get("ref_info") and notif_ref == existing["ref_info"]:
+                        logger.warning(f"[DonationManager] Duplicate notification rejected by ref_info: {notif_ref}")
+                        return {"status": "duplicate", "event_id": existing_id, "message": "Duplicate notification by reference ID"}
+                    # Match by identical title within 120 seconds
+                    time_diff = abs(now_ts - existing.get("received_at", now_ts))
+                    if time_diff <= 120:
+                        ex_title = (existing.get("notification_title") or "").strip()
+                        if notif_title and ex_title and notif_title == ex_title:
+                            logger.warning(f"[DonationManager] Duplicate notification rejected: identical content within {time_diff:.1f}s")
+                            return {"status": "duplicate", "event_id": existing_id, "message": "Duplicate notification within 120 seconds"}
+
+            # Clean raw payer name
+            raw_payer = notification_data.get("payer_name") or ""
+            clean_payer = re.sub(r'\s+received\b.*', '', raw_payer, flags=re.IGNORECASE).strip()
+            clean_payer = re.sub(r'^(?:payment\s+from|from|by)\s+', '', clean_payer, flags=re.IGNORECASE).strip()
+
             notif_record = {
                 "event_id": event_id,
                 "device_id": notification_data.get("device_id"),
@@ -186,7 +211,7 @@ class DonationManager:
                 "notification_text": notification_data.get("notification_text"),
                 "amount": amount,
                 "currency": notification_data.get("currency", "INR"),
-                "payer_name": notification_data.get("payer_name"),
+                "payer_name": clean_payer if clean_payer else (notification_data.get("payer_name") or "Paytm Payer"),
                 "ref_info": notification_data.get("ref_info"),
                 "received_at": time.time(),
                 "status": DonationState.PENDING_EMAIL,
@@ -290,6 +315,44 @@ class DonationManager:
             except Exception as e:
                 logger.error(f"[DonationManager] Background email check error: {e}")
 
+    async def sync_pending_emails(self) -> int:
+        """
+        Actively queries IMAP for emails to corroborate any pending notifications.
+        Returns the count of verified donations.
+        """
+        async with self.lock:
+            pending = [n for n in self.notifications.values() if n.get("status") == DonationState.PENDING_EMAIL]
+
+        if not pending:
+            return 0
+
+        verified_count = 0
+        try:
+            if self.bot and hasattr(self.bot, "email"):
+                email_service = self.bot.email
+            else:
+                from .email_service import EmailService
+                email_service = EmailService(self.bot.load_config if self.bot else lambda: {})
+
+            # Search recent emails from past 60 minutes
+            records = await asyncio.to_thread(
+                email_service.search_paytm_emails,
+                time_window_minutes=60,
+                target_amount=None,
+                processed_ids=list(self.emails.keys())
+            )
+
+            if records:
+                logger.info(f"[DonationManager] sync_pending_emails found {len(records)} recent email(s)!")
+                for rec in records:
+                    match_res = await self.ingest_email(rec)
+                    if match_res.get("status") == DonationState.VERIFIED:
+                        verified_count += 1
+        except Exception as e:
+            logger.error(f"[DonationManager] sync_pending_emails error: {e}")
+
+        return verified_count
+
     # ─────────────────────────────────────────────────────────────────────────
     # 5. DONATION MATCHING & VERIFICATION ENGINE
     # ─────────────────────────────────────────────────────────────────────────
@@ -302,10 +365,10 @@ class DonationManager:
         3. Correlating Tip Page Intent for customized viewer message and name
         """
         async with self.lock:
-            window = self.config.get("match_window_seconds", 600)
+            window = max(self.config.get("match_window_seconds", 600), 3600)
             strict = self.config.get("strict_mode", True)
 
-            candidates_notif = [n for n in self.notifications.values() if n["status"] not in [DonationState.VERIFIED, DonationState.ANNOUNCED]]
+            candidates_notif = [n for n in self.notifications.values() if n["status"] not in [DonationState.VERIFIED, DonationState.ANNOUNCED, "DUPLICATE_RESOLVED"]]
             candidates_email = [e for e in self.emails.values() if not e.get("is_matched", False)]
 
             for notif in candidates_notif:
@@ -332,8 +395,21 @@ class DonationManager:
                     notif["status"] = DonationState.VERIFIED
                     notif["matched_email_id"] = matched_email["message_id"]
 
+                    # Deduplicate any other duplicate pending notifications within 120s window & same amount
+                    for dup_notif in list(self.notifications.values()):
+                        if dup_notif["event_id"] != notif["event_id"] and dup_notif.get("status") == DonationState.PENDING_EMAIL:
+                            if abs(dup_notif.get("amount", 0.0) - notif["amount"]) < 0.01:
+                                if abs(dup_notif.get("received_at", 0.0) - notif["received_at"]) <= 120:
+                                    logger.info(f"[DonationManager] Auto-resolving duplicate notification {dup_notif['event_id']}")
+                                    dup_notif["status"] = "DUPLICATE_RESOLVED"
+                                    dup_notif["matched_email_id"] = matched_email["message_id"]
+
                     # Determine canonical donor name
                     final_name = matched_email.get("payer_name") or notif.get("payer_name") or "Supporter"
+                    final_name = re.sub(r'\s+received\b.*', '', final_name, flags=re.IGNORECASE).strip()
+                    final_name = re.sub(r'^(?:payment\s+from|from|by)\s+', '', final_name, flags=re.IGNORECASE).strip()
+                    if not final_name:
+                        final_name = "Supporter"
                     utr = matched_email.get("utr") or notif.get("ref_info")
 
                     # Search for associated Tip Page Intent
@@ -564,20 +640,46 @@ class DonationManager:
 
             # 2. Notifications pending email corroboration
             now = time.time()
+            pending_buckets = set()
             for n_id, n in self.notifications.items():
-                if n_id in seen_ids or n.get("status") in [DonationState.VERIFIED, DonationState.ANNOUNCED]:
+                if n_id in seen_ids or n.get("status") in [DonationState.VERIFIED, DonationState.ANNOUNCED, "DUPLICATE_RESOLVED", "duplicate"]:
                     continue
-                # Check if expired (> 30 minutes)
-                age = now - n.get("received_at", now)
-                status = "PENDING_EMAIL" if age <= 1800 else "EXPIRED"
-                status_label = "Pending (Waiting for Email)" if status == "PENDING_EMAIL" else "Expired"
+
                 ts = n.get("received_at") or now
+                # Check if expired (> 2 hours)
+                age = now - ts
+                status = "PENDING_EMAIL" if age <= 7200 else "EXPIRED"
+                status_label = "Pending (Waiting for Email)" if status == "PENDING_EMAIL" else "Expired"
+
+                raw_user = n.get("payer_name") or "Paytm Payer"
+                clean_user = re.sub(r'\s+received\b.*', '', raw_user, flags=re.IGNORECASE).strip()
+                clean_user = re.sub(r'^(?:payment\s+from|from|by)\s+', '', clean_user, flags=re.IGNORECASE).strip()
+                user = clean_user if clean_user else "Paytm Payer"
+                n_amount = round(float(n.get("amount", 0.0)), 2)
+
+                # If this notification's amount and time match an already verified donation, skip it
+                is_already_verified = False
+                for v_don in self.verified_donations.values():
+                    if abs(v_don.get("amount", 0.0) - n_amount) < 0.01:
+                        v_time = v_don.get("verified_timestamp") or v_don.get("timestamp_epoch") or 0
+                        if abs(v_time - ts) <= 600:
+                            is_already_verified = True
+                            break
+                if is_already_verified:
+                    continue
+
+                # Deduplicate pending notifications within 120s window so duplicates never show
+                bucket_key = (n_amount, user, int(ts / 120))
+                if bucket_key in pending_buckets:
+                    continue
+                pending_buckets.add(bucket_key)
+
                 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
                 item = {
                     "id": n_id,
                     "timestamp": time_str,
                     "raw_time": ts,
-                    "user": n.get("payer_name") or "Paytm Payer",
+                    "user": user,
                     "amount": float(n.get("amount", 0.0)),
                     "message": n.get("notification_text") or "Payment detected from phone notification",
                     "status": status,
@@ -636,6 +738,11 @@ class DonationManager:
                             "is_test": False
                         })
                         seen_ids.add(leg_id)
+
+            # If there are any pending notifications waiting for email, trigger a background email sync
+            has_pending = any(n.get("status") == DonationState.PENDING_EMAIL for n in self.notifications.values())
+            if has_pending:
+                asyncio.create_task(self.sync_pending_emails())
 
             # Sort newest first by raw_time, then string timestamp
             unified.sort(key=lambda x: (x.get("raw_time") or 0, x.get("timestamp") or ""), reverse=True)
