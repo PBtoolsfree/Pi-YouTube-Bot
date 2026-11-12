@@ -27,6 +27,17 @@ if sys.platform == "win32":
     import asyncio
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+import asyncio
+if not hasattr(asyncio, "to_thread"):
+    import functools
+    async def _to_thread(func, *args, **kwargs):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+    asyncio.to_thread = _to_thread
+
 
 def _setup_logging() -> None:
     """Configure structured logging with timestamps and levels."""

@@ -10,6 +10,7 @@ import time
 import asyncio
 import logging
 import uuid
+import re
 from typing import Dict, Any, Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,15 @@ class DeliveryState:
     FAILED = "FAILED"
 
 
+async def _run_in_thread(func, *args, **kwargs):
+    """Compatible with Python 3.8+ (asyncio.to_thread requires Python 3.9+)."""
+    import functools
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+
 class DonationManager:
     def __init__(self, data_file: str = DATA_FILE, bot_instance=None):
         self.data_file = os.path.abspath(data_file)
@@ -57,6 +67,25 @@ class DonationManager:
         }
 
         self._load()
+
+    def _resolve_email_service(self):
+        if self.bot and hasattr(self.bot, "email") and self.bot.email:
+            return self.bot.email
+        from .email_service import EmailService
+        def _get_config():
+            if self.bot and hasattr(self.bot, "load_config") and callable(self.bot.load_config):
+                cfg = self.bot.load_config()
+                if cfg:
+                    return cfg
+            for p in ["config.json", "../config.json", "data/config.json", "/home/ubuntu/pibot/bot-cloud/config.json", "/home/pradip/pibot/bot-local/config.json"]:
+                if os.path.exists(p):
+                    try:
+                        with open(p, "r", encoding="utf-8") as f:
+                            return json.load(f)
+                    except Exception:
+                        pass
+            return {}
+        return EmailService(_get_config)
 
     def set_bot(self, bot_instance):
         self.bot = bot_instance
@@ -289,14 +318,10 @@ class DonationManager:
 
             # Check via EmailService
             try:
-                if self.bot and hasattr(self.bot, "email"):
-                    email_service = self.bot.email
-                else:
-                    from .email_service import EmailService
-                    email_service = EmailService(self.bot.load_config if self.bot else lambda: {})
+                email_service = self._resolve_email_service()
 
                 # Run IMAP fetch in thread to avoid freezing async loop
-                records = await asyncio.to_thread(
+                records = await _run_in_thread(
                     email_service.search_paytm_emails,
                     time_window_minutes=15,
                     target_amount=amount,
@@ -328,14 +353,21 @@ class DonationManager:
 
         verified_count = 0
         try:
-            if self.bot and hasattr(self.bot, "email"):
-                email_service = self.bot.email
-            else:
-                from .email_service import EmailService
-                email_service = EmailService(self.bot.load_config if self.bot else lambda: {})
+            # 1. First evaluate match against already stored unmatched emails
+            first_match = await self.evaluate_match()
+            if first_match.get("status") == DonationState.VERIFIED:
+                verified_count += 1
 
-            # Search recent emails from past 60 minutes
-            records = await asyncio.to_thread(
+            # 2. Re-check if any pending notifications remain
+            async with self.lock:
+                pending = [n for n in self.notifications.values() if n.get("status") == DonationState.PENDING_EMAIL]
+
+            if not pending:
+                return verified_count
+
+            # 3. Search recent emails from IMAP
+            email_service = self._resolve_email_service()
+            records = await _run_in_thread(
                 email_service.search_paytm_emails,
                 time_window_minutes=60,
                 target_amount=None,
@@ -405,7 +437,16 @@ class DonationManager:
                                     dup_notif["matched_email_id"] = matched_email["message_id"]
 
                     # Determine canonical donor name
-                    final_name = matched_email.get("payer_name") or notif.get("payer_name") or "Supporter"
+                    em_name = (matched_email.get("payer_name") or "").strip()
+                    notif_name = (notif.get("payer_name") or "").strip()
+                    notif_clean = re.sub(r'\s+received\b.*', '', notif_name, flags=re.IGNORECASE).strip()
+                    notif_clean = re.sub(r'^(?:payment\s+from|from|by)\s+', '', notif_clean, flags=re.IGNORECASE).strip()
+
+                    if "@" in em_name and notif_clean and "@" not in notif_clean:
+                        final_name = notif_clean
+                    else:
+                        final_name = em_name or notif_clean or "Supporter"
+
                     final_name = re.sub(r'\s+received\b.*', '', final_name, flags=re.IGNORECASE).strip()
                     final_name = re.sub(r'^(?:payment\s+from|from|by)\s+', '', final_name, flags=re.IGNORECASE).strip()
                     if not final_name:
