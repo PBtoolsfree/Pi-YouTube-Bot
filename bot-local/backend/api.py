@@ -1543,23 +1543,29 @@ async def test_android_device_authentication():
     }
 
     try:
+        # 1. Valid Signature Test
+        evt_1 = f"TEST_EVT_1_{uuid.uuid4().hex[:6]}"
+        evt_old = f"TEST_EVT_OLD_{uuid.uuid4().hex[:6]}"
         now = time.time()
-        test_body = b'{"provider":"paytm_business","event_id":"TEST_EVT_1","amount":10.0}'
+        test_body = f'{"provider":"paytm_business","event_id":"' + evt_1 + '","amount":10.0}'.encode("utf-8")
         message = f"{test_dev_id}:{int(now)}:{test_body.decode('utf-8')}".encode("utf-8")
         valid_sig = hmac.new(test_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
-        val_ok, val_msg = device_auth_service.verify_request(test_dev_id, str(int(now)), valid_sig, test_body, "TEST_EVT_1")
+        val_ok, val_msg = device_auth_service.verify_request(test_dev_id, str(int(now)), valid_sig, test_body, evt_1)
         if not val_ok:
             raise Exception(f"Valid signature was unexpectedly rejected: {val_msg}")
 
-        replay_ok, replay_msg = device_auth_service.verify_request(test_dev_id, str(int(now)), valid_sig, test_body, "TEST_EVT_1")
+        # 2. Replay Test (Same event_id)
+        replay_ok, replay_msg = device_auth_service.verify_request(test_dev_id, str(int(now)), valid_sig, test_body, evt_1)
         if replay_ok:
             raise Exception("Replay attack was NOT blocked!")
 
+        # 3. Timestamp Skew Test (10 minutes old)
         old_time = now - 600
-        old_msg = f"{test_dev_id}:{int(old_time)}:{test_body.decode('utf-8')}".encode("utf-8")
+        old_body = f'{"provider":"paytm_business","event_id":"' + evt_old + '","amount":10.0}'.encode("utf-8")
+        old_msg = f"{test_dev_id}:{int(old_time)}:{old_body.decode('utf-8')}".encode("utf-8")
         old_sig = hmac.new(test_secret.encode("utf-8"), old_msg, hashlib.sha256).hexdigest()
-        skew_ok, skew_msg = device_auth_service.verify_request(test_dev_id, str(int(old_time)), old_sig, test_body, "TEST_EVT_OLD")
+        skew_ok, skew_msg = device_auth_service.verify_request(test_dev_id, str(int(old_time)), old_sig, old_body, evt_old)
         if skew_ok:
             raise Exception("Expired timestamp was NOT blocked!")
 
@@ -1719,6 +1725,20 @@ async def test_donation_matching_algorithm():
     }
     match_res = await donation_manager.ingest_notification(notif_payload)
 
+    # 2b. Ingest matching email to corroborate payment (satisfies strict mode)
+    email_payload = {
+        "message_id": f"TEST-EM-{uuid.uuid4().hex[:6].upper()}",
+        "subject": "Payment Received",
+        "sender": "no-reply@paytm.com",
+        "amount": test_amt,
+        "payer_name": donor_name,
+        "utr": f"UPI{uuid.uuid4().hex[:10].upper()}",
+        "order_id": f"ORD-{uuid.uuid4().hex[:8].upper()}",
+        "received_at": time.time(),
+        "is_test": True
+    }
+    await donation_manager.ingest_email(email_payload)
+
     final_status = await donation_manager.get_intent_status(intent_id)
     duration_ms = round((time.time() - start_time) * 1000, 2)
     is_success = final_status.get("status") in [DonationState.VERIFIED, "VERIFIED"]
@@ -1856,6 +1876,22 @@ async def test_complete_end_to_end_system():
         }
         res_ingest = await donation_manager.ingest_notification(notif_payload)
         timeline.append({"step": "2_INGEST_NOTIFICATION", "duration_ms": round((time.time() - t1)*1000, 2), "result": res_ingest.get("status")})
+
+        # Step 2b: Ingest matching email to corroborate payment
+        t1b = time.time()
+        email_payload = {
+            "message_id": f"TEST-EM-E2E-{uuid.uuid4().hex[:6].upper()}",
+            "subject": "Payment Received from Deepak Sharma",
+            "sender": "no-reply@paytm.com",
+            "amount": 99.0,
+            "payer_name": "Deepak Sharma",
+            "utr": "UPI998877665544",
+            "order_id": "ORD-E2E-998877",
+            "received_at": time.time(),
+            "is_test": True
+        }
+        await donation_manager.ingest_email(email_payload)
+        timeline.append({"step": "2b_INGEST_EMAIL_CORROBORATION", "duration_ms": round((time.time() - t1b)*1000, 2), "result": "verified"})
 
         t2 = time.time()
         status_check = await donation_manager.get_intent_status(intent["intent_id"])
