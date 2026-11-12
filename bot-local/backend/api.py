@@ -1548,7 +1548,7 @@ async def test_android_device_authentication():
         evt_1 = f"TEST_EVT_1_{uuid.uuid4().hex[:6]}"
         evt_old = f"TEST_EVT_OLD_{uuid.uuid4().hex[:6]}"
         now = time.time()
-        test_body = f'{"provider":"paytm_business","event_id":"' + evt_1 + '","amount":10.0}'.encode("utf-8")
+        test_body = ('{"provider":"paytm_business","event_id":"' + evt_1 + '","amount":10.0}').encode("utf-8")
         message = f"{test_dev_id}:{int(now)}:{test_body.decode('utf-8')}".encode("utf-8")
         valid_sig = hmac.new(test_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
@@ -1563,7 +1563,7 @@ async def test_android_device_authentication():
 
         # 3. Timestamp Skew Test (10 minutes old)
         old_time = now - 600
-        old_body = f'{"provider":"paytm_business","event_id":"' + evt_old + '","amount":10.0}'.encode("utf-8")
+        old_body = ('{"provider":"paytm_business","event_id":"' + evt_old + '","amount":10.0}').encode("utf-8")
         old_msg = f"{test_dev_id}:{int(old_time)}:{old_body.decode('utf-8')}".encode("utf-8")
         old_sig = hmac.new(test_secret.encode("utf-8"), old_msg, hashlib.sha256).hexdigest()
         skew_ok, skew_msg = device_auth_service.verify_request(test_dev_id, str(int(old_time)), old_sig, old_body, evt_old)
