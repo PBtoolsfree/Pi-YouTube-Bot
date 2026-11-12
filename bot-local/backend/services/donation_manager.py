@@ -316,12 +316,16 @@ class DonationManager:
 
                     # Search for associated Tip Page Intent
                     matched_intent = None
-                    for intent in self.intents.values():
-                        if intent["status"] == DonationState.WAITING_FOR_PAYMENT:
-                            if abs(intent["amount"] - notif["amount"]) < 0.01:
-                                if abs(notif["received_at"] - intent["created_at"]) <= window:
-                                    matched_intent = intent
-                                    break
+                    candidate_intents = [
+                        i for i in self.intents.values()
+                        if i["status"] == DonationState.WAITING_FOR_PAYMENT
+                        and abs(i["amount"] - notif["amount"]) < 0.01
+                        and abs(notif["received_at"] - i["created_at"]) <= window
+                    ]
+                    if candidate_intents:
+                        # Pick intent closest in time to notification
+                        candidate_intents.sort(key=lambda x: abs(notif["received_at"] - x["created_at"]))
+                        matched_intent = candidate_intents[0]
 
                     message = "Donation via Paytm UPI QR"
                     if matched_intent:

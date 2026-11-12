@@ -2552,10 +2552,11 @@ async def test_donation_matching_algorithm():
     """
     import time
     import uuid
+    import random
     start_time = time.time()
     cid = f"TEST-MATCH-{int(start_time)}-{uuid.uuid4().hex[:4].upper()}"
 
-    test_amt = 42.0
+    test_amt = round(random.uniform(41.0, 79.0), 2)
     donor_name = "Kavita Singh"
 
     # 1. Create Intent
@@ -2743,8 +2744,10 @@ async def test_complete_end_to_end_system():
 
     try:
         # Step 1: Create Intent
+        import random
+        test_amt = round(random.uniform(91.0, 199.0), 2)
         t0 = time.time()
-        intent = await donation_manager.create_intent(99.0, "Deepak Sharma", "Super stream! E2E Test", is_test=True)
+        intent = await donation_manager.create_intent(test_amt, "Deepak Sharma", "Super stream! E2E Test", is_test=True)
         timeline.append({"step": "1_CREATE_INTENT", "duration_ms": round((time.time() - t0)*1000, 2), "intent_id": intent["intent_id"]})
 
         # Step 2: Ingest Android Bridge Notification
@@ -2755,8 +2758,8 @@ async def test_complete_end_to_end_system():
             "event_type": "payment_notification",
             "event_id": notif_id,
             "notification_title": "Payment Received",
-            "notification_text": "Payment received of ₹99.00 from Deepak Sharma",
-            "amount": 99.0,
+            "notification_text": f"Payment received of ₹{test_amt} from Deepak Sharma",
+            "amount": test_amt,
             "currency": "INR",
             "payer_name": "Deepak Sharma",
             "ref_info": "UPI998877665544",
@@ -2772,7 +2775,7 @@ async def test_complete_end_to_end_system():
             "message_id": f"TEST-EM-E2E-{uuid.uuid4().hex[:6].upper()}",
             "subject": "Payment Received from Deepak Sharma",
             "sender": "no-reply@paytm.com",
-            "amount": 99.0,
+            "amount": test_amt,
             "payer_name": "Deepak Sharma",
             "utr": "UPI998877665544",
             "order_id": "ORD-E2E-998877",
