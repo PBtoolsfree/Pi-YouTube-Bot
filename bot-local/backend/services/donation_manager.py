@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "donations.json")
+DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "smart_donations.json")
 
 
 class DonationState:
@@ -63,16 +63,38 @@ class DonationManager:
 
     def _load(self):
         try:
+            legacy_donations_file = os.path.join(os.path.dirname(self.data_file), "donations.json")
             if os.path.exists(self.data_file):
                 with open(self.data_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    self.intents = data.get("intents", {})
-                    self.notifications = data.get("notifications", {})
-                    self.emails = data.get("emails", {})
-                    self.verified_donations = data.get("verified_donations", {})
-                    self.announced_events = data.get("announced_events", {})
-                    self.config.update(data.get("config", {}))
+                    if isinstance(data, dict):
+                        self.intents = data.get("intents", {})
+                        self.notifications = data.get("notifications", {})
+                        self.emails = data.get("emails", {})
+                        self.verified_donations = data.get("verified_donations", {})
+                        self.announced_events = data.get("announced_events", {})
+                        self.config.update(data.get("config", {}))
                 logger.info(f"[DonationManager] Loaded {len(self.verified_donations)} verified donations from store.")
+            elif os.path.exists(legacy_donations_file):
+                # Migrate if legacy file holds a dict from previous DonationManager saving
+                try:
+                    with open(legacy_donations_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict) and "verified_donations" in data:
+                        self.intents = data.get("intents", {})
+                        self.notifications = data.get("notifications", {})
+                        self.emails = data.get("emails", {})
+                        self.verified_donations = data.get("verified_donations", {})
+                        self.announced_events = data.get("announced_events", {})
+                        self.config.update(data.get("config", {}))
+                        self._save()
+                        with open(legacy_donations_file, "w", encoding="utf-8") as f:
+                            json.dump([], f, indent=2)
+                        logger.info(f"[DonationManager] Migrated {len(self.verified_donations)} donations to smart_donations.json")
+                    else:
+                        self._save()
+                except Exception:
+                    self._save()
             else:
                 self._save()
         except Exception as e:
@@ -361,6 +383,13 @@ class DonationManager:
                     self._save()
                     logger.info(f"[DonationManager] ✅ VERIFIED DONATION: {donation_id} — {final_name} donated ₹{notif['amount']} (UTR: {utr})")
 
+                    # Also sync to legacy history so OBS and existing listeners receive it
+                    if self.bot and hasattr(self.bot, "add_donation_to_history"):
+                        try:
+                            self.bot.add_donation_to_history(final_name, notif["amount"], message, donation_id, played=True, source="Paytm QR")
+                        except Exception as e:
+                            logger.warning(f"Failed to sync to bot legacy history: {e}")
+
                     # Dispatch dual announcements
                     if self.config.get("auto_announce", True):
                         asyncio.create_task(self.dispatch_announcements(donation_id))
@@ -390,6 +419,11 @@ class DonationManager:
                     }
                     self.verified_donations[donation_id] = canonical_event
                     self._save()
+                    if self.bot and hasattr(self.bot, "add_donation_to_history"):
+                        try:
+                            self.bot.add_donation_to_history(final_name, notif["amount"], "Donation via Paytm UPI QR", donation_id, played=True, source="Paytm QR")
+                        except Exception as e:
+                            logger.warning(f"Failed to sync to bot legacy history: {e}")
                     if self.config.get("auto_announce", True):
                         asyncio.create_task(self.dispatch_announcements(donation_id))
                     return {"status": DonationState.VERIFIED, "donation": canonical_event}
@@ -489,6 +523,170 @@ class DonationManager:
             donation["status"] = DonationState.ANNOUNCED
             self._save()
 
+    async def get_unified_history(self, limit: int = 100, legacy_history: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+        """
+        Builds a comprehensive, rich transaction history for the Tip Page Settings History tab.
+        Includes:
+        - VERIFIED / ANNOUNCED donations (Green - Matched & corroborated)
+        - PENDING_EMAIL notifications (Yellow - Android notification captured, waiting for Paytm email confirmation)
+        - WAITING_FOR_PAYMENT intents (Blue - QR intent initiated on tip page)
+        - EXPIRED intents / notifications (Gray)
+        - Legacy transactions from bot_service
+        """
+        async with self.lock:
+            unified: List[Dict[str, Any]] = []
+            seen_ids = set()
+
+            # 1. Verified & Announced Donations
+            for d_id, d in self.verified_donations.items():
+                ts = d.get("verified_timestamp") or time.time()
+                time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+                item = {
+                    "id": d_id,
+                    "timestamp": time_str,
+                    "raw_time": ts,
+                    "user": d.get("donor_name", "Supporter"),
+                    "amount": float(d.get("amount", 0.0)),
+                    "message": d.get("message", ""),
+                    "status": "VERIFIED",
+                    "status_label": "Verified",
+                    "source": "Paytm Business QR",
+                    "utr": d.get("utr") or "—",
+                    "order_id": d.get("order_id") or "—",
+                    "is_test": d.get("is_test", False)
+                }
+                unified.append(item)
+                seen_ids.add(d_id)
+                if d.get("notification_event_id"):
+                    seen_ids.add(d["notification_event_id"])
+                if d.get("intent_id"):
+                    seen_ids.add(d["intent_id"])
+
+            # 2. Notifications pending email corroboration
+            now = time.time()
+            for n_id, n in self.notifications.items():
+                if n_id in seen_ids or n.get("status") in [DonationState.VERIFIED, DonationState.ANNOUNCED]:
+                    continue
+                # Check if expired (> 30 minutes)
+                age = now - n.get("received_at", now)
+                status = "PENDING_EMAIL" if age <= 1800 else "EXPIRED"
+                status_label = "Pending (Waiting for Email)" if status == "PENDING_EMAIL" else "Expired"
+                ts = n.get("received_at") or now
+                time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+                item = {
+                    "id": n_id,
+                    "timestamp": time_str,
+                    "raw_time": ts,
+                    "user": n.get("payer_name") or "Paytm Payer",
+                    "amount": float(n.get("amount", 0.0)),
+                    "message": n.get("notification_text") or "Payment detected from phone notification",
+                    "status": status,
+                    "status_label": status_label,
+                    "source": "Paytm App Notification",
+                    "utr": n.get("ref_info") or "—",
+                    "order_id": "—",
+                    "is_test": n.get("is_test", False)
+                }
+                unified.append(item)
+                seen_ids.add(n_id)
+
+            # 3. Intents created on tip page still waiting for payment
+            for i_id, intent in self.intents.items():
+                if i_id in seen_ids or intent.get("status") in [DonationState.VERIFIED, DonationState.ANNOUNCED]:
+                    continue
+                age = now - intent.get("created_at", now)
+                status = "WAITING_FOR_PAYMENT" if age <= 600 else "EXPIRED"
+                status_label = "Waiting for Payment" if status == "WAITING_FOR_PAYMENT" else "Expired"
+                ts = intent.get("created_at") or now
+                time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+                item = {
+                    "id": i_id,
+                    "timestamp": time_str,
+                    "raw_time": ts,
+                    "user": intent.get("donor_name") or "Anonymous",
+                    "amount": float(intent.get("amount", 0.0)),
+                    "message": intent.get("message") or "Tip page QR code scanned",
+                    "status": status,
+                    "status_label": status_label,
+                    "source": "Tip Page QR Intent",
+                    "utr": "—",
+                    "order_id": "—",
+                    "is_test": intent.get("is_test", False)
+                }
+                unified.append(item)
+                seen_ids.add(i_id)
+
+            # 4. Include any legacy transactions
+            if legacy_history:
+                for leg in legacy_history:
+                    leg_id = leg.get("transaction_id") or f"LEGACY-{leg.get('timestamp')}-{leg.get('user')}"
+                    if leg_id not in seen_ids:
+                        unified.append({
+                            "id": leg_id,
+                            "timestamp": leg.get("timestamp", time.strftime("%Y-%m-%d %H:%M:%S")),
+                            "raw_time": 0,
+                            "user": leg.get("user", "Supporter"),
+                            "amount": float(leg.get("amount", 0.0)),
+                            "message": leg.get("message", ""),
+                            "status": "VERIFIED",
+                            "status_label": "Verified",
+                            "source": leg.get("source") or "Direct Payment",
+                            "utr": leg.get("transaction_id") or "—",
+                            "order_id": "—",
+                            "is_test": False
+                        })
+                        seen_ids.add(leg_id)
+
+            # Sort newest first by raw_time, then string timestamp
+            unified.sort(key=lambda x: (x.get("raw_time") or 0, x.get("timestamp") or ""), reverse=True)
+            return unified[:limit]
+
+    async def delete_history_item(self, target_id: Optional[str] = None, timestamp: Optional[str] = None, user: Optional[str] = None, amount: Optional[float] = None) -> bool:
+        """Deletes a specific history item from intents, notifications, or verified donations."""
+        async with self.lock:
+            found = False
+            if target_id:
+                if target_id in self.verified_donations:
+                    del self.verified_donations[target_id]
+                    found = True
+                if target_id in self.notifications:
+                    del self.notifications[target_id]
+                    found = True
+                if target_id in self.intents:
+                    del self.intents[target_id]
+                    found = True
+
+            if not found and user and amount is not None:
+                for k, v in list(self.verified_donations.items()):
+                    if v.get("donor_name") == user and abs(float(v.get("amount", 0.0)) - float(amount)) < 0.01:
+                        del self.verified_donations[k]
+                        found = True
+                        break
+                for k, v in list(self.notifications.items()):
+                    if v.get("payer_name") == user and abs(float(v.get("amount", 0.0)) - float(amount)) < 0.01:
+                        del self.notifications[k]
+                        found = True
+                        break
+                for k, v in list(self.intents.items()):
+                    if v.get("donor_name") == user and abs(float(v.get("amount", 0.0)) - float(amount)) < 0.01:
+                        del self.intents[k]
+                        found = True
+                        break
+
+            if found:
+                self._save()
+            return found
+
+    async def clear_all_history(self):
+        """Clears all historical donations, notifications, and intents."""
+        async with self.lock:
+            self.verified_donations.clear()
+            self.notifications.clear()
+            self.intents.clear()
+            self.emails.clear()
+            self.announced_events.clear()
+            self._save()
+
     def get_dashboard_summary(self) -> Dict[str, Any]:
         """Provides statistics and lists for the Admin Dashboard."""
         return {
@@ -507,3 +705,4 @@ class DonationManager:
 
 # Global singleton instance
 donation_manager = DonationManager()
+

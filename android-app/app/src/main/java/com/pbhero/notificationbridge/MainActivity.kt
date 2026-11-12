@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,12 +35,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.pbhero.notificationbridge.data.db.PaymentEventEntity
 import com.pbhero.notificationbridge.network.WebhookClient
 import com.pbhero.notificationbridge.network.WebhookDeliveryWorker
 import com.pbhero.notificationbridge.service.PBHeroNotificationListener
 import com.pbhero.notificationbridge.ui.theme.*
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -190,6 +194,9 @@ fun MainAppScreen() {
                         WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<WebhookDeliveryWorker>().build())
                         refreshState()
                         Toast.makeText(context, "Sync enqueued!", Toast.LENGTH_SHORT).show()
+                    },
+                    onNavigateToSettings = {
+                        selectedTab = 3
                     }
                 )
                 1 -> PackageSelectorScreen(keystore = keystore)
@@ -220,7 +227,8 @@ fun DashboardScreen(
     onGrantPermission: () -> Unit,
     onTestConnection: () -> Unit,
     onTestNotification: () -> Unit,
-    onSyncNow: () -> Unit
+    onSyncNow: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as PBHeroApp
@@ -231,6 +239,37 @@ fun DashboardScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (!keystore.isPaired) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = PbWarning.copy(alpha = 0.15f)),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbWarning))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = PbWarning)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Device Not Paired to Dashboard", color = PbWarning, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Scan the Pairing QR Code on your PB HERO Dashboard (Settings > App Download & Security) to activate live donation syncing.",
+                            color = PbTextSecondary,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = onNavigateToSettings,
+                            colors = ButtonDefaults.buttonColors(containerColor = PbWarning)
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = PbBackground)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Scan Dashboard QR Code", color = PbBackground, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
         if (!hasPermission) {
             item {
                 Card(
@@ -537,6 +576,70 @@ fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.Keystor
     var isPairing by remember { mutableStateOf(false) }
     var isHeartbeating by remember { mutableStateOf(false) }
     var isPairedState by remember { mutableStateOf(keystore.isPaired) }
+    var showManualMode by remember { mutableStateOf(false) }
+
+    val scanLauncher = rememberLauncherForActivityResult(
+        contract = ScanContract()
+    ) { result ->
+        val scanned = result.contents
+        if (!scanned.isNullOrBlank()) {
+            try {
+                var targetUrl = urlInput.ifBlank { "https://pbhero.qzz.io" }
+                var targetCode = ""
+
+                val trimmed = scanned.trim()
+                if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                    val json = JSONObject(trimmed)
+                    if (json.has("pairing_code")) {
+                        targetCode = json.getString("pairing_code")
+                    }
+                    if (json.has("server_url")) {
+                        targetUrl = json.getString("server_url").trim().removeSuffix("/")
+                    }
+                } else if (trimmed.matches(Regex("^\\d{6}$"))) {
+                    targetCode = trimmed
+                } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                    val uri = Uri.parse(trimmed)
+                    val codeParam = uri.getQueryParameter("code") ?: uri.getQueryParameter("pairing_code")
+                    if (!codeParam.isNullOrBlank()) {
+                        targetCode = codeParam
+                        targetUrl = "${uri.scheme}://${uri.authority}"
+                    }
+                }
+
+                if (targetCode.length == 6) {
+                    urlInput = targetUrl
+                    pairingCodeInput = targetCode
+                    scope.launch {
+                        isPairing = true
+                        val res = WebhookClient(keystore).pairWithCode(targetUrl, targetCode)
+                        isPairing = false
+                        if (res.isSuccess) {
+                            isPairedState = true
+                            pairingCodeInput = ""
+                            Toast.makeText(context, "Connected & Paired with Dashboard Successfully!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Pairing Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    Toast.makeText(context, "Could not detect a 6-digit code in QR. Please try again.", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Scan error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun launchQrScanner() {
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt("Scan Pairing QR from Dashboard (Settings > App Download & Security)")
+            setBeepEnabled(true)
+            setOrientationLocked(false)
+        }
+        scanLauncher.launch(options)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -546,7 +649,7 @@ fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.Keystor
             Text("SETTINGS & SECURITY PAIRING", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
 
-        // Section: Pair Device With Dashboard
+        // Section 1: Instant 1-Tap QR Pairing (Zero Manual Typing)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = PbSurfaceVariant),
@@ -558,7 +661,11 @@ fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.Keystor
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Connect to PB HERO Dashboard", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = PbCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("1-Tap Dashboard QR Pairing", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
@@ -573,58 +680,122 @@ fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.Keystor
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text("Enter the 6-digit pairing code displayed on your PB HERO Dashboard (valid for 5 minutes).", color = PbTextSecondary, fontSize = 11.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("Dashboard / Cloud Server URL", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = urlInput,
-                        onValueChange = {
-                            urlInput = it
-                            keystore.serverUrl = it
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text("6-Digit Pairing Code", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = pairingCodeInput,
-                        onValueChange = { if (it.length <= 6) pairingCodeInput = it },
-                        placeholder = { Text("e.g. 716950", color = PbTextSecondary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                    Text(
+                        "No manual Cloud Secret Key or URL typing required! Tap below to scan the Pairing QR code on your PB HERO Dashboard. Encryption keys are generated and saved securely in your phone's Keystore.",
+                        color = PbTextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
-                        onClick = {
-                            if (pairingCodeInput.trim().length != 6) {
-                                Toast.makeText(context, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            scope.launch {
-                                isPairing = true
-                                val res = WebhookClient(keystore).pairWithCode(urlInput, pairingCodeInput)
-                                isPairing = false
-                                if (res.isSuccess) {
-                                    isPairedState = true
-                                    pairingCodeInput = ""
-                                    Toast.makeText(context, "Device Paired Successfully!", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(context, "Pairing Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
+                        onClick = { launchQrScanner() },
                         enabled = !isPairing,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = PbCyan)
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PbCyan),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text(if (isPairing) "Pairing..." else "Pair Device with PB HERO", color = PbBackground, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = PbBackground)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            if (isPairing) "Pairing in progress..." else "SCAN DASHBOARD QR CODE",
+                            color = PbBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    if (isPairedState) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = PbSuccess, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Paired to: ${keystore.serverUrl}", color = PbSuccess, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 2: Manual 6-Digit Pairing Fallback
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PbSurface),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbBorder))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showManualMode = !showManualMode },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Keyboard, contentDescription = null, tint = PbTextSecondary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Manual Pairing Fallback", color = PbTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        }
+                        Icon(
+                            if (showManualMode) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = PbTextSecondary
+                        )
+                    }
+
+                    if (showManualMode) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Dashboard / Cloud Server URL", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = {
+                                urlInput = it
+                                keystore.serverUrl = it
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("6-Digit Pairing Code", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = pairingCodeInput,
+                            onValueChange = { if (it.length <= 6) pairingCodeInput = it },
+                            placeholder = { Text("e.g. 716950", color = PbTextSecondary) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = {
+                                if (pairingCodeInput.trim().length != 6) {
+                                    Toast.makeText(context, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                scope.launch {
+                                    isPairing = true
+                                    val res = WebhookClient(keystore).pairWithCode(urlInput, pairingCodeInput)
+                                    isPairing = false
+                                    if (res.isSuccess) {
+                                        isPairedState = true
+                                        pairingCodeInput = ""
+                                        Toast.makeText(context, "Device Paired Successfully!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Pairing Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            enabled = !isPairing,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = PbSurfaceVariant)
+                        ) {
+                            Text(if (isPairing) "Pairing..." else "Pair with 6-Digit Code", color = PbCyan, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

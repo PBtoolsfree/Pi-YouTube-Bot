@@ -46,3 +46,4 @@ export function getAdminAuth() {
 export function hasAdminAuth() {
     return !!getAdminAuth()
 }
+

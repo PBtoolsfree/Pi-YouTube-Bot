@@ -1875,47 +1875,53 @@ async def receive_donation(payload: DonationRequest):
 
 @app.get("/api/donations")
 async def get_donations_route(limit: int = 100):
-    return bot.get_donation_history(limit=limit)
+    legacy = bot.get_donation_history(limit=limit)
+    return await donation_manager.get_unified_history(limit=limit, legacy_history=legacy)
 
 @app.delete("/api/donations")
 async def clear_donations_route():
-    success = bot.clear_donation_history()
-    if success:
-        bot.processed_transactions.clear() # Clear deduplication cache to allow old tips again
+    bot.clear_donation_history()
+    await donation_manager.clear_all_history()
+    bot.processed_transactions.clear() # Clear deduplication cache to allow old tips again
 
-        # Broadcast to Pi Clients
-        is_cloud = (os.environ.get("RUN_MODE") != "local")
-        if is_cloud and getattr(bot, "pi_clients", None):
-            await bot.pi_clients.broadcast({
-                "type": "sync_action",
-                "action": "clear_history"
-            })
+    # Broadcast to Pi Clients
+    is_cloud = (os.environ.get("RUN_MODE") != "local")
+    if is_cloud and getattr(bot, "pi_clients", None):
+        await bot.pi_clients.broadcast({
+            "type": "sync_action",
+            "action": "clear_history"
+        })
 
-        return {"status": "success", "message": "History cleared"}
-    raise HTTPException(500, "Failed to clear history")
+    return {"status": "success", "message": "History cleared"}
 
 class DeleteDonationRequest(BaseModel):
-    timestamp: str
-    user: str
-    amount: float
+    id: Optional[str] = None
+    timestamp: Optional[str] = None
+    user: Optional[str] = None
+    amount: Optional[float] = None
 
 @app.delete("/api/donations/item")
 async def delete_donation_item_route(payload: DeleteDonationRequest):
-    success = bot.delete_donation_history_item(payload.timestamp, payload.user, payload.amount)
-    if success:
+    b_ok = False
+    if payload.timestamp and payload.user and payload.amount is not None:
+        b_ok = bot.delete_donation_history_item(payload.timestamp, payload.user, payload.amount)
+    dm_ok = await donation_manager.delete_history_item(payload.id, payload.timestamp, payload.user, payload.amount)
+
+    if b_ok or dm_ok:
         # Broadcast to Pi Clients
         is_cloud = (os.environ.get("RUN_MODE") != "local")
         if is_cloud and getattr(bot, "pi_clients", None):
             await bot.pi_clients.broadcast({
                 "type": "sync_action",
                 "action": "delete_history_item",
+                "id": payload.id,
                 "timestamp": payload.timestamp,
                 "user": payload.user,
                 "amount": payload.amount
             })
 
         return {"status": "success", "message": "Item deleted"}
-    raise HTTPException(404, "Item not found or failed to delete")
+    return {"status": "success", "message": "Item processed"}
 
 @app.post("/api/test/alert")
 async def simulate_alert(payload: Dict[str, Any]):
