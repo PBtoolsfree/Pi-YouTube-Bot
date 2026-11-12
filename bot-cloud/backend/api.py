@@ -2142,14 +2142,50 @@ async def get_donation_dashboard():
 
 @app.post("/api/donation/manual-approve/{donation_id}")
 async def manual_approve_donation(donation_id: str):
+    import uuid
+    import time
+    target_id = donation_id
     async with donation_manager.lock:
         donation = donation_manager.verified_donations.get(donation_id)
         if not donation:
-            raise HTTPException(status_code=404, detail="Donation not found")
-        donation["status"] = DonationState.VERIFIED
+            # Check if this is a pending notification ID
+            if donation_id in donation_manager.notifications:
+                notif = donation_manager.notifications[donation_id]
+                target_id = f"PBH-DONATION-{int(time.time())}-{uuid.uuid4().hex[:6].upper()}"
+                donation = {
+                    "donation_id": target_id,
+                    "amount": float(notif.get("amount", 0.0)),
+                    "donor_name": notif.get("payer_name") or "Supporter",
+                    "message": notif.get("text", "PB HERO Donation"),
+                    "status": DonationState.VERIFIED,
+                    "timestamp": time.time(),
+                    "notification_event_id": donation_id,
+                    "verification_source": "MANUAL_ADMIN_OVERRIDE"
+                }
+                donation_manager.verified_donations[target_id] = donation
+                notif["matched_donation_id"] = target_id
+            elif donation_id in donation_manager.emails:
+                em = donation_manager.emails[donation_id]
+                target_id = f"PBH-DONATION-{int(time.time())}-{uuid.uuid4().hex[:6].upper()}"
+                donation = {
+                    "donation_id": target_id,
+                    "amount": float(em.get("amount", 0.0)),
+                    "donor_name": em.get("payer_name") or "Supporter",
+                    "message": "Payment verified via email",
+                    "status": DonationState.VERIFIED,
+                    "timestamp": time.time(),
+                    "email_msg_id": donation_id,
+                    "verification_source": "MANUAL_ADMIN_OVERRIDE"
+                }
+                donation_manager.verified_donations[target_id] = donation
+                em["matched_donation_id"] = target_id
+            else:
+                raise HTTPException(status_code=404, detail="Donation, notification, or email record not found")
+        else:
+            donation["status"] = DonationState.VERIFIED
         donation_manager._save()
-    asyncio.create_task(donation_manager.dispatch_announcements(donation_id))
-    return {"status": "approved", "donation_id": donation_id}
+    asyncio.create_task(donation_manager.dispatch_announcements(target_id))
+    return {"status": "approved", "donation_id": target_id}
 
 
 @app.post("/api/webhook/{provider}")
