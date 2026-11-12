@@ -1342,6 +1342,29 @@ async def payment_webhook(provider: str, payload: dict):
             print(f">>> [Webhook/{provider}] CRASH: {err_msg}")
             return {"status": "error", "reason": f"Internal Server Error: {str(e)}"}
 
+    # ── YOUPI PG Webhook ──────────────────────────────────────────────────
+    if provider in ["youpi", "youpi-pg"]:
+        event = str(payload.get("event") or request.headers.get("x-gateway-event") or "").strip().upper()
+        order_id = payload.get("orderId") or payload.get("paymentId") or "Unknown"
+
+        # STRICT: Only process verified / successful transactions!
+        # Ignore CANCELLED, FAILED, EXPIRED, BLOCKED, etc.
+        if event not in ["SUCCESS", "OBSERVED_SUCCESS", "RECONCILED"]:
+            logger.warning(">>> [Webhook/youpi] Received non-success payment event '%s' for order %s. Alert skipped.", event, order_id)
+            webhook_logger.log("youpi", f"Ignored ({event})", f"Payment {event} for order {order_id}", payload)
+            return {"status": "ignored", "event": event, "reason": f"Payment is not confirmed (status: {event})"}
+
+        meta = payload.get("metadata") or {}
+        customer = payload.get("customer") or {}
+        sender = meta.get("sender") or meta.get("name") or customer.get("name") or payload.get("sender") or "Anonymous"
+        amount = float(payload.get("amount") or (payload.get("amountPaise", 0) / 100))
+        message = meta.get("message") or f"Donation via UPI"
+        utr = payload.get("utr") or ""
+        logger.info(">>> [Webhook/youpi] Verified Payment Alert: %s paid ₹%s (UTR: %s, msg: %s)", sender, amount, utr, message)
+        webhook_logger.log("youpi", "Success", f"{sender} paid ₹{amount} (UTR: {utr})", payload)
+        await bot.trigger_donation_alert(sender, amount, message, skip_verification=True)
+        return {"status": "success", "provider": "youpi", "amount": amount, "sender": sender, "utr": utr}
+
     # ── Generic / other providers ──────────────────────────────────────────
     amount  = float(payload.get("amount", 0))
     sender  = payload.get("sender", "Unknown")
@@ -1376,6 +1399,62 @@ async def test_app_webhook(payload: Optional[Dict[str, Any]] = None):
     webhook_logger.log("app", "Test", f"Test alert: {sender} ₹{amount}")
     asyncio.create_task(bot.trigger_app_alert(sender, amount, do_tts=do_tts))
     return {"status": "success", "message": f"Test alert fired: {sender} ₹{amount}"}
+
+
+# --- YOUPI PG ENDPOINTS ---
+class YoupiInitiateRequest(BaseModel):
+    amount: float
+    user: str
+    message: Optional[str] = ""
+
+@app.post("/api/payment/youpi/initiate")
+async def initiate_youpi_payment(payload: YoupiInitiateRequest, request: Request):
+    import random
+    import time
+    try:
+        cfg = _get_config().get("tip_page", {}).get("gateway", {})
+        merchant_id = cfg.get("param_1") or "00000000-0000-0000-0000-000000000001"
+        merchant_key = cfg.get("param_2") or "mk_live_42aba9fa9a5221bfeae2f27b87468bc3a8c527aca6dec5ff"
+        
+        api_host = "https://pay-api.pbherotip.qzz.io"
+        order_id = f"TIP-{int(time.time()*1000)}-{random.randint(100, 999)}"
+        amount_str = f"{payload.amount:.2f}"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                f"{api_host}/api/v1/payments",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Merchant-Id": merchant_id,
+                    "X-Merchant-Key": merchant_key
+                },
+                json={
+                    "orderId": order_id,
+                    "amount": amount_str,
+                    "currency": "INR",
+                    "customer": {"name": payload.user or "Anonymous"},
+                    "metadata": {
+                        "sender": payload.user or "Anonymous",
+                        "message": payload.message or "Support"
+                    }
+                }
+            )
+            if res.status_code not in (200, 201):
+                logger.error("YOUPI init error [%d]: %s", res.status_code, res.text)
+                raise HTTPException(res.status_code, f"Gateway error: {res.text}")
+            
+            data = res.json()
+            return {
+                "success": True,
+                "orderId": data.get("orderId", order_id),
+                "paymentId": data.get("paymentId"),
+                "checkoutUrl": data.get("checkoutUrl")
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("YOUPI initiation exception")
+        raise HTTPException(500, str(exc))
 
 
 # --- PHONEPE ENDPOINTS ---

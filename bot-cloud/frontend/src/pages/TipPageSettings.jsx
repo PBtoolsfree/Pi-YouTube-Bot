@@ -458,6 +458,7 @@ export default function TipPageSettings() {
                                             gateway: { ...localTipConfig.gateway, provider: e.target.value }
                                         })}
                                     >
+                                        <option value="youpi">YOUPI PG (Sovereign Direct UPI)</option>
                                         <option value="phonepe">PhonePe</option>
                                         <option value="razorpay">Razorpay</option>
                                         <option value="stripe">Stripe</option>
@@ -486,6 +487,37 @@ export default function TipPageSettings() {
                                                     value={localTipConfig.gateway?.key_secret || ''}
                                                     onChange={(e) => setLocalTipConfig({ ...localTipConfig, gateway: { ...localTipConfig.gateway, key_secret: e.target.value } })}
                                                 />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* YOUPI PG */}
+                                    {localTipConfig.gateway?.provider === 'youpi' && (
+                                        <>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Merchant ID / Publishable Key</label>
+                                                <input type="text" className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                                                    placeholder="00000000-0000-0000-0000-000000000001"
+                                                    value={localTipConfig.gateway?.param_1 || ''}
+                                                    onChange={(e) => setLocalTipConfig({ ...localTipConfig, gateway: { ...localTipConfig.gateway, param_1: e.target.value } })}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Webhook HMAC Secret</label>
+                                                <input type="password" className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                                                    placeholder="Enter Webhook Secret"
+                                                    value={localTipConfig.gateway?.param_2 || ''}
+                                                    onChange={(e) => setLocalTipConfig({ ...localTipConfig, gateway: { ...localTipConfig.gateway, param_2: e.target.value } })}
+                                                />
+                                            </div>
+                                            <div className="space-y-2 md:col-span-2">
+                                                <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">YOUPI Checkout Host URL</label>
+                                                <input type="text" className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                                                    placeholder="https://pay.pbherotip.qzz.io"
+                                                    value={localTipConfig.gateway?.param_3 || ''}
+                                                    onChange={(e) => setLocalTipConfig({ ...localTipConfig, gateway: { ...localTipConfig.gateway, param_3: e.target.value } })}
+                                                />
+                                                <p className="text-xs text-zinc-500">Public URL where your YOUPI PG checkout portal is hosted.</p>
                                             </div>
                                         </>
                                     )}

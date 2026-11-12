@@ -235,6 +235,71 @@ export default function TipPage() {
                         window.location.href = res.data.redirectUrl
                     }
                 }
+                else if (provider === 'other' || provider === 'youpi') {
+                    // YOUPI PG Universal In-Page Checkout Modal
+                    const gatewayCfg = config.tip_page?.gateway || {}
+                    const checkoutHost = (gatewayCfg.param_3 || 'https://pay.pbherotip.qzz.io').replace(/\/+$/, '')
+                    const merchantKey = gatewayCfg.param_1 || '00000000-0000-0000-0000-000000000001'
+
+                    try {
+                        // 1. Create trusted payment session via Pi Bot backend
+                        const initRes = await axios.post(`${apiBase}/api/payment/youpi/initiate`, {
+                            amount: parseFloat(amount),
+                            user: name || "Anonymous",
+                            message: message || ""
+                        })
+
+                        const { checkoutUrl, paymentId, orderId } = initRes.data || {}
+                        if (!checkoutUrl) {
+                            throw new Error('No checkoutUrl returned from payment gateway')
+                        }
+
+                        // 2. Load youpi.js SDK
+                        const loadScript = (src) => new Promise((resolve, reject) => {
+                            if (window.Youpi) return resolve(window.Youpi)
+                            const existing = document.querySelector(`script[src="${src}"]`)
+                            if (existing) {
+                                if (window.Youpi) return resolve(window.Youpi)
+                                existing.addEventListener('load', () => resolve(window.Youpi))
+                                existing.addEventListener('error', reject)
+                                return
+                            }
+                            const s = document.createElement('script')
+                            s.src = src
+                            s.setAttribute('data-merchant-id', merchantKey)
+                            s.onload = () => resolve(window.Youpi)
+                            s.onerror = reject
+                            document.head.appendChild(s)
+                        })
+
+                        const Youpi = await loadScript(`${checkoutHost}/youpi.js`)
+                        if (!Youpi || typeof Youpi.pay !== 'function') {
+                            throw new Error('YOUPI PG script loaded without Youpi.pay')
+                        }
+
+                        // 3. Open responsive iframe modal with trusted checkoutUrl
+                        await Youpi.pay({
+                            checkoutUrl,
+                            paymentId,
+                            orderId,
+                            handler: function(response) {
+                                console.log('[YOUPI] Modal payment confirmed:', response)
+                                setLoading(false)
+                                setStep(3)
+                            },
+                            onClose: function() {
+                                setLoading(false)
+                            }
+                        })
+                        setLoading(false)
+                        return
+                    } catch (err) {
+                        console.error('YOUPI PG launch error:', err)
+                        alert('Could not open payment gateway: ' + (err.response?.data?.detail || err.message || 'Unknown error'))
+                        setLoading(false)
+                        return
+                    }
+                }
                 else {
                     alert("Selected Gateway not yet supported for auto-redirect.")
                     setStep(2) // Fallback to manual? 
