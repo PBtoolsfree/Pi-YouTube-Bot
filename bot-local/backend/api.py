@@ -246,7 +246,8 @@ class TunnelSecurityASGIMiddleware:
                 or path.startswith("/api/donate")
                 or path == "/api/config"
                 or path in ["/favicon.ico", "/manifest.json", "/api/health", "/tip", "/tip/",
-                            "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client"]
+                            "/logo.jpg", "/Background.jpg", "/vite.svg", "/ws/pi-client",
+                            "/PB-HERO-Notification-Bridge.apk", "/api/apk/info"]
             ):
                 return await self.app(scope, receive, send)
 
