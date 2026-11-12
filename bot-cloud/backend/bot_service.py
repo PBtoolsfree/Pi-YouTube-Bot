@@ -3926,7 +3926,7 @@ class BotService:
                 history = json.load(f)
             updated = False
             for entry in history:
-                if entry.get("transaction_id") == transaction_id and not entry.get("played", True):
+                if isinstance(entry, dict) and entry.get("transaction_id") == transaction_id and not entry.get("played", True):
                     entry["played"] = True
                     updated = True
             if updated:

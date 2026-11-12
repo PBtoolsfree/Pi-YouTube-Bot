@@ -98,7 +98,7 @@ class DonationManager:
     # 1. TIP PAGE INTENT MANAGEMENT
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def create_intent(self, amount: float, donor_name: str, message: str = "") -> Dict[str, Any]:
+    async def create_intent(self, amount: float, donor_name: str, message: str = "", is_test: bool = False) -> Dict[str, Any]:
         """
         Creates a Donation Intent when a viewer clicks Next on the Tip Page.
         """
@@ -111,11 +111,12 @@ class DonationManager:
                 "message": message.strip(),
                 "created_at": time.time(),
                 "status": DonationState.WAITING_FOR_PAYMENT,
-                "matched_donation_id": None
+                "matched_donation_id": None,
+                "is_test": is_test
             }
             self.intents[intent_id] = intent
             self._save()
-            logger.info(f"[DonationManager] Created Intent {intent_id} for ₹{amount} from {donor_name}")
+            logger.info(f"[DonationManager] Created Intent {intent_id} for ₹{amount} from {donor_name} (is_test={is_test})")
             return intent
 
     async def get_intent_status(self, intent_id: str) -> Optional[Dict[str, Any]]:

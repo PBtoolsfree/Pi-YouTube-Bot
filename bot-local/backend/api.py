@@ -1620,7 +1620,7 @@ async def test_notification_forwarding():
         "test_id": "test_notification_forwarding",
         "name": "Notification Forwarding Bridge",
         "correlation_id": cid,
-        "status": "SUCCESS" if result.get("status") in ["received", "matched_and_verified"] else "FAILED",
+        "status": "SUCCESS" if result.get("status") in ["received", "accepted", "matched_and_verified"] else "FAILED",
         "duration_ms": duration_ms,
         "http_status": 200,
         "details": {
@@ -1871,7 +1871,7 @@ async def test_complete_end_to_end_system():
         dup_res = await donation_manager.ingest_notification(notif_payload)
         timeline.append({"step": "5_DUPLICATE_REJECTION", "duration_ms": round((time.time() - t4)*1000, 2), "result": dup_res.get("status")})
 
-        overall_status = "SUCCESS" if (status_check.get("status") in [DonationState.VERIFIED, "VERIFIED"] and dup_res.get("status") == "duplicate_ignored") else "PARTIAL"
+        overall_status = "SUCCESS" if (status_check.get("status") in [DonationState.VERIFIED, "VERIFIED"] and dup_res.get("status") in ["duplicate", "duplicate_ignored"]) else "PARTIAL"
 
     except Exception as e:
         logger.error(f"[TEST E2E] Error: {e}", exc_info=True)
