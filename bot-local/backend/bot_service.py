@@ -767,7 +767,8 @@ class BotService:
             "streamer_bot": {"status": sb_status, "meta": sb_meta},
             "youtube": {"status": yt_status, "meta": yt_meta},
             "audio": {"status": audio_status, "meta": "TTS Ready"},
-            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"}
+            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"},
+            "local_link": {"status": "Active", "meta": "Local Bot Host"}
         }
 
     async def send_test_chat(self):

@@ -526,67 +526,154 @@ fun HistoryScreen(events: List<PaymentEventEntity>, onRefresh: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCREEN 3: SETTINGS
+// SCREEN 3: SETTINGS & PAIRING
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun SettingsScreen(keystore: com.pbhero.notificationbridge.data.security.KeystoreManager) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var urlInput by remember { mutableStateOf(keystore.serverUrl) }
-    var registering by remember { mutableStateOf(false) }
+    var pairingCodeInput by remember { mutableStateOf("") }
+    var isPairing by remember { mutableStateOf(false) }
+    var isHeartbeating by remember { mutableStateOf(false) }
+    var isPairedState by remember { mutableStateOf(keystore.isPaired) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("SETTINGS & SECURITY", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        item {
+            Text("SETTINGS & SECURITY PAIRING", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = PbSurface),
-            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbBorder))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Cloud Server API Base URL", color = PbTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = urlInput,
-                    onValueChange = {
-                        urlInput = it
-                        keystore.serverUrl = it
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Example: https://pbhero.qzz.io or http://192.168.1.100:8000", color = PbTextSecondary, fontSize = 10.sp)
+        // Section: Pair Device With Dashboard
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PbSurfaceVariant),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(if (isPairedState) PbSuccess else PbCyan))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Connect to PB HERO Dashboard", color = PbCyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isPairedState) PbSuccess.copy(alpha = 0.2f) else PbWarning.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                if (isPairedState) "PAIRED & ACTIVE" else "NOT PAIRED",
+                                color = if (isPairedState) PbSuccess else PbWarning,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Enter the 6-digit pairing code displayed on your PB HERO Dashboard (valid for 5 minutes).", color = PbTextSecondary, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Dashboard / Cloud Server URL", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = urlInput,
+                        onValueChange = {
+                            urlInput = it
+                            keystore.serverUrl = it
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("6-Digit Pairing Code", color = PbTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = pairingCodeInput,
+                        onValueChange = { if (it.length <= 6) pairingCodeInput = it },
+                        placeholder = { Text("e.g. 716950", color = PbTextSecondary) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            if (pairingCodeInput.trim().length != 6) {
+                                Toast.makeText(context, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            scope.launch {
+                                isPairing = true
+                                val res = WebhookClient(keystore).pairWithCode(urlInput, pairingCodeInput)
+                                isPairing = false
+                                if (res.isSuccess) {
+                                    isPairedState = true
+                                    pairingCodeInput = ""
+                                    Toast.makeText(context, "Device Paired Successfully!", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Pairing Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        enabled = !isPairing,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PbCyan)
+                    ) {
+                        Text(if (isPairing) "Pairing..." else "Pair Device with PB HERO", color = PbBackground, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = PbSurface),
-            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbBorder))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Device Provisioning", color = PbTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                StatusRow("Device ID", keystore.deviceId)
-                StatusRow("HMAC Key", keystore.secretKey.take(8) + "...")
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        scope.launch {
-                            registering = true
-                            val res = WebhookClient(keystore).registerDevice()
-                            registering = false
-                            val msg = if (res.isSuccess) "Registered with Cloud Server!" else "Registration failed: ${res.exceptionOrNull()?.message}"
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        // Section: Device Provisioning Details & Diagnostic Buttons
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PbSurface),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PbBorder))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Device Credentials & Heartbeat", color = PbTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    StatusRow("Device ID", keystore.deviceId)
+                    StatusRow("App Version", "1.0.1")
+                    StatusRow("HMAC Key", keystore.secretKey.take(8) + "...")
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    isHeartbeating = true
+                                    val res = WebhookClient(keystore).sendHeartbeat()
+                                    isHeartbeating = false
+                                    Toast.makeText(context, if (res.isSuccess) "Heartbeat Successful!" else "Heartbeat Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = !isHeartbeating,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PbSurfaceVariant)
+                        ) {
+                            Text(if (isHeartbeating) "Sending..." else "Send Heartbeat", color = PbCyan, fontSize = 11.sp)
                         }
-                    },
-                    enabled = !registering,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PbCyan)
-                ) {
-                    Text(if (registering) "Registering..." else "Register Device with Cloud", color = PbBackground, fontWeight = FontWeight.Bold)
+
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    val res = WebhookClient(keystore).testConnection()
+                                    Toast.makeText(context, if (res.isSuccess) "Connected to server!" else "Connection failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PbSurfaceVariant)
+                        ) {
+                            Text("Test Health", color = PbCyan, fontSize = 11.sp)
+                        }
+                    }
                 }
             }
         }

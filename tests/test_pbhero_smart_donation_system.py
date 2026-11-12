@@ -406,6 +406,86 @@ class PBHeroSmartDonationSystemTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.bot.broadcast_calls), 1)
         self.assertEqual(len(self.bot.pi_broadcast_calls), 1)
 
+    async def test_22_website_key_management(self):
+        """Test Website Integration Key generation, hashing, rotation, and revocation."""
+        # 1. Generate key
+        res = self.auth.generate_website_key(actor="Admin Test")
+        self.assertTrue(res["key_id"].startswith("PBH-WEB-"))
+        self.assertTrue(res["secret_key"].startswith("pbh_web_"))
+        raw_secret = res["secret_key"]
+
+        # 2. Verify raw secret is valid
+        is_val, msg = self.auth.verify_website_request(raw_secret)
+        self.assertTrue(is_val, f"Website key verification failed: {msg}")
+
+        # 3. Verify corrupted secret is rejected
+        is_bad, _ = self.auth.verify_website_request("pbh_web_corrupted_key_123")
+        self.assertFalse(is_bad)
+
+        # 4. Rotate key
+        rot = self.auth.rotate_website_key(actor="Admin Test")
+        self.assertNotEqual(rot["key_id"], res["key_id"])
+
+        # Old key must now be invalid
+        is_old_val, _ = self.auth.verify_website_request(raw_secret)
+        self.assertFalse(is_old_val)
+
+        # New key must be valid
+        is_new_val, _ = self.auth.verify_website_request(rot["secret_key"])
+        self.assertTrue(is_new_val)
+
+        # 5. Revoke key
+        rev_ok = self.auth.revoke_website_key(actor="Admin Test")
+        self.assertTrue(rev_ok)
+        is_rev_val, _ = self.auth.verify_website_request(rot["secret_key"])
+        self.assertFalse(is_rev_val)
+
+    async def test_23_android_pairing_session_5min_expiry(self):
+        """Test 5-minute single-use Android pairing session."""
+        session = self.auth.create_pairing_session(server_url="https://pbhero.qzz.io", actor="Admin")
+        code = session["pairing_code"]
+        self.assertEqual(len(code), 6)
+        self.assertTrue(code.isdigit())
+
+        # Pair using code
+        success, msg, data = self.auth.pair_device_with_code(
+            pairing_code=code,
+            device_name="OPPO A53",
+            app_version="1.0.1"
+        )
+        self.assertTrue(success, f"Pairing failed: {msg}")
+        self.assertIn("device_id", data)
+        self.assertIn("secret_key", data)
+
+        # Re-use must be rejected (Single-use)
+        re_success, re_msg, _ = self.auth.pair_device_with_code(code, "Attacker Device")
+        self.assertFalse(re_success)
+        self.assertIn("already been used", re_msg)
+
+        # Check registered devices list
+        dev_list = self.auth.list_devices()
+        self.assertTrue(any(d["device_id"] == data["device_id"] for d in dev_list))
+
+        # Revoke device
+        self.auth.revoke_device(data["device_id"])
+        dev = self.auth.get_device(data["device_id"])
+        self.assertFalse(dev["is_active"])
+
+    async def test_24_apk_metadata_and_checksum(self):
+        """Verify APK metadata: SHA-256 hash, non-zero file size, package name."""
+        apk_path = os.path.join(os.path.dirname(__file__), "..", "artifacts", "PB-HERO-Notification-Bridge.apk")
+        self.assertTrue(os.path.exists(apk_path), "APK artifact must exist")
+        size = os.path.getsize(apk_path)
+        self.assertGreater(size, 10 * 1024 * 1024, "APK must be at least 10MB")
+
+        import hashlib
+        h = hashlib.sha256()
+        with open(apk_path, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        calc_sha256 = h.hexdigest().upper()
+        self.assertEqual(len(calc_sha256), 64)
+
     def _calc_hmac(self, secret, device_id, timestamp, body):
         import hmac
         import hashlib

@@ -1109,38 +1109,49 @@ class BotService:
         sb_status = "Disconnected"
         sb_meta = "WebSocket Closed"
 
-        # Check if SB WS exists
+        # Check if direct SB WS exists
         if self.is_sb_connected:
-                sb_status = "Connected"
-                remote = "Unknown"
-                try:
-                    remote = self.sb_ws.remote_address[0]
-                except: pass
+            sb_status = "Connected"
+            remote = "Unknown"
+            try:
+                remote = self.sb_ws.remote_address[0]
+            except: pass
 
-                sb_meta = f"Host: {remote}"
-                # Verify send capability
-                try:
-                    await self.sb_ws.send(json.dumps({"request": "GetInfo", "id": "TestPing"}))
-                except Exception as e:
-                    sb_status = "Degraded"
-                    sb_meta = f"Connected but send failed: {e}"
+            sb_meta = f"Host: {remote}"
+            # Verify send capability
+            try:
+                await self.sb_ws.send(json.dumps({"request": "GetInfo", "id": "TestPing"}))
+            except Exception as e:
+                sb_status = "Degraded"
+                sb_meta = f"Connected but send failed: {e}"
+        elif getattr(self, "remote_sb_connected", False):
+            sb_status = "Connected"
+            sb_meta = "Connected via Local Bot Client"
+
         # 2. YouTube Chat
         yt_status = "Offline"
         yt_meta = "Streamer.bot disconnected"
         if self.is_sb_connected:
             yt_status = "Monitoring"
             yt_meta = "Via Streamer.bot WS"
+        elif getattr(self, "remote_sb_connected", False):
+            yt_status = "Monitoring"
+            yt_meta = "Via Local Bot WS"
 
         # 3. Audio Engine
         audio_status = "Inactive"
         if self.audio:
             audio_status = "Active"
 
+        # 4. Local Bot Link (when running on Cloud)
+        link_status = "Connected" if getattr(self, "remote_sb_connected", False) else "Standby"
+
         return {
             "streamer_bot": {"status": sb_status, "meta": sb_meta},
             "youtube": {"status": yt_status, "meta": yt_meta},
             "audio": {"status": audio_status, "meta": "TTS Ready"},
-            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"}
+            "viewers": {"status": "Tracking", "meta": f"{len(self.viewers.viewers)} stored"},
+            "local_link": {"status": link_status, "meta": "Pi WebSocket Gateway"}
         }
 
     async def send_test_chat(self):

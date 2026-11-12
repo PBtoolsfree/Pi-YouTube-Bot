@@ -101,9 +101,84 @@ class WebhookClient(private val keystore: KeystoreManager) {
         }
     }
 
+    suspend fun pairWithCode(serverUrl: String, pairingCode: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val cleanUrl = serverUrl.trim().removeSuffix("/")
+            val url = "$cleanUrl/api/bridge/pair"
+            val payload = JSONObject().apply {
+                put("pairing_code", pairingCode.trim())
+                put("device_name", "${Build.MANUFACTURER} ${Build.MODEL}")
+                put("device_model", Build.MODEL)
+                put("os_version", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                put("app_version", "1.0.1")
+                put("device_id", keystore.deviceId)
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .post(payload.toString().toRequestBody(JSON_MEDIA))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val json = JSONObject(bodyStr)
+                    val secret = json.optString("secret_key")
+                    val devId = json.optString("device_id")
+                    if (secret.isNotEmpty()) {
+                        keystore.serverUrl = cleanUrl
+                        keystore.secretKey = secret
+                        if (devId.isNotEmpty()) {
+                            keystore.deviceId = devId
+                        }
+                        keystore.isPaired = true
+                        keystore.pairedAt = System.currentTimeMillis()
+                        Result.success("Connected & Paired with PB HERO Server!")
+                    } else {
+                        Result.failure(Exception("Server did not return a device secret key."))
+                    }
+                } else {
+                    val errMsg = try {
+                        JSONObject(bodyStr).optString("detail", bodyStr)
+                    } catch (e: Exception) { bodyStr }
+                    Result.failure(Exception("Pairing failed (HTTP ${response.code}): $errMsg"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendHeartbeat(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "${keystore.serverUrl}/api/bridge/heartbeat"
+            val payload = JSONObject().apply {
+                put("device_id", keystore.deviceId)
+                put("battery_level", 100)
+                put("app_version", "1.0.1")
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .post(payload.toString().toRequestBody(JSON_MEDIA))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    Result.success("Heartbeat active (200 OK)")
+                } else {
+                    Result.failure(Exception("Heartbeat HTTP ${response.code}: $bodyStr"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun testConnection(): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val url = "${keystore.serverUrl}/api/config"
+            val url = "${keystore.serverUrl}/api/health"
             val request = Request.Builder().url(url).get().build()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {

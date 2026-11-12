@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
+import './lib/apiAuth'
 import App from './App.jsx'
 
 class ErrorBoundary extends React.Component {

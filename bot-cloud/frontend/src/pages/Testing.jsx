@@ -1,22 +1,160 @@
 import React, { useState } from 'react'
 import axios from 'axios'
-import { Beaker, MessageSquare, Mic, Send, Trash2, CheckCircle, XCircle, Activity, ShieldCheck, Zap } from 'lucide-react'
+import {
+    Beaker, MessageSquare, Mic, Send, Trash2, CheckCircle, XCircle,
+    Activity, ShieldCheck, Zap, Key, Smartphone, Radio, Mail,
+    Layers, Volume2, Play, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Shield
+} from 'lucide-react'
 import { Card, CardHeader, CardContent, CardTitle, Input, Button, Label } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
 
+const TEST_DEFINITIONS = [
+    {
+        id: 'website-key',
+        endpoint: '/api/test/website-key',
+        title: '1. Website Key Verification',
+        category: 'SECURITY',
+        description: 'Validates SHA-256 verifier, reject on invalid key, and RBAC isolation from Android devices.',
+        icon: Key
+    },
+    {
+        id: 'android-device',
+        endpoint: '/api/test/android-device',
+        title: '2. Android Device Authentication',
+        category: 'SECURITY',
+        description: 'Tests HMAC-SHA256 signature verification, 5-minute replay-attack blocking, and timestamp skew.',
+        icon: Smartphone
+    },
+    {
+        id: 'notification-forwarding',
+        endpoint: '/api/test/notification-forwarding',
+        title: '3. Notification Forwarding Bridge',
+        category: 'BRIDGE',
+        description: 'Simulates Paytm Business notification ingestion, parsing ₹ amount, payer name, and store in manager.',
+        icon: Radio
+    },
+    {
+        id: 'email-observer',
+        endpoint: '/api/test/email-observer',
+        title: '4. Email Observer Polling',
+        category: 'EMAIL',
+        description: 'Tests email regex parsing on standard Paytm payment emails and inspects IMAP observer state.',
+        icon: Mail
+    },
+    {
+        id: 'donation-matching',
+        endpoint: '/api/test/donation-matching',
+        title: '5. Donation Matching & Verification',
+        category: 'MANAGER',
+        description: 'Creates intent, simulates incoming notification, and asserts deterministic match to VERIFIED state.',
+        icon: Layers
+    },
+    {
+        id: 'cloud-overlay',
+        endpoint: '/api/test/cloud-overlay',
+        title: '6. Cloud OBS Overlay Sync',
+        category: 'OVERLAY',
+        description: 'Broadcasts a simulated alert over /ws/overlay and confirms delivery to connected browser displays.',
+        icon: Activity
+    },
+    {
+        id: 'local-tts',
+        endpoint: '/api/test/local-tts',
+        title: '7. Local Bot TTS Announcement',
+        category: 'TTS AUDIO',
+        description: 'Verifies text-to-speech audio queuing via Edge-TTS and Pi client WebSocket interconnect.',
+        icon: Volume2
+    },
+    {
+        id: 'complete-system',
+        endpoint: '/api/test/complete-system',
+        title: '8. Complete End-to-End System Test',
+        category: 'FULL SUITE',
+        description: 'Simulates complete lifecycle: Intent → Android Notification → Correlation → Overlay → TTS → Duplicate Rejection.',
+        icon: ShieldCheck
+    }
+]
+
 export default function TestingPage() {
+    // ─── 8-TEST SUITE STATE ─────────────────────────────────────────────────
+    const [testResults, setTestResults] = useState({})
+    const [runningTests, setRunningTests] = useState({})
+    const [expandedDetails, setExpandedDetails] = useState({})
+    const [isRunningAll, setIsRunningAll] = useState(false)
+
+    // ─── LEGACY DIAGNOSTICS & SIMULATOR STATE ───────────────────────────────
+    const [systemStatus, setSystemStatus] = useState(null)
     const [aiPrompt, setAiPrompt] = useState('')
     const [ttsText, setTtsText] = useState('')
     const [responses, setResponses] = useState([])
-    const [loading, setLoading] = useState(false)
-    const [systemStatus, setSystemStatus] = useState(null)
+    const [aiLoading, setAiLoading] = useState(false)
 
+    // ─── RUN SINGLE TEST ────────────────────────────────────────────────────
+    const runTest = async (test) => {
+        setRunningTests(prev => ({ ...prev, [test.id]: true }))
+        const startTime = Date.now()
+
+        try {
+            const res = await axios.post(test.endpoint)
+            const duration = Date.now() - startTime
+            setTestResults(prev => ({
+                ...prev,
+                [test.id]: {
+                    status: res.data?.status || 'SUCCESS',
+                    httpStatus: res.status,
+                    duration_ms: res.data?.duration_ms || duration,
+                    correlation_id: res.data?.correlation_id || 'N/A',
+                    message: res.data?.message || 'Test passed successfully',
+                    details: res.data?.details || res.data,
+                    timestamp: new Date().toLocaleTimeString()
+                }
+            }))
+        } catch (err) {
+            const duration = Date.now() - startTime
+            const httpStatus = err.response?.status || 500
+            const errDetail = err.response?.data?.detail || err.response?.data?.error || err.message
+            setTestResults(prev => ({
+                ...prev,
+                [test.id]: {
+                    status: 'FAILED',
+                    httpStatus: httpStatus,
+                    duration_ms: duration,
+                    correlation_id: 'ERR',
+                    message: `Test Failed (${httpStatus}): ${errDetail}`,
+                    details: err.response?.data || { error: err.message },
+                    timestamp: new Date().toLocaleTimeString()
+                }
+            }))
+        } finally {
+            setRunningTests(prev => ({ ...prev, [test.id]: false }))
+        }
+    }
+
+    // ─── RUN ALL 8 TESTS SEQUENTIALLY ───────────────────────────────────────
+    const runAllTests = async () => {
+        setIsRunningAll(true)
+        for (const test of TEST_DEFINITIONS) {
+            await runTest(test)
+        }
+        setIsRunningAll(false)
+    }
+
+    const toggleExpand = (id) => {
+        setExpandedDetails(prev => ({ ...prev, [id]: !prev[id] }))
+    }
+
+    // Calculate Summary Stats
+    const totalExecuted = Object.keys(testResults).length
+    const passedCount = Object.values(testResults).filter(r => r.status === 'SUCCESS').length
+    const failedCount = Object.values(testResults).filter(r => r.status === 'FAILED').length
+
+    // ─── LEGACY HANDLERS ────────────────────────────────────────────────────
     const handleSystemCheck = async () => {
         try {
             const res = await axios.post('/api/test/system')
             setSystemStatus(res.data)
             setResponses(prev => [
-                { type: 'SYSTEM', text: `Diagnostics Complete: All systems operational.`, time: new Date().toLocaleTimeString() },
+                { type: 'SYSTEM', text: `Diagnostics Complete: Obs, Audio & YouTube inspected.`, time: new Date().toLocaleTimeString() },
                 ...prev
             ])
         } catch (err) {
@@ -45,8 +183,7 @@ export default function TestingPage() {
     const handleAiTest = async (e) => {
         e.preventDefault()
         if (!aiPrompt.trim()) return
-
-        setLoading(true)
+        setAiLoading(true)
         const timestamp = new Date().toLocaleTimeString()
         try {
             const res = await axios.post('/api/chat', { prompt: aiPrompt })
@@ -61,24 +198,20 @@ export default function TestingPage() {
                 ...prev
             ])
         } finally {
-            setLoading(false)
+            setAiLoading(false)
         }
     }
 
     const handleTtsTest = async (channel) => {
         if (!ttsText.trim()) return
-
         try {
-            console.log("TTS Test Start:", channel, ttsText);
             await axios.post('/api/audio/speak', { text: ttsText, channel })
-            console.log("TTS Test Success");
             setResponses(prev => [
                 { type: 'TTS', text: `Sent to ${channel}: "${ttsText}"`, time: new Date().toLocaleTimeString() },
                 ...prev
             ])
             setTtsText('')
         } catch (err) {
-            console.error("TTS Test Error:", err);
             setResponses(prev => [
                 { type: 'ERROR', text: `TTS Error: ${err.message}`, time: new Date().toLocaleTimeString() },
                 ...prev
@@ -88,9 +221,9 @@ export default function TestingPage() {
 
     const triggerAlert = async (type) => {
         try {
-            const res = await axios.post('/api/test/alert', { type, author: "Pi Bot Tester" })
+            await axios.post('/api/test/alert', { type, author: "PB HERO Tester" })
             setResponses(prev => [
-                { type: 'SIMULATION', text: `Simulated ${type} alert triggered.`, time: new Date().toLocaleTimeString() },
+                { type: 'SIMULATION', text: `Simulated ${type} alert triggered on OBS.`, time: new Date().toLocaleTimeString() },
                 ...prev
             ])
         } catch (err) {
@@ -102,300 +235,323 @@ export default function TestingPage() {
     }
 
     return (
-        <div className="space-y-6 pb-10">
+        <div className="space-y-8 pb-12">
             <PageStatusBar services={['bot', 'ai', 'tts', 'youtube', 'streamerBot']} />
-            <div className="flex justify-between items-center px-1">
+
+            {/* ══════════════════════════════════════════════════════════════════
+                MASTER HEADER & SAFE TEST MODE BANNER
+            ══════════════════════════════════════════════════════════════════ */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
                 <div>
-                    <h2 className="text-xl font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
-                        Advanced Testing <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full uppercase font-bold">Debug</span>
+                    <h2 className="text-xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
+                        PB HERO Verification & Security Test Suite
+                        <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2.5 py-0.5 rounded-full uppercase font-bold">
+                            Production Ready
+                        </span>
                     </h2>
-                    <p className="text-sm text-zinc-400">Manually trigger AI responses and text-to-speech engine.</p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                        Executes comprehensive authenticated diagnostic tests across Dual Security Keys, Android Bridge, Manager, OBS, and TTS.
+                    </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-zinc-800 text-zinc-400 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 text-xs"
-                    onClick={() => setResponses([])}
-                >
-                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Clear History
-                </Button>
+
+                <div className="flex items-center gap-3">
+                    <Button
+                        onClick={runAllTests}
+                        disabled={isRunningAll}
+                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs h-9 shadow-md"
+                    >
+                        {isRunningAll ? (
+                            <>
+                                <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> Running All Tests...
+                            </>
+                        ) : (
+                            <>
+                                <Play className="h-3.5 w-3.5 mr-2" /> Run All 8 Tests
+                            </>
+                        )}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setTestResults({}); setResponses([]); }}
+                        className="border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs h-9"
+                    >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Clear
+                    </Button>
+                </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* System Integrity Check */}
-                <Card className="border-emerald-500/10 bg-emerald-500/5 md:col-span-2">
-                    <CardHeader className="pb-3 border-b border-emerald-500/10">
-                        <CardTitle className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">
-                            <ShieldCheck className="h-4 w-4" /> System Integrity Check
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4 space-y-6">
-                        <div className="flex gap-3">
-                            <Button onClick={handleSystemCheck} size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm text-xs font-semibold">
-                                <Activity className="h-3.5 w-3.5 mr-2" /> Run Diagnostics
-                            </Button>
-                            <Button onClick={handleSendTestChat} size="sm" variant="secondary" className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold">
-                                <Zap className="h-3.5 w-3.5 mr-2" /> Send Test Chat to Live Stream
-                            </Button>
-                        </div>
-
-                        {systemStatus && (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <StatusBadge
-                                    label="OBS / Streamer.bot"
-                                    status={systemStatus.streamer_bot.status}
-                                    meta={systemStatus.streamer_bot.meta}
-                                />
-                                <StatusBadge
-                                    label="YouTube Chat"
-                                    status={systemStatus.youtube.status}
-                                    meta={systemStatus.youtube.meta}
-                                />
-                                <StatusBadge
-                                    label="Audio Engine"
-                                    status={systemStatus.audio.status}
-                                    meta={systemStatus.audio.meta}
-                                />
-                                <StatusBadge
-                                    label="Viewer Tracking"
-                                    status={systemStatus.viewers.status}
-                                    meta={systemStatus.viewers.meta}
-                                />
-                            </div>
-                        )}
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
-                            Verifies that OBS, YouTube, and Audio pipelines are fully connected and ready for live broadcasting.
+            {/* Safe Test Mode Banner */}
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0" />
+                    <div>
+                        <strong className="text-emerald-300 font-semibold">Safe Test Mode Active</strong>
+                        <p className="text-emerald-400/80 text-[11px] mt-0.5">
+                            All simulated donation tests are tagged with <code className="bg-emerald-950/60 px-1 rounded text-emerald-200">is_test=true</code>. Real donor balances, database analytics, and stream stats are protected.
                         </p>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
+                {totalExecuted > 0 && (
+                    <div className="flex items-center gap-3 font-mono text-[11px] shrink-0">
+                        <span className="text-emerald-400 font-bold">{passedCount} PASSED</span>
+                        {failedCount > 0 && <span className="text-red-400 font-bold">{failedCount} FAILED</span>}
+                        <span className="text-zinc-400">({totalExecuted}/8 COMPLETE)</span>
+                    </div>
+                )}
+            </div>
 
-                {/* AI Chat Testing */}
-                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                    <CardHeader className="pb-3 border-b border-zinc-800">
-                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                            <MessageSquare className="h-4 w-4 text-primary" /> AI Engine Test
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                        <form onSubmit={handleAiTest} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="ai-prompt" className="text-xs font-medium text-zinc-400">Simulate Viewer Prompt</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="ai-prompt"
-                                        placeholder="Type something to ask AI..."
-                                        value={aiPrompt}
-                                        onChange={(e) => setAiPrompt(e.target.value)}
-                                        className="bg-zinc-950 border-zinc-700 text-zinc-100 text-sm h-9"
-                                    />
-                                    <Button type="submit" size="sm" disabled={loading || !aiPrompt.trim()} className="h-9 px-3">
-                                        {loading ? <div className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" /> : <Send className="h-3.5 w-3.5" />}
+            {/* ══════════════════════════════════════════════════════════════════
+                THE 8 DEDICATED TEST CARDS GRID
+            ══════════════════════════════════════════════════════════════════ */}
+            <div className="grid gap-4 md:grid-cols-2">
+                {TEST_DEFINITIONS.map((test) => {
+                    const result = testResults[test.id]
+                    const isRunning = runningTests[test.id]
+                    const IconComponent = test.icon
+                    const isExpanded = expandedDetails[test.id]
+
+                    let badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                    let badgeLabel = 'NOT TESTED'
+                    if (isRunning) {
+                        badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                        badgeLabel = 'TESTING...'
+                    } else if (result?.status === 'SUCCESS') {
+                        badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        badgeLabel = 'SUCCESS'
+                    } else if (result?.status === 'FAILED') {
+                        badgeColor = 'bg-red-500/20 text-red-300 border-red-500/30'
+                        badgeLabel = 'FAILED'
+                    }
+
+                    return (
+                        <Card key={test.id} className="bg-zinc-900 border-zinc-800 shadow-sm flex flex-col justify-between overflow-hidden">
+                            <CardHeader className="pb-3 border-b border-zinc-800/80 bg-zinc-950/30">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 rounded-lg bg-zinc-800/80 text-cyan-400 border border-zinc-700/60">
+                                            <IconComponent className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-sm font-semibold text-zinc-100">
+                                                {test.title}
+                                            </CardTitle>
+                                            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+                                                {test.category} • {test.endpoint}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono border ${badgeColor}`}>
+                                        {badgeLabel}
+                                    </span>
+                                </div>
+                            </CardHeader>
+
+                            <CardContent className="pt-3 pb-3 space-y-3 flex-1 flex flex-col justify-between text-xs">
+                                <p className="text-zinc-400 text-[11px] leading-relaxed">
+                                    {test.description}
+                                </p>
+
+                                {result && (
+                                    <div className="space-y-1.5 pt-1">
+                                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                                            <span>Duration: <strong className="text-zinc-200">{result.duration_ms} ms</strong></span>
+                                            <span>HTTP: <strong className={result.httpStatus === 200 ? 'text-emerald-400' : 'text-red-400'}>{result.httpStatus}</strong></span>
+                                            <span>CID: <strong className="text-zinc-300">{result.correlation_id}</strong></span>
+                                        </div>
+
+                                        <p className={`text-[11px] font-medium ${result.status === 'SUCCESS' ? 'text-emerald-400/90' : 'text-red-400'}`}>
+                                            {result.message}
+                                        </p>
+
+                                        {/* Expandable JSON details */}
+                                        <button
+                                            onClick={() => toggleExpand(test.id)}
+                                            className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 font-mono pt-1"
+                                        >
+                                            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                            {isExpanded ? 'Hide Payload & Details' : 'View Payload & Details'}
+                                        </button>
+
+                                        {isExpanded && (
+                                            <pre className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-300 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                                                {JSON.stringify(result.details, null, 2)}
+                                            </pre>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
+                                    <span className="text-[10px] text-zinc-500 font-mono">
+                                        {result?.timestamp ? `Tested: ${result.timestamp}` : 'Ready to execute'}
+                                    </span>
+                                    <Button
+                                        onClick={() => runTest(test)}
+                                        disabled={isRunning}
+                                        size="sm"
+                                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] h-7 px-3 font-semibold"
+                                    >
+                                        {isRunning ? (
+                                            <>
+                                                <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" /> Testing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Play className="h-3 w-3 mr-1.5" /> Run Test
+                                            </>
+                                        )}
                                     </Button>
                                 </div>
-                            </div>
-                            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
-                                This will use your configured AI Strategy and Providers.
-                            </p>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                {/* TTS Testing */}
-                <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                    <CardHeader className="pb-3 border-b border-zinc-800">
-                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                            <Mic className="h-4 w-4 text-emerald-500" /> TTS Engine Test
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4 space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="tts-text" className="text-xs font-medium text-zinc-400">Voice Synthesis Text</Label>
-                            <Input
-                                id="tts-text"
-                                placeholder="Type text to speak..."
-                                value={ttsText}
-                                onChange={(e) => setTtsText(e.target.value)}
-                                className="bg-zinc-950 border-zinc-700 text-zinc-100 text-sm h-9"
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button size="sm" variant="secondary" onClick={() => handleTtsTest('public')} disabled={!ttsText.trim()} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 h-8 text-xs font-semibold">
-                                <Mic className="h-3.5 w-3.5 mr-2" /> Public Chat
-                            </Button>
-                            <Button size="sm" variant="outline" className="border-zinc-700 bg-transparent hover:bg-zinc-800 text-zinc-300 h-8 text-xs font-semibold" onClick={() => handleTtsTest('secret')} disabled={!ttsText.trim()}>
-                                <Beaker className="h-3.5 w-3.5 mr-2" /> Secret (Head)
-                            </Button>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
-                            Public plays on stream. Secret plays on your headphones only.
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {/* OBS Alert Testing */}
-                <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
-                    <CardHeader className="pb-3 border-b border-zinc-800">
-                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                            <Beaker className="h-4 w-4 text-primary" /> OBS Alert Simulation
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                            <AlertButton label="New Subscriber" type="NewSubscriber" emoji="❤️" onClick={(t) => triggerAlert(t)} />
-                            <AlertButton label="New Member" type="Member" emoji="💎" onClick={(t) => triggerAlert(t)} />
-                            <AlertButton label="Super Chat" type="SuperChat" emoji="⭐" onClick={(t) => triggerAlert(t)} />
-                            <AlertButton label="Gift Sub" type="GiftSub" emoji="🎁" onClick={(t) => triggerAlert(t)} />
-                            <AlertButton label="Rank Up" type="RANK_UP" emoji="👑" onClick={(t) => triggerAlert(t)} />
-                            <AlertButton label="Loyalty" type="LOYALTY" emoji="💖" onClick={(t) => triggerAlert(t)} />
-                        </div>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-wide mt-4 font-medium">
-                            These will trigger visual alerts in the OBS Overlay and play a simulation announcement.
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {/* Manual Super Chat Test */}
-                <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
-                    <CardHeader className="pb-3 border-b border-zinc-800">
-                        <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
-                            <Zap className="h-4 w-4 text-yellow-500" /> Manual Super Chat Trigger
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                        <SuperChatForm onTrigger={(data) => {
-                            axios.post('/api/test/superchat', data)
-                                .then(() => setResponses(prev => [{ type: 'SUPERCHAT_TEST', text: `Triggered SC from ${data.user} for ${data.amount}`, time: new Date().toLocaleTimeString() }, ...prev]))
-                                .catch(err => setResponses(prev => [{ type: 'ERROR', text: `SC Error: ${err.message}`, time: new Date().toLocaleTimeString() }, ...prev]))
-                        }} />
-                    </CardContent>
-                </Card>
+                            </CardContent>
+                        </Card>
+                    )
+                })}
             </div>
 
-            {/* Test Results / History */}
-            <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
-                <CardHeader className="pb-3 border-b border-zinc-800">
-                    <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Test Execution History</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="divide-y divide-zinc-800">
-                        {responses.length === 0 ? (
-                            <div className="p-8 text-center text-zinc-500 italic text-sm">No tests executed in this session.</div>
-                        ) : (
-                            responses.map((res, i) => (
-                                <div key={i} className="p-4 space-y-2 hover:bg-zinc-800/50 transition-colors">
-                                    <div className="flex justify-between items-center">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${res.type === 'AI' ? 'bg-primary/10 text-primary border-primary/20' :
-                                            res.type === 'ERROR' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                                            }`}>
-                                            {res.type}
-                                        </span>
-                                        <span className="text-[10px] text-zinc-500 font-mono">{res.time}</span>
-                                    </div>
-                                    {res.prompt && <div className="text-xs text-zinc-400 font-medium">Q: {res.prompt}</div>}
-                                    <div className="text-sm text-zinc-300 leading-relaxed font-mono">
-                                        {res.text}
+            {/* ══════════════════════════════════════════════════════════════════
+                LEGACY DIAGNOSTICS & INTERACTIVE SIMULATORS
+            ══════════════════════════════════════════════════════════════════ */}
+            <div className="pt-6 border-t border-zinc-800/80 space-y-6">
+                <div>
+                    <h3 className="text-base font-semibold text-zinc-200 flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-cyan-400" />
+                        Live Stream & Engine Diagnostics
+                    </h3>
+                    <p className="text-xs text-zinc-400">Quick tests for live chat, OBS overlay visual alerts, and voice engines.</p>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                    {/* System Diagnostics */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-emerald-400" /> System Integrity Diagnostics
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                            <div className="flex gap-3">
+                                <Button onClick={handleSystemCheck} size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold h-8">
+                                    <Activity className="h-3.5 w-3.5 mr-1.5" /> Run Diagnostics
+                                </Button>
+                                <Button onClick={handleSendTestChat} size="sm" variant="secondary" className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold h-8">
+                                    <Zap className="h-3.5 w-3.5 mr-1.5" /> Send Test Chat to Live Stream
+                                </Button>
+                            </div>
+
+                            {systemStatus && (
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2">
+                                    <StatusBadge label="OBS / Streamer.bot" status={systemStatus.streamer_bot?.status} meta={systemStatus.streamer_bot?.meta} />
+                                    <StatusBadge label="YouTube Chat" status={systemStatus.youtube?.status} meta={systemStatus.youtube?.meta} />
+                                    <StatusBadge label="Audio Engine" status={systemStatus.audio?.status} meta={systemStatus.audio?.meta} />
+                                    <StatusBadge label="Viewer Tracking" status={systemStatus.viewers?.status} meta={systemStatus.viewers?.meta} />
+                                    <StatusBadge label="Local Link" status={systemStatus.local_link?.status} meta={systemStatus.local_link?.meta} />
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* AI Prompt Test */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <MessageSquare className="h-4 w-4 text-cyan-400" /> AI Engine Test
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            <form onSubmit={handleAiTest} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-zinc-400">Simulate Viewer Prompt</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Type something to test AI..."
+                                            value={aiPrompt}
+                                            onChange={(e) => setAiPrompt(e.target.value)}
+                                            className="bg-zinc-950 border-zinc-700 text-zinc-100 text-sm h-9"
+                                        />
+                                        <Button type="submit" size="sm" disabled={aiLoading || !aiPrompt.trim()} className="h-9 px-3">
+                                            {aiLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                                        </Button>
                                     </div>
                                 </div>
-                            ))
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+                            </form>
+                        </CardContent>
+                    </Card>
 
-            <div className="text-center text-[10px] text-zinc-600 font-mono mt-8 pb-4">
-                Testing Module v2.2 - Build: {new Date().toLocaleString()}
+                    {/* TTS Engine Test */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Mic className="h-4 w-4 text-emerald-400" /> TTS Voice Synthesis Test
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs text-zinc-400">Text to Speak</Label>
+                                <Input
+                                    placeholder="Type message to test TTS..."
+                                    value={ttsText}
+                                    onChange={(e) => setTtsText(e.target.value)}
+                                    className="bg-zinc-950 border-zinc-700 text-zinc-100 text-sm h-9"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => handleTtsTest('public')} disabled={!ttsText.trim()} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 h-8 text-xs font-semibold">
+                                    <Volume2 className="h-3.5 w-3.5 mr-1.5" /> Public Stream
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleTtsTest('secret')} disabled={!ttsText.trim()} className="border-zinc-700 bg-transparent hover:bg-zinc-800 text-zinc-300 h-8 text-xs font-semibold">
+                                    <Beaker className="h-3.5 w-3.5 mr-1.5" /> Secret (Headphone)
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* OBS Alert Simulation */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm md:col-span-2">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Beaker className="h-4 w-4 text-cyan-400" /> OBS Alert Simulation
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('NewSubscriber')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    ❤️ Subscriber
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('Member')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    💎 Member
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('SuperChat')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    ⭐ Super Chat
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('GiftSub')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    🎁 Gift Sub
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('RANK_UP')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    👑 Rank Up
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => triggerAlert('LOYALTY')} className="border-zinc-800 hover:bg-zinc-800 text-xs">
+                                    💖 Loyalty
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </div>
     )
 }
 
-function AlertButton({ label, type, emoji, onClick }) {
-    return (
-        <Button
-            variant="outline"
-            className="flex flex-col h-auto py-3 gap-2 border-zinc-800 hover:bg-primary/10 hover:border-primary/50 group transition-all bg-zinc-900/50"
-            onClick={() => onClick(type)}
-        >
-            <span className="text-xl group-hover:scale-110 transition-transform">{emoji}</span>
-            <span className="text-[10px] uppercase font-bold text-zinc-500 group-hover:text-primary transition-colors">{label}</span>
-        </Button>
-    )
-}
-
-function SuperChatForm({ onTrigger }) {
-    const [formData, setFormData] = useState({
-        user: 'Test Donor',
-        amount: '₹100',
-        message: 'This is a test Super Chat message!',
-        tier: 'blue'
-    })
-
-    const handleSubmit = (e) => {
-        e.preventDefault()
-        onTrigger(formData)
-    }
-
-    return (
-        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="space-y-2 flex-1">
-                <Label className="text-xs">User</Label>
-                <Input
-                    value={formData.user}
-                    onChange={e => setFormData({ ...formData, user: e.target.value })}
-                    className="h-8 text-xs"
-                />
-            </div>
-            <div className="space-y-2 w-24">
-                <Label className="text-xs">Amount</Label>
-                <Input
-                    value={formData.amount}
-                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                    className="h-8 text-xs"
-                />
-            </div>
-            <div className="space-y-2 w-32">
-                <Label className="text-xs">Color/Tier</Label>
-                <select
-                    className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    value={formData.tier}
-                    onChange={e => setFormData({ ...formData, tier: e.target.value })}
-                >
-                    <option value="blue">Blue (₹20+)</option>
-                    <option value="lightblue">Light Blue (₹100+)</option>
-                    <option value="green">Green (₹200+)</option>
-                    <option value="yellow">Yellow (₹1000+)</option>
-                    <option value="orange">Orange (₹2000+)</option>
-                    <option value="magenta">Magenta (₹5000+)</option>
-                    <option value="red">Red (₹10000+)</option>
-                </select>
-            </div>
-            <div className="space-y-2 flex-[2]">
-                <Label className="text-xs">Message</Label>
-                <Input
-                    value={formData.message}
-                    onChange={e => setFormData({ ...formData, message: e.target.value })}
-                    className="h-8 text-xs"
-                />
-            </div>
-            <Button type="submit" size="sm" className="bg-yellow-600 hover:bg-yellow-500 text-white h-8 text-xs font-bold">
-                Trigger
-            </Button>
-        </form>
-    )
-}
-
 function StatusBadge({ label, status, meta }) {
-    const isGood = status === 'Connected' || status === 'Monitoring' || status === 'Active' || status === 'Tracking'
-    const isDegraded = status === 'Degraded' || status === 'Inactive'
-
+    const isOnline = status === 'Connected' || status === 'Monitoring' || status === 'Active' || status === 'Tracking'
+    const isDegraded = status === 'Degraded'
     return (
-        <div className={`p-3 rounded-lg border ${isGood ? 'bg-emerald-500/10 border-emerald-500/20' : isDegraded ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
-            <div className="flex items-center gap-2 mb-1">
-                {isGood ? <CheckCircle className="h-3.5 w-3.5 text-emerald-400" /> : <XCircle className="h-3.5 w-3.5 text-rose-400" />}
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isGood ? 'text-emerald-400' : 'text-rose-400'}`}>{label}</span>
+        <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800 text-xs space-y-1">
+            <span className="text-[10px] text-zinc-500 uppercase font-semibold block">{label}</span>
+            <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400' : isDegraded ? 'bg-amber-400' : 'bg-red-400'}`} />
+                <span className="font-semibold text-zinc-200">{status || 'Offline'}</span>
             </div>
-            <div className="text-sm font-bold text-zinc-200 mb-0.5">{status}</div>
-            <div className="text-[10px] font-mono text-zinc-500 truncate" title={meta}>{meta}</div>
+            {meta && <span className="text-[10px] text-zinc-500 font-mono block truncate">{meta}</span>}
         </div>
     )
 }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud, Power } from 'lucide-react'
+import { Save, Server, MessageSquare, Database, Youtube, Radio, Key, CheckCircle2, AlertTriangle, ExternalLink, Wifi, WifiOff, Clock, RefreshCw, Archive, Download, Upload, HardDrive, RotateCcw, FilePlus, Trash2, FolderOpen, Info, Gift, Cpu, Cloud, Power, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, Input, Button, Switch, Textarea } from '@/components/ui'
 import { PageStatusBar } from '@/components/ServiceStatus'
+import AppDownloadSecurity from '@/components/AppDownloadSecurity'
 
 function safeFixed(value, digits = 1, fallback = "0") {
     const num = Number(value);
@@ -55,6 +56,7 @@ export default function SettingsPage({ config, onSave }) {
         ] : [
             { id: 'integrations', label: 'Integrations', icon: <Radio className="h-4 w-4" /> },
         ]),
+        { id: 'app_security', label: 'App Download & Security', icon: <ShieldCheck className="h-4 w-4" /> },
         { id: 'backup', label: 'Backup/Restore', icon: <Database className="h-4 w-4" /> }
     ]
 
@@ -782,8 +784,10 @@ export default function SettingsPage({ config, onSave }) {
                     </div>
                 )}
 
-
-
+                {/* ─── APP DOWNLOAD & SECURITY SECTION ─── */}
+                {activeSection === 'app_security' && (
+                    <AppDownloadSecurity />
+                )}
 
             </div>
 
