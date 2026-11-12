@@ -2046,12 +2046,122 @@ async def get_local_ip():
         # Fallback
         return {"ip": "127.0.0.1"}
 
+
+
+
+# =========================================================================
+# PB HERO SMART DONATION SYSTEM (Central Manager, Bridge & Intents)
+# =========================================================================
+from backend.services.device_auth_service import device_auth_service
+from backend.services.donation_manager import donation_manager, DonationState
+
+donation_manager.set_bot(bot)
+
+class DonationIntentRequest(BaseModel):
+    amount: float
+    donor_name: str
+    message: Optional[str] = ""
+
+class DeviceRegisterRequest(BaseModel):
+    device_id: Optional[str] = None
+    device_name: Optional[str] = "PB HERO Android Bridge"
+
+@app.post("/api/donation/intent")
+async def create_donation_intent(payload: DonationIntentRequest):
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    intent = await donation_manager.create_intent(payload.amount, payload.donor_name, payload.message or "")
+    return intent
+
+@app.get("/api/donation/intent/{intent_id}/status")
+async def get_donation_intent_status(intent_id: str):
+    res = await donation_manager.get_intent_status(intent_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Intent not found")
+    return res
+
+@app.post("/api/bridge/register")
+async def register_bridge_device(payload: DeviceRegisterRequest):
+    dev = device_auth_service.register_device(
+        device_id=payload.device_id or "",
+        device_name=payload.device_name or "Android Bridge"
+    )
+    return {
+        "status": "success",
+        "device_id": dev["device_id"],
+        "secret_key": dev["secret_key"],
+        "device_name": dev["device_name"],
+        "webhook_url": "/api/webhook/paytm-bridge"
+    }
+
+@app.get("/api/bridge/devices")
+async def list_bridge_devices():
+    return {"devices": device_auth_service.list_devices()}
+
+@app.post("/api/webhook/paytm-bridge")
+async def paytm_bridge_webhook(request: Request):
+    raw_body = await request.body()
+    headers = request.headers
+    device_id = headers.get("x-device-id", "").strip()
+    timestamp = headers.get("x-timestamp", "").strip()
+    signature = headers.get("x-signature", "").strip()
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    event_id = payload.get("event_id")
+
+    # If device headers are supplied, enforce strict HMAC validation
+    if device_id or signature:
+        is_valid, reason = device_auth_service.verify_request(
+            device_id=device_id,
+            timestamp_str=timestamp,
+            signature=signature,
+            raw_body=raw_body,
+            event_id=event_id
+        )
+        if not is_valid:
+            logger.warning(f"[Webhook/PaytmBridge] Rejected request from {device_id}: {reason}")
+            raise HTTPException(status_code=401, detail=f"Unauthorized: {reason}")
+    else:
+        # Fallback check against configured webhook_secret header if present
+        secret = headers.get("x-webhook-secret")
+        req_secret = _get_config().get("security", {}).get("webhook_secret")
+        if req_secret and secret != req_secret:
+            raise HTTPException(status_code=401, detail="Missing or invalid authentication credentials")
+
+    # Ingest into Central Donation Manager
+    result = await donation_manager.ingest_notification(payload)
+    return result
+
+@app.get("/api/donation/dashboard")
+async def get_donation_dashboard():
+    return donation_manager.get_dashboard_summary()
+
+@app.post("/api/donation/manual-approve/{donation_id}")
+async def manual_approve_donation(donation_id: str):
+    async with donation_manager.lock:
+        donation = donation_manager.verified_donations.get(donation_id)
+        if not donation:
+            raise HTTPException(status_code=404, detail="Donation not found")
+        donation["status"] = DonationState.VERIFIED
+        donation_manager._save()
+    asyncio.create_task(donation_manager.dispatch_announcements(donation_id))
+    return {"status": "approved", "donation_id": donation_id}
+
+
 @app.post("/api/webhook/{provider}")
-async def payment_webhook(provider: str, payload: dict):
+async def payment_webhook(provider: str, payload: dict, request: Request = None):
     """
     Generic Webhook Receiver for Payment Gateways (e.g. razorpay, phonepe)
     The Tunnel must allow access to this path.
     """
+    if provider in ["paytm-bridge", "paytm_bridge"]:
+        if request:
+            return await paytm_bridge_webhook(request)
+        return await donation_manager.ingest_notification(payload)
     logger.info("Webhook event from %s", provider)
 
     # Custom Payment Notification Logic (Universal App Alerts)
@@ -2260,107 +2370,7 @@ async def test_app_webhook(payload: Optional[Dict[str, Any]] = None):
     return {"status": "success", "message": f"Test alert fired: {sender} ₹{amount}"}
 
 
-# =========================================================================
-# PB HERO SMART DONATION SYSTEM (Central Manager, Bridge & Intents)
-# =========================================================================
-from backend.services.device_auth_service import device_auth_service
-from backend.services.donation_manager import donation_manager, DonationState
 
-donation_manager.set_bot(bot)
-
-class DonationIntentRequest(BaseModel):
-    amount: float
-    donor_name: str
-    message: Optional[str] = ""
-
-class DeviceRegisterRequest(BaseModel):
-    device_id: Optional[str] = None
-    device_name: Optional[str] = "PB HERO Android Bridge"
-
-@app.post("/api/donation/intent")
-async def create_donation_intent(payload: DonationIntentRequest):
-    if payload.amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
-    intent = await donation_manager.create_intent(payload.amount, payload.donor_name, payload.message or "")
-    return intent
-
-@app.get("/api/donation/intent/{intent_id}/status")
-async def get_donation_intent_status(intent_id: str):
-    res = await donation_manager.get_intent_status(intent_id)
-    if not res:
-        raise HTTPException(status_code=404, detail="Intent not found")
-    return res
-
-@app.post("/api/bridge/register")
-async def register_bridge_device(payload: DeviceRegisterRequest):
-    dev = device_auth_service.register_device(
-        device_id=payload.device_id or "",
-        device_name=payload.device_name or "Android Bridge"
-    )
-    return {
-        "status": "success",
-        "device_id": dev["device_id"],
-        "secret_key": dev["secret_key"],
-        "device_name": dev["device_name"],
-        "webhook_url": "/api/webhook/paytm-bridge"
-    }
-
-@app.get("/api/bridge/devices")
-async def list_bridge_devices():
-    return {"devices": device_auth_service.list_devices()}
-
-@app.post("/api/webhook/paytm-bridge")
-async def paytm_bridge_webhook(request: Request):
-    raw_body = await request.body()
-    headers = request.headers
-    device_id = headers.get("x-device-id", "").strip()
-    timestamp = headers.get("x-timestamp", "").strip()
-    signature = headers.get("x-signature", "").strip()
-
-    try:
-        payload = json.loads(raw_body.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    event_id = payload.get("event_id")
-
-    # If device headers are supplied, enforce strict HMAC validation
-    if device_id or signature:
-        is_valid, reason = device_auth_service.verify_request(
-            device_id=device_id,
-            timestamp_str=timestamp,
-            signature=signature,
-            raw_body=raw_body,
-            event_id=event_id
-        )
-        if not is_valid:
-            logger.warning(f"[Webhook/PaytmBridge] Rejected request from {device_id}: {reason}")
-            raise HTTPException(status_code=401, detail=f"Unauthorized: {reason}")
-    else:
-        # Fallback check against configured webhook_secret header if present
-        secret = headers.get("x-webhook-secret")
-        req_secret = _get_config().get("security", {}).get("webhook_secret")
-        if req_secret and secret != req_secret:
-            raise HTTPException(status_code=401, detail="Missing or invalid authentication credentials")
-
-    # Ingest into Central Donation Manager
-    result = await donation_manager.ingest_notification(payload)
-    return result
-
-@app.get("/api/donation/dashboard")
-async def get_donation_dashboard():
-    return donation_manager.get_dashboard_summary()
-
-@app.post("/api/donation/manual-approve/{donation_id}")
-async def manual_approve_donation(donation_id: str):
-    async with donation_manager.lock:
-        donation = donation_manager.verified_donations.get(donation_id)
-        if not donation:
-            raise HTTPException(status_code=404, detail="Donation not found")
-        donation["status"] = DonationState.VERIFIED
-        donation_manager._save()
-    asyncio.create_task(donation_manager.dispatch_announcements(donation_id))
-    return {"status": "approved", "donation_id": donation_id}
 
 
 
