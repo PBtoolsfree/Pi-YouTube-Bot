@@ -414,7 +414,7 @@ class DonationManager:
 
             records = await _run_in_thread(
                 email_service.search_paytm_emails,
-                time_window_minutes=15,
+                time_window_minutes=60,
                 target_amount=None,
                 processed_ids=list(self.emails.keys())
             )
