@@ -48,7 +48,7 @@ export default function TransactionsOverlay({ isRotating = false }) {
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data)
-                    if (data.type === 'log' && ['DONATION', 'SUPERCHAT', 'APP_NOTIFICATION'].includes(data.category)) {
+                    if (data.type === 'donation_alert' || (data.type === 'log' && ['DONATION', 'SUPERCHAT', 'APP_NOTIFICATION'].includes(data.category))) {
                         fetchTransactions()
                     }
                 } catch (e) { }

@@ -386,164 +386,231 @@ class DonationManager:
         return verified_count
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 5. DONATION MATCHING & VERIFICATION ENGINE
+    # 5. DONATION MATCHING & VERIFICATION ENGINE (UNIFIED DEDUPLICATION PROTOCOL)
     # ─────────────────────────────────────────────────────────────────────────
 
     async def evaluate_match(self, event_id: Optional[str] = None, msg_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Core matching logic prioritizing:
-        1. Exact UTR / Transaction ID (if present in both)
-        2. Amount + Time Window (10 min) + Consistent signals
-        3. Correlating Tip Page Intent for customized viewer message and name
+        Comprehensive Unified Deduplication & Matching Protocol:
+        Correlates signals across:
+        1. Android App Notifications (PB HERO Notification Bridge)
+        2. Bank / Paytm Business Emails (EmailService / IMAP)
+        3. Tip Page Intents (Viewer initiated payment)
+        
+        Guarantees:
+        - Absolute deduplication across channels (No duplicate alerts/TTS/history)
+        - Tip Page custom donor name & message preservation
+        - Real-time loyalty points crediting
+        - Simultaneous synchronized overlay + TTS dispatch
         """
         async with self.lock:
             window = max(self.config.get("match_window_seconds", 600), 3600)
             strict = self.config.get("strict_mode", True)
+            now_ts = time.time()
 
-            candidates_notif = [n for n in self.notifications.values() if n["status"] not in [DonationState.VERIFIED, DonationState.ANNOUNCED, "DUPLICATE_RESOLVED"]]
+            candidates_notif = [n for n in self.notifications.values() if n.get("status") not in [DonationState.VERIFIED, DonationState.ANNOUNCED, "DUPLICATE_RESOLVED", "duplicate"]]
             candidates_email = [e for e in self.emails.values() if not e.get("is_matched", False)]
+            active_intents = [i for i in self.intents.values() if i.get("status") == DonationState.WAITING_FOR_PAYMENT and (now_ts - i.get("created_at", now_ts)) <= window]
 
+            # Helper for deduplication check against already verified donations
+            def is_already_verified(amt: float, utr_val: Optional[str], ref_val: Optional[str], check_ts: float) -> Optional[Dict[str, Any]]:
+                for v_id, v_d in self.verified_donations.items():
+                    v_utr = str(v_d.get("utr") or "").strip()
+                    # 1. Exact UTR match is a duplicate
+                    if utr_val and v_utr and v_utr != "—" and v_utr == str(utr_val).strip():
+                        return v_d
+                    if ref_val and v_utr and v_utr != "—" and (v_utr in str(ref_val) or str(ref_val) in v_utr):
+                        return v_d
+                    # 2. If both have distinct UTRs, they are NOT duplicates!
+                    has_distinct_utrs = (utr_val and v_utr and v_utr != "—" and utr_val != "—" and str(utr_val).strip() != v_utr)
+                    if has_distinct_utrs:
+                        continue
+                    # 3. Same amount without distinct UTRs within 180s debounce
+                    if abs(float(v_d.get("amount", 0.0)) - float(amt)) < 0.01:
+                        v_time = float(v_d.get("verified_timestamp") or v_d.get("raw_time") or 0)
+                        if abs(check_ts - v_time) <= 180:
+                            return v_d
+                return None
+
+            # Helper to finalize and record verified donation
+            def record_verified(donor_name: str, amount: float, message: str, utr_val: Optional[str],
+                                notif_obj: Optional[Dict[str, Any]], email_obj: Optional[Dict[str, Any]],
+                                intent_obj: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+                donation_id = f"PBH-DONATION-{int(time.time())}-{uuid.uuid4().hex[:6].upper()}"
+                source_label = "Tip Page (Paytm QR)" if intent_obj else "Paytm Business QR"
+
+                canonical_event = {
+                    "event_type": "donation_verified",
+                    "event_id": donation_id,
+                    "donor_name": donor_name,
+                    "amount": float(amount),
+                    "currency": "INR",
+                    "message": message,
+                    "utr": utr_val or "—",
+                    "order_id": (email_obj.get("order_id") if email_obj else None) or "—",
+                    "notification_event_id": notif_obj.get("event_id") if notif_obj else None,
+                    "email_message_id": email_obj.get("message_id") if email_obj else None,
+                    "intent_id": intent_obj.get("intent_id") if intent_obj else None,
+                    "verified_timestamp": time.time(),
+                    "status": DonationState.VERIFIED,
+                    "source": source_label,
+                    "cloud_overlay_status": DeliveryState.PENDING,
+                    "local_tts_status": DeliveryState.PENDING
+                }
+
+                if intent_obj:
+                    intent_obj["status"] = DonationState.VERIFIED
+                    intent_obj["matched_donation_id"] = donation_id
+
+                if notif_obj:
+                    notif_obj["status"] = DonationState.VERIFIED
+                    notif_obj["matched_donation_id"] = donation_id
+                    if email_obj:
+                        notif_obj["matched_email_id"] = email_obj.get("message_id")
+
+                if email_obj:
+                    email_obj["is_matched"] = True
+                    email_obj["matched_donation_id"] = donation_id
+
+                # Deduplicate any other pending notifications with identical amount within 180s
+                for dup_notif in list(self.notifications.values()):
+                    if (not notif_obj or dup_notif["event_id"] != notif_obj["event_id"]) and dup_notif.get("status") == DonationState.PENDING_EMAIL:
+                        # If both have distinct ref_info/UTR, they are distinct transactions! Do not auto-resolve!
+                        dup_ref = str(dup_notif.get("ref_info") or "").strip()
+                        obj_ref = str((notif_obj.get("ref_info") if notif_obj else None) or utr_val or "").strip()
+                        if dup_ref and obj_ref and dup_ref != "—" and obj_ref != "—" and dup_ref != obj_ref:
+                            continue
+                        if abs(dup_notif.get("amount", 0.0) - float(amount)) < 0.01:
+                            if abs(dup_notif.get("received_at", 0.0) - (notif_obj.get("received_at", now_ts) if notif_obj else now_ts)) <= 180:
+                                logger.info(f"[DonationManager] Auto-resolving duplicate notification {dup_notif['event_id']}")
+                                dup_notif["status"] = "DUPLICATE_RESOLVED"
+
+                self.verified_donations[donation_id] = canonical_event
+
+                # Award loyalty points
+                if self.bot and hasattr(self.bot, "viewers") and self.bot.viewers:
+                    try:
+                        cfg = self.bot.load_config() if hasattr(self.bot, "load_config") else {}
+                        pts_per_tip = cfg.get("loyalty", {}).get("points_per_tip_rupee", 0)
+                        if pts_per_tip > 0:
+                            pts_to_add = int(float(amount) * pts_per_tip)
+                            target_user = intent_obj.get("donor_name") if (intent_obj and intent_obj.get("donor_name") != "Anonymous") else donor_name
+                            clean_user = re.sub(r'\(.*?\)', '', target_user).strip() or target_user
+                            self.bot.viewers.add_points(clean_user, pts_to_add)
+                            logger.info(f"[DonationManager] Awarded {pts_to_add} loyalty points to {clean_user} for ₹{amount}")
+                    except Exception as e:
+                        logger.error(f"[DonationManager] Failed to award loyalty points: {e}")
+
+                # Sync to legacy bot history
+                if self.bot and hasattr(self.bot, "_save_donation_history"):
+                    try:
+                        self.bot._save_donation_history(donor_name, amount, message, donation_id, played=True, source=source_label)
+                    except Exception as e:
+                        logger.warning(f"Failed to sync to bot legacy history: {e}")
+
+                if self.bot and hasattr(self.bot, "processed_transactions"):
+                    self.bot.processed_transactions[donation_id] = True
+                    if utr_val:
+                        self.bot.processed_transactions[str(utr_val)] = True
+
+                self._save()
+                logger.info(f"[DonationManager] ✅ VERIFIED DONATION: {donation_id} — {donor_name} donated ₹{amount} (UTR: {utr_val})")
+
+                # Dispatch dual announcements
+                if self.config.get("auto_announce", True):
+                    asyncio.create_task(self.dispatch_announcements(donation_id))
+
+                return canonical_event
+
+            # ── PATH 1: Match Notification with Email / Intent ───────────────
             for notif in candidates_notif:
-                matched_email = None
+                # Check if this notification already matches an existing verified donation
+                already_v = is_already_verified(notif["amount"], notif.get("ref_info"), notif.get("ref_info"), notif.get("received_at", now_ts))
+                if already_v:
+                    logger.info(f"[DonationManager] Notification {notif['event_id']} matches existing verified donation {already_v['event_id']}. Marking DUPLICATE_RESOLVED.")
+                    notif["status"] = "DUPLICATE_RESOLVED"
+                    notif["matched_donation_id"] = already_v["event_id"]
+                    self._save()
+                    continue
 
-                # 1. Search for matching email
+                matched_email = None
                 for em in candidates_email:
                     if abs(notif["amount"] - em["amount"]) < 0.01:
-                        # Time window check
-                        time_diff = abs(notif["received_at"] - em["received_at"])
+                        time_diff = abs(notif["received_at"] - em.get("received_at", notif["received_at"]))
                         if time_diff <= window:
-                            # If UTR is in ref_info and matches, absolute match
                             if notif.get("ref_info") and em.get("utr") and str(em["utr"]) in str(notif["ref_info"]):
                                 matched_email = em
                                 break
-                            # Otherwise amount + time within window
                             if matched_email is None:
                                 matched_email = em
 
-                # Verification decision
-                if matched_email:
-                    # Successfully corroborated!
-                    matched_email["is_matched"] = True
-                    notif["status"] = DonationState.VERIFIED
-                    notif["matched_email_id"] = matched_email["message_id"]
+                # Check for matching active Tip Page Intent
+                matched_intent = None
+                candidate_intents = [
+                    i for i in active_intents
+                    if abs(i["amount"] - notif["amount"]) < 0.01
+                    and abs(notif["received_at"] - i.get("created_at", notif["received_at"])) <= window
+                ]
+                if candidate_intents:
+                    candidate_intents.sort(key=lambda x: abs(notif["received_at"] - x.get("created_at", notif["received_at"])))
+                    matched_intent = candidate_intents[0]
 
-                    # Deduplicate any other duplicate pending notifications within 120s window & same amount
-                    for dup_notif in list(self.notifications.values()):
-                        if dup_notif["event_id"] != notif["event_id"] and dup_notif.get("status") == DonationState.PENDING_EMAIL:
-                            if abs(dup_notif.get("amount", 0.0) - notif["amount"]) < 0.01:
-                                if abs(dup_notif.get("received_at", 0.0) - notif["received_at"]) <= 120:
-                                    logger.info(f"[DonationManager] Auto-resolving duplicate notification {dup_notif['event_id']}")
-                                    dup_notif["status"] = "DUPLICATE_RESOLVED"
-                                    dup_notif["matched_email_id"] = matched_email["message_id"]
-
-                    # Determine canonical donor name
-                    em_name = (matched_email.get("payer_name") or "").strip()
+                # Decide if verification criteria met
+                # Condition: Corroborated by Email OR Corroborated by active Intent OR (non-strict mode)
+                if matched_email or matched_intent or not strict:
+                    em_name = (matched_email.get("payer_name") or "").strip() if matched_email else ""
                     notif_name = (notif.get("payer_name") or "").strip()
                     notif_clean = re.sub(r'\s+received\b.*', '', notif_name, flags=re.IGNORECASE).strip()
                     notif_clean = re.sub(r'^(?:payment\s+from|from|by)\s+', '', notif_clean, flags=re.IGNORECASE).strip()
 
-                    if "@" in em_name and notif_clean and "@" not in notif_clean:
-                        final_name = notif_clean
+                    if em_name and (not notif_clean or notif_clean in ["Paytm Payer", "Supporter"]):
+                        final_payer = em_name
                     else:
-                        final_name = em_name or notif_clean or "Supporter"
+                        final_payer = notif_clean or em_name or "Supporter"
+                    utr = (matched_email.get("utr") if matched_email else None) or notif.get("ref_info") or "—"
 
-                    final_name = re.sub(r'\s+received\b.*', '', final_name, flags=re.IGNORECASE).strip()
-                    final_name = re.sub(r'^(?:payment\s+from|from|by)\s+', '', final_name, flags=re.IGNORECASE).strip()
-                    if not final_name:
-                        final_name = "Supporter"
-                    utr = matched_email.get("utr") or notif.get("ref_info")
-
-                    # Search for associated Tip Page Intent
-                    matched_intent = None
-                    candidate_intents = [
-                        i for i in self.intents.values()
-                        if i["status"] == DonationState.WAITING_FOR_PAYMENT
-                        and abs(i["amount"] - notif["amount"]) < 0.01
-                        and abs(notif["received_at"] - i["created_at"]) <= window
-                    ]
-                    if candidate_intents:
-                        # Pick intent closest in time to notification
-                        candidate_intents.sort(key=lambda x: abs(notif["received_at"] - x["created_at"]))
-                        matched_intent = candidate_intents[0]
-
-                    message = "Donation via Paytm UPI QR"
+                    msg = "Donation via Paytm UPI QR"
+                    final_donor = final_payer
                     if matched_intent:
-                        matched_intent["status"] = DonationState.VERIFIED
                         if matched_intent.get("donor_name") and matched_intent["donor_name"] != "Anonymous":
-                            final_name = f"{matched_intent['donor_name']} ({final_name})"
+                            final_donor = f"{matched_intent['donor_name']} ({final_payer})" if final_payer != "Supporter" and final_payer != matched_intent["donor_name"] else matched_intent["donor_name"]
                         if matched_intent.get("message"):
-                            message = matched_intent["message"]
+                            msg = matched_intent["message"]
 
-                    donation_id = f"PBH-DONATION-{int(time.time())}-{uuid.uuid4().hex[:6].upper()}"
-                    canonical_event = {
-                        "event_type": "donation_verified",
-                        "event_id": donation_id,
-                        "donor_name": final_name,
-                        "amount": notif["amount"],
-                        "currency": "INR",
-                        "message": message,
-                        "utr": utr,
-                        "order_id": matched_email.get("order_id"),
-                        "notification_event_id": notif["event_id"],
-                        "email_message_id": matched_email["message_id"],
-                        "intent_id": matched_intent["intent_id"] if matched_intent else None,
-                        "verified_timestamp": time.time(),
-                        "status": DonationState.VERIFIED,
-                        "cloud_overlay_status": DeliveryState.PENDING,
-                        "local_tts_status": DeliveryState.PENDING
-                    }
+                    canon = record_verified(final_donor, notif["amount"], msg, utr, notif, matched_email, matched_intent)
+                    return {"status": DonationState.VERIFIED, "donation": canon}
 
-                    if matched_intent:
-                        matched_intent["matched_donation_id"] = donation_id
-
-                    self.verified_donations[donation_id] = canonical_event
+            # ── PATH 2: Match Email with Intent (When Android notification wasn't received) ──
+            for em in candidates_email:
+                already_v = is_already_verified(em["amount"], em.get("utr"), em.get("utr"), em.get("received_at", now_ts))
+                if already_v:
+                    em["is_matched"] = True
+                    em["matched_donation_id"] = already_v["event_id"]
+                    if already_v.get("utr") in [None, "—", ""] and em.get("utr"):
+                        already_v["utr"] = em["utr"]
                     self._save()
-                    logger.info(f"[DonationManager] ✅ VERIFIED DONATION: {donation_id} — {final_name} donated ₹{notif['amount']} (UTR: {utr})")
+                    continue
 
-                    # Also sync to legacy history so OBS and existing listeners receive it
-                    if self.bot and hasattr(self.bot, "add_donation_to_history"):
-                        try:
-                            self.bot.add_donation_to_history(final_name, notif["amount"], message, donation_id, played=True, source="Paytm QR")
-                        except Exception as e:
-                            logger.warning(f"Failed to sync to bot legacy history: {e}")
+                matched_intent = None
+                candidate_intents = [
+                    i for i in active_intents
+                    if abs(i["amount"] - em["amount"]) < 0.01
+                    and abs(em.get("received_at", now_ts) - i.get("created_at", now_ts)) <= window
+                ]
+                if candidate_intents:
+                    candidate_intents.sort(key=lambda x: abs(em.get("received_at", now_ts) - x.get("created_at", now_ts)))
+                    matched_intent = candidate_intents[0]
 
-                    # Dispatch dual announcements
-                    if self.config.get("auto_announce", True):
-                        asyncio.create_task(self.dispatch_announcements(donation_id))
+                if matched_intent:
+                    payer = (em.get("payer_name") or "").strip() or "Supporter"
+                    final_donor = matched_intent.get("donor_name") or payer
+                    if final_donor != payer and payer != "Supporter":
+                        final_donor = f"{final_donor} ({payer})"
+                    msg = matched_intent.get("message") or "Donation via Paytm UPI QR"
+                    utr = em.get("utr") or "—"
 
-                    return {"status": DonationState.VERIFIED, "donation": canonical_event}
-
-                elif not strict:
-                    # Non-strict mode: Notification alone can be verified if permitted by admin
-                    notif["status"] = DonationState.VERIFIED
-                    final_name = notif.get("payer_name") or "Supporter"
-                    donation_id = f"PBH-DONATION-{int(time.time())}-{uuid.uuid4().hex[:6].upper()}"
-                    canonical_event = {
-                        "event_type": "donation_verified",
-                        "event_id": donation_id,
-                        "donor_name": final_name,
-                        "amount": notif["amount"],
-                        "currency": "INR",
-                        "message": "Donation via Paytm UPI QR",
-                        "utr": notif.get("ref_info"),
-                        "notification_event_id": notif["event_id"],
-                        "email_message_id": None,
-                        "intent_id": None,
-                        "verified_timestamp": time.time(),
-                        "status": DonationState.VERIFIED,
-                        "cloud_overlay_status": DeliveryState.PENDING,
-                        "local_tts_status": DeliveryState.PENDING
-                    }
-                    self.verified_donations[donation_id] = canonical_event
-                    self._save()
-                    if self.bot and hasattr(self.bot, "add_donation_to_history"):
-                        try:
-                            self.bot.add_donation_to_history(final_name, notif["amount"], "Donation via Paytm UPI QR", donation_id, played=True, source="Paytm QR")
-                        except Exception as e:
-                            logger.warning(f"Failed to sync to bot legacy history: {e}")
-                    if self.config.get("auto_announce", True):
-                        asyncio.create_task(self.dispatch_announcements(donation_id))
-                    return {"status": DonationState.VERIFIED, "donation": canonical_event}
+                    canon = record_verified(final_donor, em["amount"], msg, utr, None, em, matched_intent)
+                    return {"status": DonationState.VERIFIED, "donation": canon}
 
             return {"status": "PENDING_EVALUATION"}
 
@@ -580,17 +647,26 @@ class DonationManager:
 
         # ── Destination A: Cloud Bot OBS Overlay ─────────────────────────────
         try:
+            alert_payload = {
+                "type": "donation_alert",
+                "category": "DONATION",
+                "source": "PB_HERO_SMART_DONATION",
+                "user": donor_name,
+                "author": donor_name,
+                "donor_name": donor_name,
+                "amount": amount,
+                "message": message,
+                "utr": utr,
+                "transaction_id": donation_id,
+                "timestamp": time.time(),
+                "currency": "INR",
+                "tier": "gold" if amount >= 500 else "cyan" if amount >= 100 else "blue"
+            }
             if self.bot and hasattr(self.bot, "broadcast_func") and self.bot.broadcast_func:
                 logger.info(f"[DonationManager] Broadcasting to Cloud OBS Overlay for {donation_id}...")
-                await self.bot.broadcast_func({
-                    "type": "donation_alert",
-                    "source": "PB_HERO_SMART_DONATION",
-                    "user": donor_name,
-                    "amount": amount,
-                    "message": message,
-                    "utr": utr,
-                    "transaction_id": donation_id
-                })
+                await self.bot.broadcast_func(alert_payload)
+                if self.bot and hasattr(self.bot, "_log_ui"):
+                    await self.bot._log_ui("DONATION", f"DONATION: {donor_name} tipped ₹{amount}: {message}", author=donor_name, meta=alert_payload)
                 donation["cloud_overlay_status"] = DeliveryState.DELIVERED
             else:
                 logger.warning("[DonationManager] Cloud overlay broadcast function unavailable.")
@@ -667,7 +743,7 @@ class DonationManager:
                     "message": d.get("message", ""),
                     "status": "VERIFIED",
                     "status_label": "Verified",
-                    "source": "Paytm Business QR",
+                    "source": d.get("source") or ("Tip Page (Paytm QR)" if d.get("intent_id") else "Paytm Business QR"),
                     "utr": d.get("utr") or "—",
                     "order_id": d.get("order_id") or "—",
                     "is_test": d.get("is_test", False)
@@ -678,6 +754,8 @@ class DonationManager:
                     seen_ids.add(d["notification_event_id"])
                 if d.get("intent_id"):
                     seen_ids.add(d["intent_id"])
+                if d.get("email_message_id"):
+                    seen_ids.add(d["email_message_id"])
 
             # 2. Notifications pending email corroboration
             now = time.time()

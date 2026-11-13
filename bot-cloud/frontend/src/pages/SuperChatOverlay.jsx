@@ -210,24 +210,39 @@ export default function SuperChatOverlay({ config }) {
                 try {
                     const data = JSON.parse(event.data);
 
-                    if (data.type === 'NewSubscriber' || data.type === 'NewSponsor' || data.type === 'subscriber_count') {
-                        return; // Explicitly ignore subscriber events
+                    if (data.type === 'NewSubscriber' || data.type === 'NewSponsor' || data.type === 'subscriber_count' || data.type === 'config_update') {
+                        return; // Explicitly ignore subscriber / config events
                     }
 
-                    const isTip = data.category === 'DONATION' || data.category === 'PAYTM' || data.category === 'APP_NOTIFICATION' || data.type === 'App Notification';
-                    const isSuperChat = data.category === 'SUPERCHAT' || data.type === 'SuperChat' || data.type === 'SuperSticker';
+                    const isTip = data.type === 'donation_alert' ||
+                                  data.type === 'donation' ||
+                                  data.type === 'app_alert' ||
+                                  data.type === 'App Notification' ||
+                                  data.category === 'DONATION' ||
+                                  data.category === 'PAYTM' ||
+                                  data.category === 'APP_NOTIFICATION';
+
+                    const isSuperChat = data.category === 'SUPERCHAT' ||
+                                        data.type === 'SuperChat' ||
+                                        data.type === 'SuperSticker' ||
+                                        data.type === 'superchat';
 
                     const currentSettings = settingsRef.current;
                     const showTip = isTip && currentSettings.enableTips !== false;
                     const showSC = isSuperChat && currentSettings.enableSuperChats !== false;
 
                     if (showTip || showSC) {
+                        const rawAuthor = data.author || data.user || data.donor_name || (data.meta && (data.meta.author || data.meta.user)) || 'Anonymous';
+                        const rawAmount = data.amount || (data.meta && data.meta.amount) || 0;
+                        const rawMessage = data.message || (data.meta && data.meta.message) || '';
+                        const rawCurrency = data.currency || (data.meta && data.meta.currency) || 'INR';
+
                         const newAlert = {
                             id: Date.now() + Math.random(),
-                            author: data.author || data.user || 'Anonymous',
-                            amount: data.amount || (data.meta && data.meta.amount) || 0,
-                            message: data.message || '',
-                            currency: data.currency || (data.meta && data.meta.currency) || 'INR'
+                            author: rawAuthor,
+                            amount: rawAmount,
+                            message: rawMessage,
+                            currency: rawCurrency
                         };
                         setAlerts(prev => [...prev, newAlert]);
                     }
@@ -285,7 +300,7 @@ export default function SuperChatOverlay({ config }) {
 
             #alert-container {
                 font-family: 'Roboto', sans-serif;
-                position: fixed;
+                position: absolute;
                 top: 0;
                 left: 0;
                 width: 100%;
@@ -300,6 +315,7 @@ export default function SuperChatOverlay({ config }) {
                 padding-left: ${settings.sidePadding || 20}px;
                 padding-right: ${settings.sidePadding || 20}px;
                 pointer-events: none;
+                overflow: hidden;
             }
 
             .superchat-card {

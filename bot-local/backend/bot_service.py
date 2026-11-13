@@ -1200,7 +1200,19 @@ class BotService:
                 event_category = "Monetization" if clean_type in ["SuperChat", "SuperSticker"] else "Engagement"
                 
                 # Trigger the specific action
-                await self._fire_sb_alert(display_type.upper(), alert_msg, author, event_category, action_name=target_action)
+                extra_data = None
+                if clean_type in ["SuperChat", "SuperSticker"]:
+                    amount_str = msg_data.get("amount") or msg_data.get("displayString") or "0"
+                    amount_match = re.search(r'[\d.,]+', str(amount_str))
+                    amount_num = float(amount_match.group().replace(',', '')) if amount_match else 0
+                    extra_data = {
+                        "amount": amount_num,
+                        "currency": "INR",
+                        "tier": msg_data.get("tier", "blue"),
+                        "comment": msg_data.get("comment", "")
+                    }
+
+                await self._fire_sb_alert(display_type.upper(), alert_msg, author, event_category, action_name=target_action, extra_data=extra_data)
 
                 # SUBSCRIBER COUNT UPDATE (REAL-TIME INCREMENT)
                 if display_type in ["NewSubscriber", "NewSponsor"]:

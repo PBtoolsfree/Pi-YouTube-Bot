@@ -2342,32 +2342,47 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     if not amount:
         raise HTTPException(400, "Amount required")
     
-    timestamp = payload.get("timestamp") # New: Transaction Start Time
+    timestamp = payload.get("timestamp") # Transaction start time
+    user = payload.get("user", "Anonymous")
+    message = payload.get("message", "Donation via UPI")
+    amt_float = float(amount)
+
+    # 1. First check if central DonationManager already verified this donation (e.g. from app bridge)
+    async with donation_manager.lock:
+        now_ts = time.time()
+        for d_id, d in donation_manager.verified_donations.items():
+            if abs(float(d.get("amount", 0.0)) - amt_float) < 0.01:
+                v_ts = float(d.get("verified_timestamp") or 0)
+                if abs(now_ts - v_ts) <= 600:
+                    return {"verified": True, "message_id": d_id, "amount": amt_float, "already_verified": True}
 
     try:
         from backend.services.email_service import EmailService
     except ImportError:
         raise HTTPException(503, "Email Verification service is not available on this instance.")
 
-    # Use a temporary service instance to check
-    # In production, might want a persistent one or connection pooling
     service = EmailService(bot.load_config)
-    
-    # Run in thread to avoid blocking async loop
     try:
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, lambda: service.check_for_payment_email(amount, min_timestamp=timestamp))
+        result = await loop.run_in_executor(
+            None,
+            lambda: service.check_for_payment_email(amount, min_timestamp=timestamp, processed_ids=bot.processed_transactions)
+        )
         
-        # If verified, trigger alert!
-        if result["verified"]:
-            user = payload.get("user", "Anonymous")
-            message = payload.get("message", "Donation via UPI")
-            
-            # Trigger Alert with Transaction ID (Message-ID) for Deduplication
+        if result.get("verified"):
             msg_id = result.get("message_id")
-            
-            # Trigger Alert
-            await bot.trigger_donation_alert(user, float(amount), message, transaction_id=msg_id, skip_verification=True)
+            email_record = {
+                "message_id": msg_id,
+                "amount": amt_float,
+                "payer_name": user,
+                "utr": result.get("utr") or msg_id,
+                "status": "SUCCESS",
+                "timestamp": time.time(),
+                "subject": f"Payment received of Rs.{amount}"
+            }
+            # Ingest into central donation_manager so single matching, deduplication, and announcement happen!
+            await donation_manager.ingest_email(email_record)
+            logger.info(f"[VerifyEmail] Successfully routed email verification through DonationManager for {user} (₹{amt_float})")
             
         return result
     finally:
@@ -2386,10 +2401,6 @@ async def email_disconnect_manual():
 
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
-    # Block public access to logs WebSocket
-    if websocket.headers.get("cf-connecting-ip") or websocket.headers.get("cf-ray"):
-        await websocket.close(code=1008, reason="Access Denied")
-        return
     await websocket.accept()
     active_websockets.append(websocket)
     try:

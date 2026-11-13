@@ -29,13 +29,13 @@ export default function AlertOverlay() {
                 try {
                     const data = JSON.parse(event.data)
                     const validCategories = ['alert', 'ALERT', 'RANK_UP', 'LOYALTY', 'DONATION', 'SE_EVENT']
-                    if (validCategories.includes(data.category) || data.type === 'alert') {
+                    if (validCategories.includes(data.category) || data.type === 'alert' || data.type === 'donation_alert') {
                         let emoji = '🔥'
                         let title = 'New Alert'
                         let color = '#00f0ff'
                         let particles = '✦'
 
-                        if (data.category === 'DONATION') {
+                        if (data.category === 'DONATION' || data.type === 'donation_alert') {
                             emoji = '💰'; title = 'DONATION'; color = '#00ff88'; particles = '💎'
                         } else if (data.category === 'RANK_UP') {
                             emoji = '⭐'; title = 'RANK UP'; color = '#ffd700'; particles = '⭐'

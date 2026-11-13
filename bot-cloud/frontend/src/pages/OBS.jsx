@@ -133,6 +133,28 @@ export default function OBSPage({ config, onSave }) {
                         </CardContent>
                     </Card>
 
+                    {/* Super Chat & Donation Alert Overlay Card */}
+                    <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
+                        <CardHeader className="pb-3 border-b border-zinc-800">
+                            <CardTitle className="flex items-center gap-2 text-zinc-100 font-semibold text-sm">
+                                <Monitor className="h-4 w-4 text-amber-500" /> Super Chat & Tip Alert Overlay
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                            <p className="text-xs text-zinc-400">
+                                Real-time Super Chat and UPI Tip cards with live animations and TTS synchronization.
+                            </p>
+                            <div className="flex gap-2">
+                                <div className="flex-1 bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-xs truncate text-zinc-300 select-all">
+                                    {`${origin}/?mode=superchat`}
+                                </div>
+                                <Button size="icon" variant="outline" className="h-9 w-9 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300" onClick={() => copyToClipboard(`${origin}/?mode=superchat`, 'superchat')}>
+                                    {copiedMap['superchat'] ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Chat Overlay Card */}
                     <Card className="bg-zinc-900 border-zinc-800 shadow-sm">
                         <CardHeader className="pb-3 border-b border-zinc-800">

@@ -158,7 +158,7 @@ export default function OverlayEditor() {
             case 'sub_count': return `/?mode=sub_count`
             case 'transactions': return `/?mode=transactions`
             case 'top_viewers': return `/?mode=top_viewers`
-            case 'superchat': return `/?mode=superchat`
+            case 'superchat': return `/?mode=superchat&test=1`
             case 'ticker': return `/?mode=ticker`
             case 'hub': return `/?mode=hub`
             case 'goal': return `/overlay/goal`
@@ -699,6 +699,21 @@ function DraggableWidget({ widget, isSelected, onSelect, onUpdate, previewUrl, s
                             speed={widget.tickerSpeed}
                             color={widget.tickerColor}
                         />
+                    </div>
+                ) : widget.type === 'superchat' ? (
+                    <div style={{ width: '100%', height: '100%', pointerEvents: 'none', position: 'relative' }}>
+                        <iframe
+                            src="/?mode=superchat&test=1"
+                            allowTransparency="true"
+                            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none', backgroundColor: 'transparent' }}
+                            title="Superchat Preview"
+                        />
+                        <div className="absolute inset-0 border border-dashed border-amber-500/50 rounded-xl bg-amber-500/10 flex flex-col items-center justify-center p-3 text-center">
+                            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider drop-shadow">
+                                <span className="text-sm">💬</span> Super Chat / Alert Zone
+                            </div>
+                            <span className="text-[10px] text-zinc-400 font-medium mt-0.5">Donations & Super Chats appear here</span>
+                        </div>
                     </div>
                 ) : (
                     <iframe

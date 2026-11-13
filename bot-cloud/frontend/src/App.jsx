@@ -69,7 +69,7 @@ function App() {
     // If the path is explicitly an overlay or editor, NEVER force public tip page
     const path = window.location.pathname;
     const search = window.location.search;
-    if (path.startsWith('/overlay') || path === '/giveawayspin' || path === '/public-avatar-overlay' || path === '/obs/game' || path === '/overlay-editor' || search.includes('mode=')) {
+    if (path.startsWith('/overlay') || path === '/giveawayspin' || path === '/public-avatar-overlay' || path === '/obs/game' || path === '/overlay-editor' || path === '/overlay_editor' || search.includes('mode=')) {
       return false;
     }
 
@@ -222,7 +222,7 @@ function App() {
   const isTickerOverlay = window.location.search.includes('mode=ticker') || window.location.pathname === '/overlay/ticker'
   const isQROverlay = window.location.search.includes('mode=qrcode') || window.location.pathname === '/overlay/qrcode'
   const isPokemonOverlay = window.location.pathname === '/overlay/pokemon' || window.location.search.includes('mode=pokemon')
-  const isOverlayEditor = window.location.pathname === '/overlay-editor'
+  const isOverlayEditor = window.location.pathname === '/overlay-editor' || window.location.pathname === '/overlay_editor'
 
   // OVERLAYS FIRST: Must match before any public mode / tip page fallbacks
   if (isOverlay) return <div className="bg-transparent h-screen w-screen"><AudioOverlay /></div>
@@ -231,7 +231,7 @@ function App() {
   if (isSubOverlay) return <div className="bg-transparent h-screen w-screen"><SubscriberOverlay /></div>
   if (isTxOverlay) return <div className="bg-transparent h-screen w-screen"><TransactionsOverlay /></div>
   if (isHubOverlay) return <div className="bg-transparent h-screen w-screen"><HubOverlay /></div>
-  if (isSuperChat) return <div className="bg-transparent h-screen w-screen"><SuperChatOverlay config={config} /></div>
+  if (isSuperChat) return <div className="bg-transparent w-full h-full overflow-hidden"><SuperChatOverlay config={config} /></div>
   if (isAppOverlay) return <div className="bg-transparent h-screen w-screen"><AppOverlay /></div>
   if (isGameOverlay) return <div className="bg-transparent h-screen w-screen"><GameOverlay /></div>
   if (isPublicAvatarOverlay) return <div className="bg-transparent h-screen w-screen"><PublicAvatarOverlay /></div>
@@ -240,7 +240,7 @@ function App() {
   if (isGiveawaySpin) return <div className="bg-transparent h-screen w-screen"><GiveawaySpinOverlay /></div>
   if (isRotatingWidget) return <div className="bg-transparent h-screen w-screen overflow-hidden"><RotatingWidgetOverlay /></div>
   if (isBossOverlay) return <BossOverlay />
-  if (isCustomOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><CustomOverlay /></div>
+  if (isCustomOverlay) return <div className="bg-transparent w-full h-full overflow-hidden"><CustomOverlay /></div>
   if (isTickerOverlay) return <TickerOverlay />
   if (isQROverlay) return <QROverlay />
   if (isPokemonOverlay) return <div className="bg-transparent h-screen w-screen overflow-hidden"><PokemonOverlay /></div>
