@@ -472,6 +472,13 @@ async def startup_event():
             asyncio.create_task(cloud_queue_processor())
         await bot.start(broadcast_log)
         logger.info("Bot service active.")
+
+        try:
+            from backend.services.donation_manager import donation_manager
+            donation_manager.set_bot(bot)
+            donation_manager.start_poller()
+        except Exception as e:
+            logger.warning(f"Could not start donation_manager poller in startup_event: {e}")
     except Exception as exc:
         logger.exception("CRITICAL STARTUP ERROR: %s", exc)
         sys.exit(1)
@@ -2361,7 +2368,11 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
     except ImportError:
         raise HTTPException(503, "Email Verification service is not available on this instance.")
 
-    service = EmailService(bot.load_config)
+    service = getattr(bot, "email", None)
+    is_shared = service is not None
+    if not service:
+        service = EmailService(bot.load_config)
+
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -2371,22 +2382,28 @@ async def verify_payment_via_email(payload: Dict[str, Any]):
         
         if result.get("verified"):
             msg_id = result.get("message_id")
+            details = result.get("details") or {}
             email_record = {
                 "message_id": msg_id,
                 "amount": amt_float,
-                "payer_name": user,
-                "utr": result.get("utr") or msg_id,
+                "payer_name": user if (user and user != "Anonymous") else (result.get("payer_name") or "Supporter"),
+                "utr": result.get("utr") or details.get("utr") or msg_id,
+                "order_id": details.get("order_id"),
                 "status": "SUCCESS",
                 "timestamp": time.time(),
                 "subject": f"Payment received of Rs.{amount}"
             }
+            # Also ensure an active intent exists for matching custom name & message
+            if user or message:
+                await donation_manager.create_intent(amt_float, user or "Anonymous", message or "")
             # Ingest into central donation_manager so single matching, deduplication, and announcement happen!
             await donation_manager.ingest_email(email_record)
             logger.info(f"[VerifyEmail] Successfully routed email verification through DonationManager for {user} (₹{amt_float})")
             
         return result
     finally:
-        service._disconnect()
+        if not is_shared and service:
+            service._disconnect()
 
 @app.post("/api/email/connect")
 async def email_connect_manual():

@@ -5,6 +5,7 @@ import re
 import datetime
 import logging
 import time
+import threading
 try:
     from bs4 import BeautifulSoup
 except ImportError:
@@ -21,6 +22,7 @@ class EmailService:
         self.connected = False
         self.last_check = 0
         self.last_error = None
+        self._lock = threading.Lock()
 
     def _connect(self):
         try:
@@ -66,12 +68,13 @@ class EmailService:
     def check_connection(self):
         """
         Quickly checks if credentials are valid and server is reachable.
+        Does not close a healthy persistent connection.
         Returns: (bool, str) -> (Success, Message)
         """
-        if self._connect():
-            self._disconnect()
-            return True, "Connected Successfully"
-        return False, self.last_error or "Connection Failed"
+        with self._lock:
+            if self._ensure_connected():
+                return True, "Connected Successfully"
+            return False, self.last_error or "Connection Failed"
 
     def _disconnect(self):
         if self.mail:
@@ -195,109 +198,111 @@ class EmailService:
         """
         Fetches and parses Paytm/UPI payment confirmation emails received within time_window_minutes.
         Returns a list of parsed transaction records.
+        Thread-safe: Protected by self._lock.
         """
-        if not self._ensure_connected():
-            logger.error(f"[EmailService] Could not connect: {self.last_error}")
-            return []
-
-        records = []
-        try:
-            status, _ = self.mail.select("inbox")
-            if status != "OK":
-                self._disconnect()
-                if not self._connect():
-                    return []
-                status, _ = self.mail.select("inbox")
-
-            date_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d-%b-%Y")
-            status, messages = self.mail.search(None, f'(SINCE "{date_str}")')
-            if status != "OK" or not messages or not messages[0]:
-                status, messages = self.mail.search(None, "ALL")
-
-            if status != "OK" or not messages or not messages[0]:
+        with self._lock:
+            if not self._ensure_connected():
+                logger.error(f"[EmailService] Could not connect: {self.last_error}")
                 return []
 
-            email_ids = messages[0].split()
-            recent_ids = email_ids[-40:] if len(email_ids) > 40 else email_ids
+            records = []
+            try:
+                status, _ = self.mail.select("inbox")
+                if status != "OK":
+                    self._disconnect()
+                    if not self._connect():
+                        return []
+                    status, _ = self.mail.select("inbox")
 
-            now = datetime.datetime.now(datetime.timezone.utc)
-            cutoff = now - datetime.timedelta(minutes=time_window_minutes)
+                date_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d-%b-%Y")
+                status, messages = self.mail.search(None, f'(SINCE "{date_str}")')
+                if status != "OK" or not messages or not messages[0]:
+                    status, messages = self.mail.search(None, "ALL")
 
-            for e_id in reversed(recent_ids):
-                try:
-                    res, msg_data = self.mail.fetch(e_id, "(RFC822)")
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
-                            msg_id = msg.get("Message-ID", "").strip() or f"NO_ID_{e_id.decode()}"
+                if status != "OK" or not messages or not messages[0]:
+                    return []
 
-                            # Deduplication check
-                            if processed_ids and msg_id in processed_ids:
-                                continue
+                email_ids = messages[0].split()
+                recent_ids = email_ids[-40:] if len(email_ids) > 40 else email_ids
 
-                            # Subject decoding
-                            raw_subject = msg["Subject"] or ""
-                            decoded_parts = decode_header(raw_subject)
-                            subject = ""
-                            for text_chunk, enc in decoded_parts:
-                                if isinstance(text_chunk, bytes):
-                                    subject += text_chunk.decode(enc or 'utf-8', errors='replace')
-                                else:
-                                    subject += str(text_chunk)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                cutoff = now - datetime.timedelta(minutes=time_window_minutes)
 
-                            # Date check
-                            from email.utils import parsedate_to_datetime
-                            try:
-                                email_date = parsedate_to_datetime(msg["Date"])
-                                if email_date.tzinfo is None:
-                                    email_date = email_date.replace(tzinfo=datetime.timezone.utc)
-                                else:
-                                    email_date = email_date.astimezone(datetime.timezone.utc)
-                                if email_date < cutoff:
+                for e_id in reversed(recent_ids):
+                    try:
+                        res, msg_data = self.mail.fetch(e_id, "(RFC822)")
+                        for response_part in msg_data:
+                            if isinstance(response_part, tuple):
+                                msg = email.message_from_bytes(response_part[1])
+                                msg_id = msg.get("Message-ID", "").strip() or f"NO_ID_{e_id.decode()}"
+
+                                # Deduplication check
+                                if processed_ids and msg_id in processed_ids:
                                     continue
-                            except Exception:
-                                email_date = now
 
-                            # Body extraction
-                            body = ""
-                            if msg.is_multipart():
-                                for part in msg.walk():
-                                    ctype = part.get_content_type()
-                                    cdispo = str(part.get("Content-Disposition"))
-                                    if ctype == "text/plain" and "attachment" not in cdispo:
-                                        payload = part.get_payload(decode=True)
-                                        if payload:
-                                            body += payload.decode('utf-8', errors='replace') + "\n"
-                                    elif ctype == "text/html" and "attachment" not in cdispo:
-                                        payload = part.get_payload(decode=True)
-                                        if payload:
-                                            html_text = payload.decode('utf-8', errors='replace')
-                                            if BeautifulSoup:
-                                                soup = BeautifulSoup(html_text, "html.parser")
-                                                body += soup.get_text() + "\n"
-                                            else:
-                                                body += re.sub(r'<[^>]+>', ' ', html_text) + "\n"
-                            else:
-                                payload = msg.get_payload(decode=True)
-                                if payload:
-                                    body = payload.decode('utf-8', errors='replace')
+                                # Subject decoding
+                                raw_subject = msg["Subject"] or ""
+                                decoded_parts = decode_header(raw_subject)
+                                subject = ""
+                                for text_chunk, enc in decoded_parts:
+                                    if isinstance(text_chunk, bytes):
+                                        subject += text_chunk.decode(enc or 'utf-8', errors='replace')
+                                    else:
+                                        subject += str(text_chunk)
 
-                            parsed = self.parse_transaction_content(subject, body, msg_id, email_date)
-                            if parsed and parsed["status"] == "SUCCESS":
-                                if target_amount is not None:
-                                    if abs(parsed["amount"] - float(target_amount)) < 0.01:
-                                        records.append(parsed)
+                                # Date check
+                                from email.utils import parsedate_to_datetime
+                                try:
+                                    email_date = parsedate_to_datetime(msg["Date"])
+                                    if email_date.tzinfo is None:
+                                        email_date = email_date.replace(tzinfo=datetime.timezone.utc)
+                                    else:
+                                        email_date = email_date.astimezone(datetime.timezone.utc)
+                                    if email_date < cutoff:
+                                        continue
+                                except Exception:
+                                    email_date = now
+
+                                # Body extraction
+                                body = ""
+                                if msg.is_multipart():
+                                    for part in msg.walk():
+                                        ctype = part.get_content_type()
+                                        cdispo = str(part.get("Content-Disposition"))
+                                        if ctype == "text/plain" and "attachment" not in cdispo:
+                                            payload = part.get_payload(decode=True)
+                                            if payload:
+                                                body += payload.decode('utf-8', errors='replace') + "\n"
+                                        elif ctype == "text/html" and "attachment" not in cdispo:
+                                            payload = part.get_payload(decode=True)
+                                            if payload:
+                                                html_text = payload.decode('utf-8', errors='replace')
+                                                if BeautifulSoup:
+                                                    soup = BeautifulSoup(html_text, "html.parser")
+                                                    body += soup.get_text() + "\n"
+                                                else:
+                                                    body += re.sub(r'<[^>]+>', ' ', html_text) + "\n"
                                 else:
-                                    records.append(parsed)
-                except Exception as ex:
-                    logger.warning(f"[EmailService] Error checking email {e_id}: {ex}")
-                    continue
+                                    payload = msg.get_payload(decode=True)
+                                    if payload:
+                                        body = payload.decode('utf-8', errors='replace')
 
-        except Exception as e:
-            logger.error(f"[EmailService] search_paytm_emails failed: {e}")
-            self._disconnect()
+                                parsed = self.parse_transaction_content(subject, body, msg_id, email_date)
+                                if parsed and parsed["status"] == "SUCCESS":
+                                    if target_amount is not None:
+                                        if abs(parsed["amount"] - float(target_amount)) < 0.01:
+                                            records.append(parsed)
+                                    else:
+                                        records.append(parsed)
+                    except Exception as ex:
+                        logger.warning(f"[EmailService] Error checking email {e_id}: {ex}")
+                        continue
 
-        return records
+            except Exception as e:
+                logger.error(f"[EmailService] search_paytm_emails failed: {e}")
+                self._disconnect()
+
+            return records
 
     def verify_payment(self, expected_amount, sender_hint=None, time_window_minutes=10, min_timestamp=None, processed_ids=None):
         """

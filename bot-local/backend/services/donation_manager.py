@@ -51,6 +51,7 @@ class DonationManager:
         self.data_file = os.path.abspath(data_file)
         self.bot = bot_instance
         self.lock = asyncio.Lock()
+        self._poller_task: Optional[asyncio.Task] = None
 
         # In-memory stores persisted to JSON
         self.intents: Dict[str, Dict[str, Any]] = {}
@@ -67,6 +68,19 @@ class DonationManager:
         }
 
         self._load()
+
+    def set_bot(self, bot_instance):
+        self.bot = bot_instance
+        self.start_poller()
+
+    def start_poller(self):
+        try:
+            loop = asyncio.get_running_loop()
+            if self._poller_task is None or self._poller_task.done():
+                self._poller_task = loop.create_task(self._auto_email_poll_loop())
+                logger.info("[DonationManager] Background email poller task started.")
+        except RuntimeError:
+            pass
 
     def _resolve_email_service(self):
         if self.bot and hasattr(self.bot, "email") and self.bot.email:
@@ -86,9 +100,6 @@ class DonationManager:
                         pass
             return {}
         return EmailService(_get_config)
-
-    def set_bot(self, bot_instance):
-        self.bot = bot_instance
 
     def _load(self):
         try:
@@ -385,6 +396,55 @@ class DonationManager:
 
         return verified_count
 
+    async def sync_recent_emails(self) -> int:
+        """
+        Polls IMAP for new Paytm payment emails received in the last 15 minutes.
+        Ingests any unseen email into the central matching engine.
+        Returns the number of newly verified donations.
+        """
+        verified_count = 0
+        try:
+            email_service = self._resolve_email_service()
+            if not email_service:
+                return 0
+
+            cfg = self.bot.load_config() if (self.bot and hasattr(self.bot, "load_config") and callable(self.bot.load_config)) else {}
+            if not cfg.get("email_verification", {}).get("enabled", False):
+                return 0
+
+            records = await _run_in_thread(
+                email_service.search_paytm_emails,
+                time_window_minutes=15,
+                target_amount=None,
+                processed_ids=list(self.emails.keys())
+            )
+
+            if records:
+                logger.info(f"[DonationManager] sync_recent_emails found {len(records)} new email(s)!")
+                for rec in records:
+                    match_res = await self.ingest_email(rec)
+                    if match_res.get("status") == DonationState.VERIFIED:
+                        verified_count += 1
+        except Exception as e:
+            logger.debug(f"[DonationManager] sync_recent_emails error: {e}")
+
+        return verified_count
+
+    async def _auto_email_poll_loop(self):
+        """
+        Periodically polls recent Paytm emails (every 15s) so direct QR payments and tip page payments
+        are announced immediately, even when PB HERO Android Bridge app is not active on streamer's phone.
+        """
+        logger.info("[DonationManager] Auto email polling loop started (15s interval).")
+        while True:
+            await asyncio.sleep(15)
+            try:
+                await self.sync_recent_emails()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug(f"[DonationManager] Auto email poll tick error: {e}")
+
     # ─────────────────────────────────────────────────────────────────────────
     # 5. DONATION MATCHING & VERIFICATION ENGINE (UNIFIED DEDUPLICATION PROTOCOL)
     # ─────────────────────────────────────────────────────────────────────────
@@ -413,19 +473,28 @@ class DonationManager:
             active_intents = [i for i in self.intents.values() if i.get("status") == DonationState.WAITING_FOR_PAYMENT and (now_ts - i.get("created_at", now_ts)) <= window]
 
             # Helper for deduplication check against already verified donations
-            def is_already_verified(amt: float, utr_val: Optional[str], ref_val: Optional[str], check_ts: float) -> Optional[Dict[str, Any]]:
+            def is_already_verified(amt: float, utr_val: Optional[str], ref_val: Optional[str], check_ts: float, order_val: Optional[str] = None) -> Optional[Dict[str, Any]]:
                 for v_id, v_d in self.verified_donations.items():
                     v_utr = str(v_d.get("utr") or "").strip()
+                    v_order = str(v_d.get("order_id") or "").strip()
+                    check_order = str(order_val or "").strip()
+
                     # 1. Exact UTR match is a duplicate
                     if utr_val and v_utr and v_utr != "—" and v_utr == str(utr_val).strip():
                         return v_d
+                    # Exact Order ID match is a duplicate
+                    if check_order and v_order and v_order != "—" and v_order == check_order:
+                        return v_d
                     if ref_val and v_utr and v_utr != "—" and (v_utr in str(ref_val) or str(ref_val) in v_utr):
                         return v_d
-                    # 2. If both have distinct UTRs, they are NOT duplicates!
+
+                    # 2. If both have distinct UTRs OR distinct Order IDs, they are DISTINCT donations!
                     has_distinct_utrs = (utr_val and v_utr and v_utr != "—" and utr_val != "—" and str(utr_val).strip() != v_utr)
-                    if has_distinct_utrs:
+                    has_distinct_orders = (check_order and v_order and v_order != "—" and check_order != "—" and check_order != v_order)
+                    if has_distinct_utrs or has_distinct_orders:
                         continue
-                    # 3. Same amount without distinct UTRs within 180s debounce
+
+                    # 3. Same amount without distinct UTRs/Orders within 180s debounce
                     if abs(float(v_d.get("amount", 0.0)) - float(amt)) < 0.01:
                         v_time = float(v_d.get("verified_timestamp") or v_d.get("raw_time") or 0)
                         if abs(check_ts - v_time) <= 180:
@@ -525,7 +594,7 @@ class DonationManager:
             # ── PATH 1: Match Notification with Email / Intent ───────────────
             for notif in candidates_notif:
                 # Check if this notification already matches an existing verified donation
-                already_v = is_already_verified(notif["amount"], notif.get("ref_info"), notif.get("ref_info"), notif.get("received_at", now_ts))
+                already_v = is_already_verified(notif["amount"], notif.get("ref_info"), notif.get("ref_info"), notif.get("received_at", now_ts), order_val=notif.get("ref_info"))
                 if already_v:
                     logger.info(f"[DonationManager] Notification {notif['event_id']} matches existing verified donation {already_v['event_id']}. Marking DUPLICATE_RESOLVED.")
                     notif["status"] = "DUPLICATE_RESOLVED"
@@ -580,16 +649,18 @@ class DonationManager:
                     canon = record_verified(final_donor, notif["amount"], msg, utr, notif, matched_email, matched_intent)
                     return {"status": DonationState.VERIFIED, "donation": canon}
 
-            # ── PATH 2: Match Email with Intent (When Android notification wasn't received) ──
+            # ── PATH 2: Match Email with Intent OR Direct QR Donation ────────
             for em in candidates_email:
-                already_v = is_already_verified(em["amount"], em.get("utr"), em.get("utr"), em.get("received_at", now_ts))
+                already_v = is_already_verified(em["amount"], em.get("utr"), em.get("utr"), em.get("received_at", now_ts), order_val=em.get("order_id"))
                 if already_v:
                     em["is_matched"] = True
                     em["matched_donation_id"] = already_v["event_id"]
                     if already_v.get("utr") in [None, "—", ""] and em.get("utr"):
                         already_v["utr"] = em["utr"]
+                    if already_v.get("order_id") in [None, "—", ""] and em.get("order_id"):
+                        already_v["order_id"] = em["order_id"]
                     self._save()
-                    continue
+                    return {"status": DonationState.VERIFIED, "donation": already_v, "already_verified": True}
 
                 matched_intent = None
                 candidate_intents = [
@@ -607,9 +678,17 @@ class DonationManager:
                     if final_donor != payer and payer != "Supporter":
                         final_donor = f"{final_donor} ({payer})"
                     msg = matched_intent.get("message") or "Donation via Paytm UPI QR"
-                    utr = em.get("utr") or "—"
+                    utr = em.get("utr") or em.get("order_id") or "—"
 
                     canon = record_verified(final_donor, em["amount"], msg, utr, None, em, matched_intent)
+                    return {"status": DonationState.VERIFIED, "donation": canon}
+                elif not strict:
+                    raw_payer = (em.get("payer_name") or "").strip()
+                    clean_payer = re.sub(r'^(?:payment\s+from|from|by)\s+', '', raw_payer, flags=re.IGNORECASE).strip() or "Supporter"
+                    msg = "Donation via Paytm UPI QR"
+                    utr = em.get("utr") or em.get("order_id") or "—"
+
+                    canon = record_verified(clean_payer, em["amount"], msg, utr, None, em, None)
                     return {"status": DonationState.VERIFIED, "donation": canon}
 
             return {"status": "PENDING_EVALUATION"}
