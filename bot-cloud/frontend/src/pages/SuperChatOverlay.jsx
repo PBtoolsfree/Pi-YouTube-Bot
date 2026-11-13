@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import axios from 'axios'
 
 // --- DEFAULT SETTINGS ---
 const DEFAULT_SETTINGS = {
@@ -21,12 +22,13 @@ function getNormalizedAmountInINR(amount, currencyCode) {
 }
 
 function getDuration(amount, settings) {
-    if (amount < 100) return settings.tiers.t1;
-    if (amount < 200) return settings.tiers.t2;
-    if (amount < 1000) return settings.tiers.t3;
-    if (amount < 2000) return settings.tiers.t4;
-    if (amount < 5000) return settings.tiers.t5;
-    return settings.tiers.t6;
+    const tiers = settings?.tiers || DEFAULT_SETTINGS.tiers;
+    if (amount < 100) return tiers?.t1 ?? 30;
+    if (amount < 200) return tiers?.t2 ?? 60;
+    if (amount < 1000) return tiers?.t3 ?? 90;
+    if (amount < 2000) return tiers?.t4 ?? 120;
+    if (amount < 5000) return tiers?.t5 ?? 180;
+    return tiers?.t6 ?? 300;
 }
 
 function getTheme(amount) {
@@ -133,9 +135,10 @@ const SuperChatCard = ({ data, onComplete, settings }) => {
 
                 <div className="superchat-header" style={{ backgroundColor: theme.headerColor, color: theme.textColor }}>
                     <img
-                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${data.author}`}
+                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(data.author || 'User')}`}
                         className="user-avatar"
                         alt="avatar"
+                        onError={(e) => { e.target.style.display = 'none'; }}
                     />
                     <div className="header-text">
                         <span className="username" style={{ color: theme.textColor }}>{displayName}</span>
@@ -174,9 +177,20 @@ export default function SuperChatOverlay({ config }) {
     // Load Settings from Config
     useEffect(() => {
         if (config && config.super_chat) {
-            const newSettings = { ...DEFAULT_SETTINGS, ...config.super_chat };
+            const newSettings = { ...DEFAULT_SETTINGS, ...config.super_chat, tiers: { ...DEFAULT_SETTINGS.tiers, ...(config.super_chat.tiers || {}) } };
             setSettings(newSettings);
             settingsRef.current = newSettings;
+        } else if (!config) {
+            const API_URL = import.meta.env?.VITE_API_URL || "/api";
+            axios.get(`${API_URL}/config`)
+                .then(res => {
+                    if (res.data && res.data.super_chat) {
+                        const newSettings = { ...DEFAULT_SETTINGS, ...res.data.super_chat, tiers: { ...DEFAULT_SETTINGS.tiers, ...(res.data.super_chat.tiers || {}) } };
+                        setSettings(newSettings);
+                        settingsRef.current = newSettings;
+                    }
+                })
+                .catch(() => {});
         }
     }, [config]);
 

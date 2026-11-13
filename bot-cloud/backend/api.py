@@ -391,7 +391,8 @@ async def broadcast_log(data: dict):
         allowed_pi_types = [
             "play_tts", "log", "tts_event", "POKEMON_EVENT", "pokemon_event",
             "goal_start", "goal_update", "goal_achieved", "goal_ended",
-            "giveaway_update", "meme_redeem", "meme_expired"
+            "giveaway_update", "meme_redeem", "meme_expired",
+            "donation_alert", "app_alert"
         ]
         should_broadcast = data.get("type") in allowed_pi_types or data.get("event") == "AGENT_ACTION"
         if should_broadcast and bot and getattr(bot, "pi_clients", None):

@@ -218,12 +218,18 @@ class DonationManager:
             if amount < float(self.config.get("min_amount", 1.0)):
                 return {"status": "ignored", "reason": f"Amount ₹{amount} is below minimum threshold."}
 
-            # Backend Semantic Deduplication Guard (Prevents identical alerts within 120s)
             notif_title = (notification_data.get("notification_title") or "").strip()
             notif_text = (notification_data.get("notification_text") or "").strip()
             notif_ref = (notification_data.get("ref_info") or "").strip()
             now_ts = time.time()
 
+            # Ignore promotional, marketing, or cashback push notifications
+            combined_text = f"{notif_title} {notif_text}".lower()
+            if any(k in combined_text for k in ["cashback", "flat cashback", "scratch card", "apply for loan", "get loan", "special offer", "congratulations! you won", "recharge & bill"]):
+                logger.info(f"[DonationManager] Ignoring promotional non-payment notification: {notif_title}")
+                return {"status": "ignored", "reason": "Promotional notification"}
+
+            # Backend Semantic Deduplication Guard (Prevents identical alerts within 120s)
             for existing_id, existing in list(self.notifications.items()):
                 if abs(existing.get("amount", 0.0) - amount) < 0.01:
                     # Match by ref_info if both have it
@@ -365,9 +371,12 @@ class DonationManager:
         verified_count = 0
         try:
             # 1. First evaluate match against already stored unmatched emails
-            first_match = await self.evaluate_match()
-            if first_match.get("status") == DonationState.VERIFIED:
-                verified_count += 1
+            while True:
+                first_match = await self.evaluate_match()
+                if first_match.get("status") == DonationState.VERIFIED and not first_match.get("already_verified"):
+                    verified_count += 1
+                else:
+                    break
 
             # 2. Re-check if any pending notifications remain
             async with self.lock:
@@ -423,8 +432,16 @@ class DonationManager:
                 logger.info(f"[DonationManager] sync_recent_emails found {len(records)} new email(s)!")
                 for rec in records:
                     match_res = await self.ingest_email(rec)
-                    if match_res.get("status") == DonationState.VERIFIED:
+                    if match_res.get("status") == DonationState.VERIFIED and not match_res.get("already_verified"):
                         verified_count += 1
+
+            # Continuously evaluate all remaining unmatched emails until no more matches
+            while True:
+                extra_match = await self.evaluate_match()
+                if extra_match.get("status") == DonationState.VERIFIED and not extra_match.get("already_verified"):
+                    verified_count += 1
+                else:
+                    break
         except Exception as e:
             logger.debug(f"[DonationManager] sync_recent_emails error: {e}")
 
@@ -470,6 +487,8 @@ class DonationManager:
 
             candidates_notif = [n for n in self.notifications.values() if n.get("status") not in [DonationState.VERIFIED, DonationState.ANNOUNCED, "DUPLICATE_RESOLVED", "duplicate"]]
             candidates_email = [e for e in self.emails.values() if not e.get("is_matched", False)]
+            if msg_id and msg_id in self.emails and not self.emails[msg_id].get("is_matched"):
+                candidates_email = [self.emails[msg_id]] + [e for e in candidates_email if e.get("message_id") != msg_id]
             active_intents = [i for i in self.intents.values() if i.get("status") == DonationState.WAITING_FOR_PAYMENT and (now_ts - i.get("created_at", now_ts)) <= window]
 
             # Helper for deduplication check against already verified donations
@@ -660,7 +679,7 @@ class DonationManager:
                     if already_v.get("order_id") in [None, "—", ""] and em.get("order_id"):
                         already_v["order_id"] = em["order_id"]
                     self._save()
-                    return {"status": DonationState.VERIFIED, "donation": already_v, "already_verified": True}
+                    continue
 
                 matched_intent = None
                 candidate_intents = [

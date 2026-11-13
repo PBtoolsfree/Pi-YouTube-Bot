@@ -2491,6 +2491,24 @@ class BotService:
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
 
+        # 1.5 Broadcast visual alert to local OBS overlays (/ws/logs and /ws/overlay)
+        if callable(self.broadcast_func):
+            local_alert_payload = {
+                "type": "donation_alert",
+                "category": "DONATION",
+                "source": source,
+                "user": user,
+                "author": user,
+                "donor_name": user,
+                "amount": float(amount),
+                "message": message,
+                "transaction_id": transaction_id,
+                "timestamp": time.time(),
+                "currency": "INR",
+                "tier": "gold" if float(amount) >= 500 else "cyan" if float(amount) >= 100 else "blue"
+            }
+            asyncio.create_task(self.broadcast_func(local_alert_payload))
+
         # 2. TTS Audio (Clean Message)
         audio_cfg = config.get("audio", {})
         if self.audio and audio_cfg.get("enabled", True):
@@ -2573,6 +2591,24 @@ class BotService:
             return {"status": "success", "processed": True, "queued": True}
 
         # --- LOCAL ACTIONS (Only executed if NOT cloud server, meaning local Pi) ---
+
+        # 2.5 Broadcast app notification alert to local OBS overlays (/ws/logs and /ws/overlay)
+        if callable(self.broadcast_func):
+            local_app_alert = {
+                "type": "app_alert",
+                "category": "APP_NOTIFICATION",
+                "source": source,
+                "user": user,
+                "author": user,
+                "donor_name": user,
+                "amount": float(amount),
+                "message": message,
+                "transaction_id": tx_id,
+                "timestamp": time.time(),
+                "currency": "INR",
+                "tier": "gold" if float(amount) >= 500 else "cyan" if float(amount) >= 100 else "blue"
+            }
+            asyncio.create_task(self.broadcast_func(local_app_alert))
 
         # 3. Audio Announcement
         config = self.load_config()
